@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@theme {
+  /* Peaker Asil Mor Renkleri */
+  --color-background: #09090b;
+  --color-card: #121215;
+  --color-brand: #7c3aed;
+  --color-brand-dark: #5b21b6;
+  --color-brand-light: #a78bfa;
+}
+
+:root {
+  background-color: var(--color-background);
+  color: white;
+}
+
+/* Peaker UI scale — tutarlı ritim; sayfalar `ui-*` ile hizalanır */
+@layer components {
+  .ui-page {
+    @apply space-y-6 pb-16 text-white;
+  }
+  .ui-page-loose {
+    @apply space-y-8 pb-20 text-white;
+  }
+  .ui-h1 {
+    @apply text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-none;
+  }
+  .ui-h2 {
+    @apply text-xl font-black italic text-white uppercase tracking-tight;
+  }
+  .ui-h2-sm {
+    @apply text-sm font-black italic text-white uppercase;
+  }
+  .ui-lead {
+    @apply text-gray-500 font-bold text-[10px] uppercase tracking-[0.3em] italic mt-3 border-l-2 border-[#7c3aed] pl-4;
+  }
+  .ui-label {
+    @apply text-[10px] text-gray-500 font-black uppercase tracking-widest italic;
+  }
+  .ui-body {
+    @apply text-sm text-gray-300;
+  }
+  .ui-card {
+    @apply bg-[#121215] border border-white/5 rounded-[2rem] p-6 shadow-xl;
+  }
+  .ui-card-inner {
+    @apply bg-white/[0.02] border border-white/5 rounded-2xl;
+  }
+  .ui-card-chart {
+    @apply bg-[#121215] border border-white/5 rounded-[2rem] p-8 shadow-xl relative overflow-hidden;
+  }
+  .ui-btn {
+    @apply inline-flex items-center justify-center rounded-xl min-h-9 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all;
+  }
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl min-h-11 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all bg-[#7c3aed] text-white sm:hover:bg-[#6d28d9] disabled:opacity-60 touch-manipulation;
+  }
+  .ui-btn-ghost {
+    @apply inline-flex items-center justify-center rounded-xl min-h-9 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all border border-white/5 bg-[#121215] text-white sm:hover:bg-white/5;
+  }
+  .ui-grid {
+    @apply grid gap-4;
+  }
+  .ui-grid-tight {
+    @apply grid gap-3;
+  }
+  .ui-section {
+    @apply space-y-4;
+  }
+  .ui-toolbar {
+    @apply bg-[#121215] border border-white/5 rounded-[2rem] p-4;
+  }
+  .ui-field {
+    @apply space-y-1.5;
+  }
+  .ui-input {
+    @apply w-full bg-[#1c1c21] border border-white/10 rounded-xl px-4 min-h-11 text-base sm:text-xs font-bold text-white outline-none focus:border-[#7c3aed]/60 touch-manipulation;
+  }
+  .ui-select {
+    @apply w-full bg-[#1c1c21] border border-white/10 rounded-xl px-4 min-h-11 text-base sm:text-xs font-bold text-white outline-none focus:border-[#7c3aed]/60 touch-manipulation;
+  }
+  .ui-btn-danger {
+    @apply inline-flex items-center justify-center rounded-xl min-h-9 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all bg-red-500/10 border border-red-500/30 text-red-300 sm:hover:bg-red-500/20;
+  }
+  .ui-badge {
+    @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border;
+  }
+  .ui-badge-neutral {
+    @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border border-white/10 bg-white/5 text-gray-300;
+  }
+  .ui-badge-success {
+    @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border border-emerald-500/30 bg-emerald-500/10 text-emerald-300;
+  }
+  .ui-badge-warning {
+    @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border border-amber-500/30 bg-amber-500/10 text-amber-300;
+  }
+  .ui-badge-danger {
+    @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border border-red-500/30 bg-red-500/10 text-red-300;
+  }
+}
+@media print {
+  /* Sidebar, Header ve Navigasyon gibi gereksiz elemanları gizle */
+  nav, aside, .print\:hidden, button, .sidebar-class-isminiz {
+    display: none !important;
+  }
+
+  /* Sayfa yapısını ve renkleri PDF için optimize et */
+  body, html, main {
+    background-color: #000 !important; /* Arka planın siyah kalmasını sağlar */
+    color: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact; /* Renklerin korunmasını zorunlu kılar */
+  }
+
+  /* Rapor kartlarını tam genişlik yap */
+  .container, .max-w-7xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 20px !important;
+  }
+
+  /* Sayfa sonu kesilmelerini önle */
+  .card {
+    page-break-inside: avoid;
+  }
+}
