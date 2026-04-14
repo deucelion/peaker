@@ -224,7 +224,12 @@ export default function SporcuDetayDinamik() {
             </div>
 
             <div className="flex flex-wrap justify-center xl:justify-start gap-2">
-              <MetricBadge icon={<Target size={14} />} label="MEVKİ" val={player.position || "GKP"} />
+              <MetricBadge
+                icon={<Target size={14} />}
+                label="MEVKI"
+                val={player.position ? player.position : "MEVKI BELIRTILMEDI"}
+                color={player.position ? "text-white" : "text-amber-300"}
+              />
               <MetricBadge icon={<ShieldCheck size={14} />} label="BOY" val={`${player.height || "--"} CM`} />
               <MetricBadge icon={<Heart size={14} />} label="AĞIRLIK" val={`${player.weight || "--"} KG`} />
               <MetricBadge icon={<Droplets size={14} />} label="FORMA" val={`#${player.number || "--"}`} color="text-[#7c3aed]" />

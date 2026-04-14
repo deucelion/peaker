@@ -20,6 +20,15 @@ import Link from "next/link";
 import { addTrainingParticipant, setAttendanceStatus } from "@/lib/actions/attendanceActions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 
+function toAttendanceBadgeLabel(
+  status: "registered" | "attended" | "missed" | "cancelled" | null | undefined
+) {
+  if (status === "attended") return "KATILDI";
+  if (status === "missed") return "GELMEDI";
+  if (status === "cancelled") return "IPTAL";
+  return "KAYITLI";
+}
+
 export default function AntrenmanYonetimi() {
   const searchParams = useSearchParams();
   const requestedTrainingId = searchParams.get("trainingId");
@@ -169,7 +178,7 @@ export default function AntrenmanYonetimi() {
                 href="/dersler"
                 className="mt-4 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-[#7c3aed] px-5 py-3 text-[10px] font-black uppercase italic tracking-tighter text-white shadow-lg shadow-[#7c3aed]/20 transition-all sm:w-auto sm:hover:bg-[#6d28d9]"
               >
-                <Plus size={14} aria-hidden /> DERSLER SAYFASINA GIT
+                <Plus size={14} aria-hidden /> DERSLER SAYFASINA GİT
               </Link>
             </div>
           </div>
@@ -221,12 +230,12 @@ export default function AntrenmanYonetimi() {
                 </div>
                 <div className="space-y-2 min-w-0 flex-1">
                   <select 
-                    className="min-h-11 w-full max-w-full cursor-pointer touch-manipulation bg-transparent text-lg font-black uppercase italic text-white outline-none transition-colors sm:text-2xl sm:hover:text-[#7c3aed] md:text-3xl"
+                    className="min-h-11 w-full max-w-full cursor-pointer touch-manipulation rounded-xl border border-white/10 bg-[#1c1c21] px-3 py-2 text-base font-black uppercase italic tracking-tight text-white outline-none transition-colors focus:border-[#7c3aed]/60 sm:text-lg sm:hover:border-[#7c3aed]/40 md:text-xl"
                     value={selectedTrainingId}
                     onChange={e => { setSelectedTrainingId(e.target.value); loadParticipants(e.target.value); }}
                   >
                     {trainings.map(t => (
-                      <option key={t.id} value={t.id} className="bg-[#121215] text-white text-base font-sans">{t.title}</option>
+                      <option key={t.id} value={t.id} className="bg-[#121215] text-white text-sm font-black uppercase italic">{t.title}</option>
                     ))}
                   </select>
                   <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs font-bold text-gray-500 uppercase italic tracking-wide sm:tracking-widest">
@@ -253,14 +262,22 @@ export default function AntrenmanYonetimi() {
                       {p.profiles.full_name[0]}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <span className="font-black italic text-gray-200 uppercase tracking-tight block leading-tight break-words">
+                      <span
+                        className="block min-w-0 truncate font-black italic text-gray-200 uppercase tracking-tight leading-tight"
+                        title={p.profiles.full_name || ""}
+                      >
                         {p.profiles.full_name}
                       </span>
-                      <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest italic break-words">{p.profiles.position}</span>
+                      <span
+                        className="block min-w-0 truncate text-[10px] text-gray-600 font-bold uppercase tracking-widest italic"
+                        title={p.profiles.position || ""}
+                      >
+                        {p.profiles.position || "POZISYON BELIRTILMEDI"}
+                      </span>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end w-full sm:w-auto shrink-0">
+                  <div className="flex min-w-0 items-center gap-2 flex-wrap justify-start sm:justify-end w-full sm:w-auto shrink-0">
                     <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${
                       p.attendance_status === "attended"
                         ? "text-green-400 border-green-500/20 bg-green-500/10"
@@ -270,7 +287,7 @@ export default function AntrenmanYonetimi() {
                         ? "text-gray-300 border-white/10 bg-white/5"
                         : "text-amber-300 border-amber-500/20 bg-amber-500/10"
                     }`}>
-                      {p.attendance_status || "registered"}
+                      {toAttendanceBadgeLabel(p.attendance_status)}
                     </span>
                     <button 
                       type="button"

@@ -22,6 +22,7 @@ export default function PrivateLessonPackagesPage() {
   const [packages, setPackages] = useState<PrivateLessonPackage[]>([]);
   const [athletes, setAthletes] = useState<Array<{ id: string; full_name: string }>>([]);
   const [coaches, setCoaches] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [athleteSearch, setAthleteSearch] = useState("");
   const [form, setForm] = useState({
     athleteId: "",
     coachId: "",
@@ -38,6 +39,11 @@ export default function PrivateLessonPackagesPage() {
 
   const activePackages = useMemo(() => packages.filter((p) => p.isActive), [packages]);
   const finishedPackages = useMemo(() => packages.filter((p) => !p.isActive), [packages]);
+  const filteredAthletes = useMemo(() => {
+    const q = athleteSearch.trim().toLowerCase();
+    if (!q) return athletes;
+    return athletes.filter((athlete) => athlete.full_name.toLowerCase().includes(q));
+  }, [athletes, athleteSearch]);
   const parsedTotalLessons = Number(form.totalLessons);
   const parsedTotalPrice = Number(form.totalPrice);
   const parsedAmountPaid = Number(form.amountPaid);
@@ -212,16 +218,28 @@ export default function PrivateLessonPackagesPage() {
         <form onSubmit={onCreatePackage} className="space-y-4 sm:space-y-5 min-w-0">
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Field label="Sporcu Sec *">
-              <select
-                value={form.athleteId}
-                onChange={(e) => setForm((prev) => ({ ...prev, athleteId: e.target.value }))}
-                className="ui-select bg-black px-3"
-                required
-              >
-                {athletes.map((a) => (
-                  <option key={a.id} value={a.id}>{a.full_name}</option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                <input
+                  type="search"
+                  value={athleteSearch}
+                  onChange={(e) => setAthleteSearch(e.target.value)}
+                  placeholder="Sporcu ara..."
+                  className="ui-input bg-black px-3"
+                />
+                <select
+                  value={form.athleteId}
+                  onChange={(e) => setForm((prev) => ({ ...prev, athleteId: e.target.value }))}
+                  className="ui-select bg-black px-3"
+                  required
+                >
+                  {filteredAthletes.map((a) => (
+                    <option key={a.id} value={a.id}>{a.full_name}</option>
+                  ))}
+                </select>
+                {filteredAthletes.length === 0 ? (
+                  <p className="text-[10px] font-black uppercase text-gray-500">Aramaya uygun sporcu yok.</p>
+                ) : null}
+              </div>
             </Field>
 
             <Field label="Koç (opsiyonel)">
