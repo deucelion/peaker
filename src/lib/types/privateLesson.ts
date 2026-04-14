@@ -20,6 +20,18 @@ export interface PrivateLessonPackage {
   updatedAt: string;
 }
 
+export interface PrivateLessonPayment {
+  id: string;
+  packageId: string;
+  athleteId: string;
+  coachId: string | null;
+  amount: number;
+  paidAt: string;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface PrivateLessonUsage {
   id: string;
   packageId: string;
@@ -27,4 +39,10 @@ export interface PrivateLessonUsage {
   coachId: string | null;
   usedAt: string;
   note: string | null;
+}
+
+export interface PrivateLessonPackageDetailSnapshot {
+  package: PrivateLessonPackage;
+  usageRows: PrivateLessonUsage[];
+  paymentRows: PrivateLessonPayment[];
 }

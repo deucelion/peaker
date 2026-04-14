@@ -16,6 +16,36 @@ function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
 }
 
+const MONTH_NAMES_TR = [
+  "Ocak",
+  "Subat",
+  "Mart",
+  "Nisan",
+  "Mayis",
+  "Haziran",
+  "Temmuz",
+  "Agustos",
+  "Eylul",
+  "Ekim",
+  "Kasim",
+  "Aralik",
+] as const;
+
+function resolvePaymentPeriod(dueDate: string | null): { monthName: string; yearInt: number } {
+  const baseDate = dueDate ? new Date(`${dueDate}T00:00:00`) : new Date();
+  if (Number.isNaN(baseDate.getTime())) {
+    const now = new Date();
+    return {
+      monthName: MONTH_NAMES_TR[now.getMonth()] ?? "Ocak",
+      yearInt: now.getFullYear(),
+    };
+  }
+  return {
+    monthName: MONTH_NAMES_TR[baseDate.getMonth()] ?? "Ocak",
+    yearInt: baseDate.getFullYear(),
+  };
+}
+
 async function resolveFinansAdmin(): Promise<
   { actorUserId: string; actorRole: string; organizationId: string } | { error: string }
 > {
@@ -165,6 +195,7 @@ export async function createOrgPayment(formData: FormData) {
 
   const dueRaw = formData.get("due_date")?.toString().trim();
   const dueDate = dueRaw && dueRaw.length >= 8 ? dueRaw : null;
+  const { monthName, yearInt } = resolvePaymentPeriod(dueDate);
 
   const desc = formData.get("desc")?.toString().trim().slice(0, 2000) || null;
 
@@ -201,6 +232,8 @@ export async function createOrgPayment(formData: FormData) {
       amount,
       payment_type: paymentType,
       due_date: dueDate,
+      month_name: monthName,
+      year_int: yearInt,
       status: "bekliyor",
       total_sessions: totalSessions,
       remaining_sessions: remainingSessions,

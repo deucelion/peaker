@@ -46,6 +46,8 @@ async function ensureCoachPermissionsRow(
       can_take_attendance: DEFAULT_COACH_PERMISSIONS.can_take_attendance,
       can_view_reports: DEFAULT_COACH_PERMISSIONS.can_view_reports,
       can_manage_training_notes: DEFAULT_COACH_PERMISSIONS.can_manage_training_notes,
+      can_manage_athlete_profiles: DEFAULT_COACH_PERMISSIONS.can_manage_athlete_profiles,
+      can_manage_teams: DEFAULT_COACH_PERMISSIONS.can_manage_teams,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "coach_id" }
@@ -368,7 +370,7 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
   const { data: permissionRow } = await adminClient
     .from("coach_permissions")
     .select(
-      "can_create_lessons, can_edit_lessons, can_view_all_athletes, can_add_athletes_to_lessons, can_take_attendance, can_view_reports, can_manage_training_notes"
+      "can_create_lessons, can_edit_lessons, can_view_all_athletes, can_add_athletes_to_lessons, can_take_attendance, can_view_reports, can_manage_training_notes, can_manage_athlete_profiles, can_manage_teams"
     )
     .eq("coach_id", coachId)
     .maybeSingle();
@@ -384,6 +386,8 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
       can_take_attendance: permissionRow?.can_take_attendance ?? true,
       can_view_reports: permissionRow?.can_view_reports ?? true,
       can_manage_training_notes: permissionRow?.can_manage_training_notes ?? true,
+      can_manage_athlete_profiles: permissionRow?.can_manage_athlete_profiles ?? true,
+      can_manage_teams: permissionRow?.can_manage_teams ?? true,
     },
   };
 }

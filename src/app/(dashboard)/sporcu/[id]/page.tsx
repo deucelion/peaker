@@ -31,8 +31,9 @@ import type { TrainingLoadRow, WellnessReportRow } from "@/types/performance";
 import {
   listPositionOptionsForManagement,
   loadAthleteDetailForManagement,
-  updateAthletePositionForManagement,
+  updateAthleteProfileForManagement,
 } from "@/lib/actions/athleteDetailActions";
+import { listTeamsForActor } from "@/lib/actions/teamActions";
 import { AthleteFieldTestsPanel, type FieldTestResultRow } from "./AthleteFieldTestsPanel";
 import { AthletePerformanceInsightsPanel, type BodyMetricRow } from "./AthletePerformanceInsightsPanel";
 import Notification from "@/components/Notification";
@@ -63,7 +64,15 @@ export default function SporcuDetayDinamik() {
   const [weeklyLoads, setWeeklyLoads] = useState<WeeklyLoadPoint[]>([]);
   const [trainingLoads, setTrainingLoads] = useState<TrainingLoadRow[]>([]);
   const [positionOptions, setPositionOptions] = useState<string[]>([]);
-  const [positionDraft, setPositionDraft] = useState("");
+  const [teamOptions, setTeamOptions] = useState<string[]>([]);
+  const [profileDraft, setProfileDraft] = useState({
+    fullName: "",
+    team: "",
+    position: "",
+    number: "",
+    height: "",
+    weight: "",
+  });
   const [positionMessage, setPositionMessage] = useState<string | null>(null);
   const [updatingPosition, setUpdatingPosition] = useState(false);
 
@@ -94,8 +103,16 @@ export default function SporcuDetayDinamik() {
         return;
       }
 
-      setPlayer(res.profile as ProfileBasic);
-      setPositionDraft(((res.profile as ProfileBasic).position || "").trim());
+      const loadedProfile = res.profile as ProfileBasic;
+      setPlayer(loadedProfile);
+      setProfileDraft({
+        fullName: loadedProfile.full_name || "",
+        team: (loadedProfile.team || "").trim(),
+        position: (loadedProfile.position || "").trim(),
+        number: (loadedProfile.number || "").trim(),
+        height: loadedProfile.height != null ? String(loadedProfile.height) : "",
+        weight: loadedProfile.weight != null ? String(loadedProfile.weight) : "",
+      });
 
       const results = (res.results || []) as FieldTestResultRow[];
       setTableMetrics(results);
@@ -132,6 +149,10 @@ export default function SporcuDetayDinamik() {
       const positionsRes = await listPositionOptionsForManagement();
       if (!("error" in positionsRes)) {
         setPositionOptions(positionsRes.positions || []);
+      }
+      const teamsRes = await listTeamsForActor();
+      if (!("error" in teamsRes)) {
+        setTeamOptions((teamsRes.teams || []).map((t) => String(t.name)).filter(Boolean));
       }
     } catch (e) {
       console.error("Veri hatası:", e);
@@ -215,23 +236,84 @@ export default function SporcuDetayDinamik() {
                 if (!id) return;
                 setUpdatingPosition(true);
                 setPositionMessage(null);
-                const result = await updateAthletePositionForManagement(id, positionDraft);
+                const result = await updateAthleteProfileForManagement(id, {
+                  fullName: profileDraft.fullName,
+                  team: profileDraft.team,
+                  position: profileDraft.position,
+                  number: profileDraft.number,
+                  height: profileDraft.height,
+                  weight: profileDraft.weight,
+                });
                 if ("success" in result && result.success) {
-                  setPlayer((prev) => (prev ? { ...prev, position: positionDraft.trim() || null } : prev));
-                  setPositionMessage("Pozisyon guncellendi.");
+                  setPlayer((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          full_name: profileDraft.fullName.trim(),
+                          team: profileDraft.team.trim() || null,
+                          position: profileDraft.position.trim() || null,
+                          number: profileDraft.number.trim() || null,
+                          height: profileDraft.height.trim() ? Number(profileDraft.height) : null,
+                          weight: profileDraft.weight.trim() ? Number(profileDraft.weight) : null,
+                        }
+                      : prev
+                  );
+                  setPositionMessage("Sporcu profili guncellendi.");
                 } else {
-                  setPositionMessage(("error" in result && result.error) || "Pozisyon guncellenemedi.");
+                  setPositionMessage(("error" in result && result.error) || "Sporcu profili guncellenemedi.");
                 }
                 setUpdatingPosition(false);
               }}
-              className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
+              className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2"
             >
               <input
-                value={positionDraft}
-                onChange={(e) => setPositionDraft(e.target.value.toUpperCase())}
+                value={profileDraft.fullName}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, fullName: e.target.value }))}
+                placeholder="Ad soyad"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+              />
+              <input
+                value={profileDraft.team}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, team: e.target.value.toUpperCase() }))}
+                list="athlete-team-options"
+                placeholder="Takim (opsiyonel)"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              />
+              <datalist id="athlete-team-options">
+                {teamOptions.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              <input
+                value={profileDraft.position}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, position: e.target.value.toUpperCase() }))}
                 list="athlete-position-options"
                 placeholder="Pozisyon guncelle (opsiyonel)"
                 className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              />
+              <input
+                value={profileDraft.number}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, number: e.target.value.toUpperCase() }))}
+                placeholder="Forma no (opsiyonel)"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              />
+              <input
+                type="number"
+                min={50}
+                max={260}
+                value={profileDraft.height}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, height: e.target.value }))}
+                placeholder="Boy (cm)"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed]"
+              />
+              <input
+                type="number"
+                min={20}
+                max={300}
+                value={profileDraft.weight}
+                onChange={(e) => setProfileDraft((prev) => ({ ...prev, weight: e.target.value }))}
+                placeholder="Kilo (kg)"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed]"
               />
               <datalist id="athlete-position-options">
                 {positionOptions.map((p) => (
@@ -241,9 +323,9 @@ export default function SporcuDetayDinamik() {
               <button
                 type="submit"
                 disabled={updatingPosition}
-                className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:hover:bg-[#6d28d9]"
+                className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:hover:bg-[#6d28d9] sm:col-span-2 sm:w-fit"
               >
-                {updatingPosition ? "Guncelleniyor..." : "Pozisyonu Kaydet"}
+                {updatingPosition ? "Guncelleniyor..." : "Profili Kaydet"}
               </button>
             </form>
             {positionMessage ? (

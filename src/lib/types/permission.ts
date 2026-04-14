@@ -6,6 +6,8 @@ export const COACH_PERMISSION_KEYS = [
   "can_take_attendance",
   "can_view_reports",
   "can_manage_training_notes",
+  "can_manage_athlete_profiles",
+  "can_manage_teams",
 ] as const;
 
 export type CoachPermissionKey = (typeof COACH_PERMISSION_KEYS)[number];
@@ -20,4 +22,6 @@ export const DEFAULT_COACH_PERMISSIONS: CoachPermissions = {
   can_take_attendance: true,
   can_view_reports: true,
   can_manage_training_notes: true,
+  can_manage_athlete_profiles: true,
+  can_manage_teams: true,
 };

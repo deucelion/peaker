@@ -224,20 +224,46 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
   const pager = normalizePagination(page, pageSize, 500);
   const res = await adminClient
     .from("training_participants")
-    .select("*, profiles(*)", { count: "exact" })
+    .select("training_id, profile_id, is_present, attendance_status, marked_by, marked_at", { count: "exact" })
     .eq("training_id", trainingId)
     .range(pager.from, pager.to);
   if (res.error) return { error: `Katilimcilar alinamadi: ${res.error.message}` };
-  const participants = (res.data || []).map((row) => {
-    const profile = (row as { profiles?: { full_name?: string | null; email?: string | null } }).profiles;
+
+  const rows = (res.data || []) as Array<{
+    training_id: string;
+    profile_id: string;
+    is_present?: boolean | null;
+    attendance_status?: string | null;
+    marked_by?: string | null;
+    marked_at?: string | null;
+  }>;
+  const profileIds = Array.from(new Set(rows.map((row) => row.profile_id).filter(Boolean)));
+  let profileMap = new Map<string, { id: string; full_name: string; email: string | null; position: string | null }>();
+  if (profileIds.length > 0) {
+    const { data: profileRows, error: profileErr } = await adminClient
+      .from("profiles")
+      .select("id, full_name, email, position")
+      .in("id", profileIds)
+      .eq("organization_id", actor.organizationId);
+    if (profileErr) return { error: `Katilimci profilleri alinamadi: ${profileErr.message}` };
+    profileMap = new Map(
+      (profileRows || []).map((p) => [
+        p.id,
+        {
+          id: p.id,
+          full_name: toDisplayName(p.full_name, p.email, "Sporcu"),
+          email: p.email ?? null,
+          position: p.position ?? null,
+        },
+      ])
+    );
+  }
+
+  const participants = rows.map((row) => {
+    const profile = profileMap.get(row.profile_id);
     return {
       ...row,
-      profiles: profile
-        ? {
-            ...profile,
-            full_name: toDisplayName(profile.full_name, profile.email, "Sporcu"),
-          }
-        : profile,
+      profiles: profile || null,
     };
   }) as Array<Record<string, unknown>>;
   return { participants, total: res.count || 0, page: pager.page, pageSize: pager.pageSize };

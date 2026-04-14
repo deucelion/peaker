@@ -595,23 +595,30 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
 
   const { data: participantRows, error: partErr } = await adminClient
     .from("training_participants")
-    .select("profile_id, profiles!inner(id, full_name, email)")
+    .select("profile_id")
     .eq("training_id", lessonId);
 
-  if (partErr) {
-    return { error: `Katilimci listesi alinamadi: ${partErr.message}` };
-  }
+  if (partErr) return { error: `Katilimci listesi alinamadi: ${partErr.message}` };
 
-  const participants: LessonManagementDetailAthlete[] = ((participantRows || []) as Array<{
-    profile_id: string;
-    profiles: { id: string; full_name: string | null; email?: string | null } | { id: string; full_name: string | null; email?: string | null }[] | null;
-  }>).map((row) => {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    return {
-      id: profile?.id || row.profile_id,
-      full_name: toDisplayName(profile?.full_name, profile?.email, "Sporcu"),
-    };
-  });
+  const participantIds = Array.from(new Set((participantRows || []).map((row) => row.profile_id).filter(Boolean)));
+  let participants: LessonManagementDetailAthlete[] = [];
+  if (participantIds.length > 0) {
+    const { data: profileRows, error: profileErr } = await adminClient
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", participantIds)
+      .eq("organization_id", orgId);
+    if (profileErr) return { error: `Katilimci profilleri alinamadi: ${profileErr.message}` };
+
+    const profileMap = new Map((profileRows || []).map((row) => [row.id, row]));
+    participants = participantIds.map((profileId) => {
+      const profile = profileMap.get(profileId);
+      return {
+        id: profile?.id || profileId,
+        full_name: toDisplayName(profile?.full_name ?? null, profile?.email ?? null, "Sporcu"),
+      };
+    });
+  }
 
   const { data: athleteRows, error: athErr } = await adminClient
     .from("profiles")

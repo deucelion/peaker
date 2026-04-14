@@ -12,7 +12,7 @@ import {
   removeLessonParticipant,
   updateLesson,
 } from "@/lib/actions/lessonActions";
-import { combineLocalDateAndTime, splitIsoToDateAndTime } from "@/lib/forms/datetimeLocal";
+import { combineLocalDateAndTime, formatLessonDateTimeTr, splitIsoToDateAndTime } from "@/lib/forms/datetimeLocal";
 import type { Lesson } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
@@ -205,7 +205,7 @@ export default function LessonDetailPage() {
             <h1 className="text-2xl sm:text-3xl font-black italic uppercase text-white break-words">{lesson.title}</h1>
             <p className="text-[10px] text-gray-500 font-bold italic mt-2 break-words">{lesson.description || "Aciklama yok"}</p>
             <p className="text-[10px] text-gray-500 font-bold italic mt-2 break-words">
-              {new Date(lesson.startTime).toLocaleString("tr-TR")} - {new Date(lesson.endTime).toLocaleString("tr-TR")}
+              {formatLessonDateTimeTr(lesson.startTime)} - {formatLessonDateTimeTr(lesson.endTime)}
             </p>
             <p className="text-[10px] text-gray-500 font-bold italic mt-1 break-words">
               Lokasyon: {lesson.location}

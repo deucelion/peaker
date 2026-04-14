@@ -14,6 +14,7 @@ type CriticalCheckKey =
   | "organizations_ready"
   | "organization_lifecycle"
   | "private_lesson_packages_ready"
+  | "private_lesson_payments_ready"
   | "payments_profile_id"
   | "profiles_integrity";
 
@@ -68,6 +69,8 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
       "can_take_attendance",
       "can_view_reports",
       "can_manage_training_notes",
+      "can_manage_athlete_profiles",
+      "can_manage_teams",
     ],
     "20260330_coach_permissions.sql"
   );
@@ -155,6 +158,25 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
       "updated_at",
     ],
     "20260408_private_lesson_packages.sql"
+  );
+
+  await checkColumns(
+    "private_lesson_payments_ready",
+    "Private lesson payments schema",
+    "private_lesson_payments",
+    [
+      "id",
+      "package_id",
+      "organization_id",
+      "athlete_id",
+      "coach_id",
+      "amount",
+      "paid_at",
+      "note",
+      "created_by",
+      "created_at",
+    ],
+    "20260414_private_lesson_payments.sql"
   );
 
   await checkColumns(

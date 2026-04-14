@@ -34,6 +34,12 @@ test("admin: dashboard + aidat + özel paket + sporcular + koçlar (ve varsa ko�
 
   await page.goto("/ozel-ders-paketleri");
   await expect(page.getByRole("heading", { name: /ÖZEL DERS/i })).toBeVisible();
+  const packageLinks = page.locator('.ui-page a[href^="/ozel-ders-paketleri/"]');
+  if ((await packageLinks.count()) > 0) {
+    await packageLinks.first().click();
+    await expect(page).toHaveURL(/\/ozel-ders-paketleri\/[0-9a-f-]{20,}/i);
+    await expect(page.locator("h1").first()).toBeVisible();
+  }
 
   await page.goto("/oyuncular");
   await expect(page.getByRole("heading", { name: /TAKIM/i })).toBeVisible();

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChevronLeft, Loader2, Users } from "lucide-react";
 import Notification from "@/components/Notification";
-import { loadTeamDetail } from "@/lib/actions/teamActions";
+import { assignAthleteToTeam, loadTeamDetail, removeAthleteFromTeam } from "@/lib/actions/teamActions";
 
 type TeamAthlete = {
   id: string;
@@ -18,6 +18,8 @@ type TeamAthlete = {
 type TeamDetail = {
   team: { id: string; name: string };
   athletes: TeamAthlete[];
+  availableAthletes: Array<{ id: string; fullName: string }>;
+  canManageTeamMembers: boolean;
   summary: {
     total: number;
     activeCount: number;
@@ -33,6 +35,8 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<TeamDetail | null>(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function run() {
@@ -49,6 +53,8 @@ export default function TeamDetailPage() {
         setDetail(null);
       } else {
         setDetail(res as TeamDetail);
+        const firstAvailable = (res as TeamDetail).availableAthletes?.[0]?.id || "";
+        setSelectedAthleteId((prev) => prev || firstAvailable);
       }
       setLoading(false);
     }
@@ -82,6 +88,7 @@ export default function TeamDetailPage() {
         <Notification message={error} variant="error" />
       ) : detail ? (
         <>
+          {message ? <Notification message={message} variant={message.toLowerCase().includes("edilemedi") ? "error" : "success"} /> : null}
           <header className="min-w-0 border-b border-white/5 pb-6">
             <h1 className="ui-h1 break-words">
               {detail.team.name} <span className="text-[#7c3aed]">DETAYI</span>
@@ -139,11 +146,74 @@ export default function TeamDetailPage() {
                     <span className={athlete.isActive ? "ui-badge-success" : "ui-badge-warning"}>
                       {athlete.isActive ? "Aktif" : "Pasif"}
                     </span>
+                    {detail.canManageTeamMembers ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await removeAthleteFromTeam(detail.team.id, athlete.id);
+                          if ("error" in res) {
+                            setMessage(res.error || "Sporcu takimdan cikarilamadi.");
+                          } else {
+                            setMessage("Sporcu takimdan cikarildi.");
+                            const refreshed = await loadTeamDetail(detail.team.id);
+                            if (!("error" in refreshed)) {
+                              setDetail(refreshed as TeamDetail);
+                            }
+                          }
+                        }}
+                        className="ml-2 min-h-10 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-400"
+                      >
+                        Takimdan Cikar
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
           </section>
+          {detail.canManageTeamMembers ? (
+            <section className="mt-6 rounded-[1.5rem] border border-white/5 bg-[#121215] p-5">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Takima Sporcu Ekle</p>
+              {detail.availableAthletes.length === 0 ? (
+                <p className="text-[10px] font-black uppercase text-gray-500">Eklenebilecek sporcu yok.</p>
+              ) : (
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <select
+                    value={selectedAthleteId}
+                    onChange={(e) => setSelectedAthleteId(e.target.value)}
+                    className="ui-select bg-black px-3"
+                  >
+                    {detail.availableAthletes.map((athlete) => (
+                      <option key={athlete.id} value={athlete.id}>
+                        {athlete.fullName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedAthleteId) return;
+                      const res = await assignAthleteToTeam(detail.team.id, selectedAthleteId);
+                      if ("error" in res) {
+                        setMessage(res.error || "Sporcu takima eklenemedi.");
+                      } else {
+                        setMessage("Sporcu takima eklendi.");
+                        const refreshed = await loadTeamDetail(detail.team.id);
+                        if (!("error" in refreshed)) {
+                          setDetail(refreshed as TeamDetail);
+                          const nextFirst = (refreshed as TeamDetail).availableAthletes?.[0]?.id || "";
+                          setSelectedAthleteId(nextFirst);
+                        }
+                      }
+                    }}
+                    className="ui-btn-primary min-h-11 px-4 py-2"
+                  >
+                    Takima Ekle
+                  </button>
+                </div>
+              )}
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Loader2, PlusCircle, Wallet, CheckCircle2, History, AlertTriangle } from "lucide-react";
 import Notification from "@/components/Notification";
 import {
@@ -128,18 +129,20 @@ export default function PrivateLessonPackagesPage() {
     }
   }
 
-  async function onSetPayment(packageId: string, amountPaid: number) {
-    const value = window.prompt("Yeni odenen tutari girin", amountPaid.toString());
+  async function onSetPayment(packageId: string) {
+    const value = window.prompt("Yeni tahsilat tutarini girin (bu tutar mevcut odenene eklenecek)", "");
     if (value === null) return;
+    const noteValue = window.prompt("Odeme notu (opsiyonel)", "") ?? "";
     const fd = new FormData();
     fd.append("packageId", packageId);
-    fd.append("amountPaid", value);
+    fd.append("paymentAmount", value);
+    fd.append("note", noteValue);
     const res = await updatePrivateLessonPayment(fd);
     if ("success" in res && res.success) {
-      setMessage("Odeme guncellendi.");
+      setMessage("Tahsilat eklendi.");
       await loadAll();
     } else {
-      setMessage(res.error || "Odeme guncellenemedi.");
+      setMessage(res.error || "Tahsilat eklenemedi.");
     }
   }
 
@@ -359,7 +362,7 @@ function PackageList({
   title: string;
   items: PrivateLessonPackage[];
   onUseLesson: (packageId: string) => void;
-  onSetPayment: (packageId: string, amountPaid: number) => void;
+  onSetPayment: (packageId: string) => void;
   expandedPkgId: string | null;
   usageByPkg: Record<string, Array<{ id: string; usedAt: string; note: string | null }>>;
   usageLoadingId: string | null;
@@ -387,7 +390,9 @@ function PackageList({
             <div key={pkg.id} className="border border-white/10 bg-black/20 rounded-xl p-3 sm:p-4 min-w-0">
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between min-w-0">
                 <div className="min-w-0 flex-1">
-                  <p className="text-white font-black italic uppercase break-words">{pkg.packageName}</p>
+                  <Link href={`/ozel-ders-paketleri/${pkg.id}`} className="text-white font-black italic uppercase break-words underline-offset-2 sm:hover:underline">
+                    {pkg.packageName}
+                  </Link>
                   <p className="text-[10px] text-gray-500 font-bold uppercase mt-1 break-words">
                     {pkg.athleteName} • {pkg.packageType} • Koç: {pkg.coachName || "-"}
                   </p>
@@ -424,10 +429,10 @@ function PackageList({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSetPayment(pkg.id, pkg.amountPaid)}
+                  onClick={() => onSetPayment(pkg.id)}
                   className="min-h-11 w-full sm:w-auto px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-black uppercase inline-flex items-center justify-center gap-1 touch-manipulation sm:hover:bg-amber-500/20"
                 >
-                  <Wallet size={12} aria-hidden /> Ödeme Güncelle
+                  <Wallet size={12} aria-hidden /> Tahsilat Ekle
                 </button>
                 <button
                   type="button"

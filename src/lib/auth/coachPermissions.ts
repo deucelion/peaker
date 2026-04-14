@@ -18,6 +18,8 @@ export function normalizeCoachPermissions(raw?: RawPermissionRow): CoachPermissi
     can_take_attendance: raw?.can_take_attendance ?? DEFAULT_COACH_PERMISSIONS.can_take_attendance,
     can_view_reports: raw?.can_view_reports ?? DEFAULT_COACH_PERMISSIONS.can_view_reports,
     can_manage_training_notes: raw?.can_manage_training_notes ?? DEFAULT_COACH_PERMISSIONS.can_manage_training_notes,
+    can_manage_athlete_profiles: raw?.can_manage_athlete_profiles ?? DEFAULT_COACH_PERMISSIONS.can_manage_athlete_profiles,
+    can_manage_teams: raw?.can_manage_teams ?? DEFAULT_COACH_PERMISSIONS.can_manage_teams,
   };
 }
 

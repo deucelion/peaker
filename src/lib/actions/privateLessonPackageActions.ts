@@ -8,8 +8,14 @@ import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
-import { computePaymentStatus, computeRemainingLessons, normalizeMoney } from "@/lib/privateLessons/packageMath";
-import type { PrivateLessonPackage, PrivateLessonPaymentStatus } from "@/lib/types";
+import { computeIncrementalAmountPaid, computePaymentStatus, computeRemainingLessons, normalizeMoney } from "@/lib/privateLessons/packageMath";
+import type {
+  PrivateLessonPackage,
+  PrivateLessonPackageDetailSnapshot,
+  PrivateLessonPayment,
+  PrivateLessonPaymentStatus,
+  PrivateLessonUsage,
+} from "@/lib/types";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
@@ -63,6 +69,30 @@ function mapPackage(raw: {
     isActive: raw.is_active,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
+  };
+}
+
+function mapPaymentRow(raw: {
+  id: string;
+  package_id: string;
+  athlete_id: string;
+  coach_id: string | null;
+  amount: number;
+  paid_at: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}): PrivateLessonPayment {
+  return {
+    id: raw.id,
+    packageId: raw.package_id,
+    athleteId: raw.athlete_id,
+    coachId: raw.coach_id,
+    amount: normalizeMoney(raw.amount),
+    paidAt: raw.paid_at,
+    note: raw.note,
+    createdBy: raw.created_by,
+    createdAt: raw.created_at,
   };
 }
 
@@ -388,7 +418,7 @@ export async function addPrivateLessonUsage(formData: FormData) {
 
 export async function updatePrivateLessonPayment(formData: FormData) {
   return withServerActionGuard("privateLesson.updatePrivateLessonPayment", async () => {
-  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready"]);
+  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "private_lesson_payments_ready"]);
   if (schemaError) return { error: schemaError };
 
   const resolved = await resolvePackageActor();
@@ -398,23 +428,26 @@ export async function updatePrivateLessonPayment(formData: FormData) {
   if (!guard.ok) return { error: guard.error };
 
   const packageId = formData.get("packageId")?.toString().trim() || "";
-  const amountPaid = normalizeMoney(formData.get("amountPaid")?.toString() || "0");
+  const paymentAmount = normalizeMoney(formData.get("paymentAmount")?.toString() || "0");
+  const note = formData.get("note")?.toString().trim() || null;
   if (!packageId) return { error: "Paket secimi zorunludur." };
+  if (paymentAmount <= 0) return { error: "Tahsilat tutari sifirdan buyuk olmali." };
 
   const adminClient = createSupabaseAdminClient();
   const { data: pkg } = await adminClient
     .from("private_lesson_packages")
-    .select("id, organization_id, total_price, athlete_id, package_name")
+    .select("id, organization_id, total_price, amount_paid, athlete_id, coach_id, package_name")
     .eq("id", packageId)
     .eq("organization_id", actor.organization_id!)
     .maybeSingle();
   if (!pkg) return { error: "Paket bulunamadi." };
 
-  const paymentStatus = computePaymentStatus(pkg.total_price, amountPaid);
+  const nextAmountPaid = computeIncrementalAmountPaid(pkg.amount_paid, paymentAmount);
+  const paymentStatus = computePaymentStatus(pkg.total_price, nextAmountPaid);
   const { error } = await adminClient
     .from("private_lesson_packages")
     .update({
-      amount_paid: amountPaid,
+      amount_paid: nextAmountPaid,
       payment_status: paymentStatus,
       updated_at: new Date().toISOString(),
     })
@@ -422,17 +455,31 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     .eq("organization_id", actor.organization_id!);
   if (error) return { error: `Odeme guncellenemedi: ${error.message}` };
 
+  const paymentCoachId = pkg.coach_id || (getSafeRole(actor.role) === "coach" ? actor.id : null);
+  const { error: paymentInsertErr } = await adminClient.from("private_lesson_payments").insert({
+    package_id: packageId,
+    organization_id: actor.organization_id,
+    athlete_id: pkg.athlete_id,
+    coach_id: paymentCoachId,
+    amount: paymentAmount,
+    paid_at: new Date().toISOString(),
+    note,
+    created_by: actor.id,
+  });
+  if (paymentInsertErr) return { error: `Odeme hareketi kaydedilemedi: ${paymentInsertErr.message}` };
+
   const pName = (pkg as { package_name?: string }).package_name || "Ozel ders paketi";
+  const remainingBalance = normalizeMoney(pkg.total_price - nextAmountPaid);
   try {
     if (paymentStatus !== "paid") {
       await insertNotificationsForUsers(
         [pkg.athlete_id as string],
-        `${pName}: Odeme guncellendi. Odenen ₺${amountPaid} / Toplam ₺${normalizeMoney(pkg.total_price)}. Durum: ${paymentStatus}.`
+        `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(pkg.total_price)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`
       );
     } else {
       await insertNotificationsForUsers(
         [pkg.athlete_id as string],
-        `${pName}: Odeme tamamlandi.`
+        `${pName}: Yeni tahsilat ₺${paymentAmount}. Odeme tamamlandi.`
       );
     }
   } catch {
@@ -443,4 +490,74 @@ export async function updatePrivateLessonPayment(formData: FormData) {
   revalidatePath("/ozel-ders-paketlerim");
   return { success: true as const };
   });
+}
+
+export async function getPrivateLessonPackageDetail(
+  packageId: string
+): Promise<PrivateLessonPackageDetailSnapshot | { error: string }> {
+  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "private_lesson_payments_ready"]);
+  if (schemaError) return { error: schemaError };
+
+  const resolved = await resolvePackageActor();
+  if ("error" in resolved) return { error: resolved.error };
+  const { actor } = resolved;
+  const role = getSafeRole(actor.role);
+  if (!actor.organization_id) return { error: "Organizasyon bilgisi eksik." };
+
+  if (role !== "admin" && role !== "coach" && role !== "sporcu") {
+    return { error: "Bu islem icin yetkiniz yok." };
+  }
+
+  if (role === "coach") {
+    const permissions = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!hasCoachPermission(permissions, "can_manage_training_notes")) {
+      return { error: "Ozel paket detayini goruntuleme yetkiniz yok." };
+    }
+  }
+
+  const id = packageId.trim();
+  if (!id) return { error: "Paket secimi zorunludur." };
+
+  const adminClient = createSupabaseAdminClient();
+  const { data: pkgRow, error: pkgErr } = await adminClient
+    .from("private_lesson_packages")
+    .select(PACKAGE_SELECT)
+    .eq("id", id)
+    .eq("organization_id", actor.organization_id)
+    .maybeSingle();
+  if (pkgErr || !pkgRow) return { error: "Paket bulunamadi." };
+
+  const mappedPackage = mapPackage(pkgRow as never);
+  if (role === "sporcu" && mappedPackage.athleteId !== actor.id) {
+    return { error: "Sadece kendi paket detayinizi gorebilirsiniz." };
+  }
+
+  const { data: usageRows, error: usageErr } = await adminClient
+    .from("private_lesson_usage")
+    .select("id, package_id, athlete_id, coach_id, used_at, note")
+    .eq("package_id", id)
+    .order("used_at", { ascending: false });
+  if (usageErr) return { error: `Kullanim gecmisi alinamadi: ${usageErr.message}` };
+
+  const { data: paymentRows, error: paymentErr } = await adminClient
+    .from("private_lesson_payments")
+    .select("id, package_id, athlete_id, coach_id, amount, paid_at, note, created_by, created_at")
+    .eq("package_id", id)
+    .order("paid_at", { ascending: false });
+  if (paymentErr) return { error: `Odeme gecmisi alinamadi: ${paymentErr.message}` };
+
+  const mappedUsage: PrivateLessonUsage[] = (usageRows || []).map((row) => ({
+    id: row.id as string,
+    packageId: row.package_id as string,
+    athleteId: row.athlete_id as string,
+    coachId: (row.coach_id as string | null) ?? null,
+    usedAt: row.used_at as string,
+    note: (row.note as string | null) ?? null,
+  }));
+
+  return {
+    package: mappedPackage,
+    usageRows: mappedUsage,
+    paymentRows: (paymentRows || []).map((row) => mapPaymentRow(row as never)),
+  };
 }

@@ -9,6 +9,7 @@ import { listCoachDayLessonsSnapshot, listLessonsSnapshot } from "@/lib/actions/
 import type { Lesson } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
+import { formatLessonDateTimeTr, formatLessonTimeTr } from "@/lib/forms/datetimeLocal";
 
 interface CoachOption {
   id: string;
@@ -41,6 +42,7 @@ export default function LessonsPage() {
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [coachDayLessons, setCoachDayLessons] = useState<CoachLessonPreview[]>([]);
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
+  const [athleteSearch, setAthleteSearch] = useState("");
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -98,6 +100,16 @@ export default function LessonsPage() {
         l.status.toLowerCase().includes(q)
     );
   }, [lessons, search]);
+
+  const filteredAthletes = useMemo(() => {
+    const q = athleteSearch.trim().toLowerCase();
+    if (!q) return athletes;
+    return athletes.filter((athlete) => athlete.full_name.toLowerCase().includes(q));
+  }, [athletes, athleteSearch]);
+
+  const coachNameById = useMemo(() => {
+    return new Map(coaches.map((coach) => [coach.id, coach.full_name]));
+  }, [coaches]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -304,9 +316,9 @@ export default function LessonsPage() {
                 <div className="grid gap-2">
                   {coachDayLessons.map((lesson) => (
                     <div key={lesson.id} className="text-[10px] font-bold text-gray-300 bg-black/30 border border-white/10 rounded-lg px-3 py-2 break-words min-w-0">
-                      {lesson.title} - {new Date(lesson.start_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                      {lesson.title} - {formatLessonTimeTr(lesson.start_time)}
                       {" - "}
-                      {new Date(lesson.end_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                      {formatLessonTimeTr(lesson.end_time)}
                     </div>
                   ))}
                 </div>
@@ -316,8 +328,15 @@ export default function LessonsPage() {
 
             <div className="bg-[#1c1c21] border border-white/10 rounded-xl p-3">
             <p className="ui-label mb-2">Sporcu Seçimi</p>
+            <input
+              type="search"
+              value={athleteSearch}
+              onChange={(e) => setAthleteSearch(e.target.value)}
+              placeholder="Sporcu ara..."
+              className="ui-input mb-3 min-h-11 italic text-base sm:text-xs"
+            />
             <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
-              {athletes.map((athlete) => {
+              {filteredAthletes.map((athlete) => {
                 const checked = selectedAthletes.includes(athlete.id);
                 return (
                   <label key={athlete.id} className="flex items-start gap-3 text-[11px] text-gray-300 font-bold min-h-10 py-1 touch-manipulation cursor-pointer min-w-0">
@@ -335,6 +354,9 @@ export default function LessonsPage() {
                   </label>
                 );
               })}
+              {filteredAthletes.length === 0 ? (
+                <p className="col-span-full text-[10px] font-bold italic text-gray-500">Aramaya uygun sporcu bulunamadi.</p>
+              ) : null}
             </div>
           </div>
 
@@ -370,10 +392,13 @@ export default function LessonsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] font-black uppercase min-w-0">
                   <span className="ui-badge-neutral max-w-full break-words">
-                    <Calendar size={12} className="shrink-0 inline" /> {new Date(lesson.startTime).toLocaleString("tr-TR")}
+                    <Calendar size={12} className="shrink-0 inline" /> {formatLessonDateTimeTr(lesson.startTime)}
                   </span>
                   <span className="ui-badge-neutral break-words max-w-full">
                     {lesson.location}
+                  </span>
+                  <span className="ui-badge-neutral break-words max-w-full">
+                    KOC: {lesson.coachId ? (coachNameById.get(lesson.coachId) ?? "Bilinmiyor") : "Atanmadi"}
                   </span>
                   <span className="ui-badge-neutral text-[#c4b5fd] border-[#7c3aed]/20 bg-[#7c3aed]/10 shrink-0">
                     {lesson.capacity} KISI

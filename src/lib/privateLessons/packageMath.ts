@@ -20,3 +20,9 @@ export function computeRemainingLessons(totalLessonsInput: number, usedLessonsIn
   const usedLessons = Math.max(0, Math.floor(usedLessonsInput));
   return Math.max(totalLessons - usedLessons, 0);
 }
+
+export function computeIncrementalAmountPaid(currentAmountPaidInput: number, paymentAmountInput: number): number {
+  const currentAmountPaid = normalizeMoney(currentAmountPaidInput);
+  const paymentAmount = normalizeMoney(paymentAmountInput);
+  return normalizeMoney(currentAmountPaid + paymentAmount);
+}

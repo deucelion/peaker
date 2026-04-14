@@ -245,6 +245,8 @@ function CoachProfilePageInner() {
             { key: "can_take_attendance", label: "Yoklama Alma" },
             { key: "can_view_reports", label: "Raporlari Gorme" },
             { key: "can_manage_training_notes", label: "Not/Program Yönetimi" },
+              { key: "can_manage_athlete_profiles", label: "Sporcu Profil Yonetimi" },
+              { key: "can_manage_teams", label: "Takim Yonetimi" },
           ].map((item) => {
             const checked = permissions[item.key as CoachPermissionKey];
             return (

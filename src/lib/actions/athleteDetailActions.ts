@@ -163,7 +163,7 @@ async function resolveManagementActorForAthleteMutations() {
   }
   if (actorRole === "coach") {
     const coachPerms = await getCoachPermissions(actor.id, actor.organization_id);
-    if (!coachPerms.can_view_all_athletes) {
+    if (!coachPerms.can_manage_athlete_profiles) {
       return { error: "Sporcu guncelleme yetkiniz yok." as const };
     }
   }
@@ -221,5 +221,70 @@ export async function updateAthletePositionForManagement(athleteId: string, next
 
   revalidatePath(`/sporcu/${athleteId}`);
   revalidatePath("/oyuncular");
+  return { success: true as const };
+}
+
+export async function updateAthleteProfileForManagement(
+  athleteId: string,
+  updates: {
+    fullName: string;
+    team: string;
+    position: string;
+    number: string;
+    height: string;
+    weight: string;
+  }
+) {
+  if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
+  const gate = await resolveManagementActorForAthleteMutations();
+  if ("error" in gate) return { error: gate.error };
+
+  const fullName = updates.fullName.trim();
+  const team = updates.team.trim();
+  const position = updates.position.trim();
+  const number = updates.number.trim();
+  const heightNum = updates.height.trim() ? Number(updates.height) : null;
+  const weightNum = updates.weight.trim() ? Number(updates.weight) : null;
+
+  if (!fullName) return { error: "Ad soyad zorunludur." as const };
+  if (fullName.length > 120) return { error: "Ad soyad en fazla 120 karakter olabilir." as const };
+  if (team.length > 80) return { error: "Takim adi en fazla 80 karakter olabilir." as const };
+  if (position.length > 24) return { error: "Pozisyon en fazla 24 karakter olabilir." as const };
+  if (number.length > 16) return { error: "Forma numarasi en fazla 16 karakter olabilir." as const };
+  if (heightNum != null && (!Number.isFinite(heightNum) || heightNum < 50 || heightNum > 260)) {
+    return { error: "Boy 50-260 araliginda olmali." as const };
+  }
+  if (weightNum != null && (!Number.isFinite(weightNum) || weightNum < 20 || weightNum > 300)) {
+    return { error: "Kilo 20-300 araliginda olmali." as const };
+  }
+
+  const adminClient = createSupabaseAdminClient();
+  const { data: target, error: tErr } = await adminClient
+    .from("profiles")
+    .select("id, role, organization_id")
+    .eq("id", athleteId)
+    .eq("organization_id", gate.actor.organization_id)
+    .maybeSingle();
+  if (tErr || !target || getSafeRole(target.role) !== "sporcu") {
+    return { error: "Sporcu bulunamadi veya erisim reddedildi." as const };
+  }
+
+  const { error } = await adminClient
+    .from("profiles")
+    .update({
+      full_name: fullName,
+      team: team || null,
+      position: position || null,
+      number: number || null,
+      height: heightNum,
+      weight: weightNum,
+    })
+    .eq("id", athleteId)
+    .eq("organization_id", gate.actor.organization_id);
+  if (error) return { error: `Sporcu profili guncellenemedi: ${error.message}` as const };
+
+  revalidatePath(`/sporcu/${athleteId}`);
+  revalidatePath("/oyuncular");
+  revalidatePath("/takimlar");
   return { success: true as const };
 }

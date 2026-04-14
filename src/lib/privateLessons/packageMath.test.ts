@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computePaymentStatus, computeRemainingLessons, normalizeMoney } from "@/lib/privateLessons/packageMath";
+import {
+  computeIncrementalAmountPaid,
+  computePaymentStatus,
+  computeRemainingLessons,
+  normalizeMoney,
+} from "@/lib/privateLessons/packageMath";
 
 describe("private lesson package math", () => {
   it("normalizes money to non-negative 2 decimals", () => {
@@ -19,5 +24,22 @@ describe("private lesson package math", () => {
     expect(computeRemainingLessons(10, 3)).toBe(7);
     expect(computeRemainingLessons(10, 12)).toBe(0);
     expect(computeRemainingLessons(-1, 0)).toBe(0);
+  });
+
+  it("adds incremental payment on top of current paid amount", () => {
+    expect(computeIncrementalAmountPaid(100, 25)).toBe(125);
+    expect(computeIncrementalAmountPaid(100.1, 0.2)).toBe(100.3);
+    expect(computeIncrementalAmountPaid(0, -10)).toBe(0);
+  });
+
+  it("keeps payment status consistent after incremental updates", () => {
+    const totalPrice = 800;
+    const afterFirst = computeIncrementalAmountPaid(0, 200);
+    const afterSecond = computeIncrementalAmountPaid(afterFirst, 500);
+    const afterThird = computeIncrementalAmountPaid(afterSecond, 100);
+
+    expect(computePaymentStatus(totalPrice, afterFirst)).toBe("partial");
+    expect(computePaymentStatus(totalPrice, afterSecond)).toBe("partial");
+    expect(computePaymentStatus(totalPrice, afterThird)).toBe("paid");
   });
 });
