@@ -13,7 +13,7 @@ export async function addPlayer(formData: FormData) {
   const fullName = formData.get("fullName")?.toString().trim();
   const password = formData.get("password")?.toString();
   const position = formData.get("position")?.toString();
-  const team = formData.get("team")?.toString();
+  const team = formData.get("team")?.toString().trim() || null;
 
   // 2. SIKI DOĞRULAMA
   if (!email || !SIMPLE_EMAIL_RE.test(email) || !password || password.length < 6) {
@@ -72,7 +72,7 @@ export async function addPlayer(formData: FormData) {
           email: email,
           role: "sporcu",
           position: position || "Belirtilmedi",
-          team: team || "Genel",
+          team,
           organization_id: organizationId, // Bu satır güvenliğin temelidir
           is_active: true,
           created_at: new Date().toISOString()

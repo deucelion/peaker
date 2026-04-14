@@ -409,11 +409,27 @@ export async function addCoach(formData: FormData) {
       return { error: "Gecersiz oturum. Lutfen tekrar giris yapin." };
     }
 
-    const { data: actorProfile, error: profileError } = await sessionClient
+    let { data: actorProfile, error: profileError } = await sessionClient
       .from("profiles")
       .select("role, organization_id")
       .eq("id", authData.user.id)
       .maybeSingle();
+    if (!actorProfile) {
+      const adminClient = createSupabaseAdminClient();
+      const byId = await adminClient
+        .from("profiles")
+        .select("role, organization_id")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+      actorProfile = byId.data ?? null;
+      if (!actorProfile) {
+        actorProfile = {
+          role: extractSessionRole(authData.user),
+          organization_id: extractSessionOrganizationId(authData.user),
+        };
+      }
+      profileError = byId.error ?? null;
+    }
 
     if (profileError || !actorProfile) {
       return { error: "Profil dogrulanamadi." };

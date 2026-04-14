@@ -109,6 +109,15 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     managementGroup: "operations",
   },
   {
+    href: PATHS.takimlar,
+    icon: "Users",
+    label: tr.nav.teams,
+    section: "management",
+    roles: ["admin", "coach"],
+    activeMatch: "prefix",
+    managementGroup: "operations",
+  },
+  {
     href: PATHS.finans,
     icon: "CreditCard",
     label: "Aidat Takibi",

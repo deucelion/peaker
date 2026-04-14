@@ -3,6 +3,7 @@ export const tr = {
     superAdmin: "Super Admin",
     systemHealth: "Sistem Sağlığı",
     players: "Sporcular",
+    teams: "Takimlar",
     coaches: "Koçlar",
     notesWeekly: "Notlar ve Haftalık Program",
     privatePackages: "Özel Ders Paketleri",

@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
@@ -126,4 +127,99 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     wellnessReports: wellnessRows ?? [],
     bodyMetrics,
   };
+}
+
+async function resolveManagementActorForAthleteMutations() {
+  const sessionClient = await createServerSupabaseClient();
+  const { data: authData, error: authError } = await sessionClient.auth.getUser();
+  if (authError || !authData.user) {
+    return { error: "Gecersiz oturum." as const };
+  }
+
+  let { data: actor } = await sessionClient
+    .from("profiles")
+    .select("id, role, organization_id, is_active")
+    .eq("id", authData.user.id)
+    .maybeSingle();
+  if (!actor) {
+    const adminClient = createSupabaseAdminClient();
+    const byId = await adminClient
+      .from("profiles")
+      .select("id, role, organization_id, is_active")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    actor = byId.data ?? null;
+  }
+  if (!actor?.organization_id) {
+    return { error: "Kullanici profili dogrulanamadi." as const };
+  }
+
+  const coachBlock = messageIfCoachCannotOperate(actor.role, actor.is_active);
+  if (coachBlock) return { error: coachBlock };
+
+  const actorRole = getSafeRole(actor.role);
+  if (actorRole !== "admin" && actorRole !== "coach") {
+    return { error: "Bu islem icin yetkiniz yok." as const };
+  }
+  if (actorRole === "coach") {
+    const coachPerms = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!coachPerms.can_view_all_athletes) {
+      return { error: "Sporcu guncelleme yetkiniz yok." as const };
+    }
+  }
+  return { actor };
+}
+
+export async function listPositionOptionsForManagement() {
+  const gate = await resolveManagementActorForAthleteMutations();
+  if ("error" in gate) return { error: gate.error };
+
+  const adminClient = createSupabaseAdminClient();
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("position")
+    .eq("organization_id", gate.actor.organization_id)
+    .eq("role", "sporcu");
+
+  if (error) return { error: `Pozisyonlar alinamadi: ${error.message}` };
+  const positions = Array.from(
+    new Set(
+      (data || [])
+        .map((row) => (row.position || "").trim())
+        .filter((v) => v.length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b, "tr"));
+
+  return { positions };
+}
+
+export async function updateAthletePositionForManagement(athleteId: string, nextPositionRaw: string) {
+  if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
+
+  const gate = await resolveManagementActorForAthleteMutations();
+  if ("error" in gate) return { error: gate.error };
+  const nextPosition = nextPositionRaw.trim();
+  if (nextPosition.length > 24) return { error: "Pozisyon en fazla 24 karakter olabilir." as const };
+
+  const adminClient = createSupabaseAdminClient();
+  const { data: target, error: tErr } = await adminClient
+    .from("profiles")
+    .select("id, role, organization_id")
+    .eq("id", athleteId)
+    .eq("organization_id", gate.actor.organization_id)
+    .maybeSingle();
+  if (tErr || !target || getSafeRole(target.role) !== "sporcu") {
+    return { error: "Sporcu bulunamadi veya erisim reddedildi." as const };
+  }
+
+  const { error } = await adminClient
+    .from("profiles")
+    .update({ position: nextPosition || null })
+    .eq("id", athleteId)
+    .eq("organization_id", gate.actor.organization_id);
+  if (error) return { error: `Pozisyon guncellenemedi: ${error.message}` as const };
+
+  revalidatePath(`/sporcu/${athleteId}`);
+  revalidatePath("/oyuncular");
+  return { success: true as const };
 }

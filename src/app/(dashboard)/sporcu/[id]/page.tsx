@@ -28,9 +28,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProfileBasic } from "@/types/domain";
 import type { TrainingLoadRow, WellnessReportRow } from "@/types/performance";
-import { loadAthleteDetailForManagement } from "@/lib/actions/athleteDetailActions";
+import {
+  listPositionOptionsForManagement,
+  loadAthleteDetailForManagement,
+  updateAthletePositionForManagement,
+} from "@/lib/actions/athleteDetailActions";
 import { AthleteFieldTestsPanel, type FieldTestResultRow } from "./AthleteFieldTestsPanel";
 import { AthletePerformanceInsightsPanel, type BodyMetricRow } from "./AthletePerformanceInsightsPanel";
+import Notification from "@/components/Notification";
 
 interface RadarPoint {
   subject: string;
@@ -57,6 +62,10 @@ export default function SporcuDetayDinamik() {
   const [acwrStatus, setAcwrStatus] = useState({ ratio: 0, label: "Veri Bekleniyor", color: "text-gray-500" });
   const [weeklyLoads, setWeeklyLoads] = useState<WeeklyLoadPoint[]>([]);
   const [trainingLoads, setTrainingLoads] = useState<TrainingLoadRow[]>([]);
+  const [positionOptions, setPositionOptions] = useState<string[]>([]);
+  const [positionDraft, setPositionDraft] = useState("");
+  const [positionMessage, setPositionMessage] = useState<string | null>(null);
+  const [updatingPosition, setUpdatingPosition] = useState(false);
 
   const calculateACWR = useCallback((loads: TrainingLoadRow[]) => {
     const last7Days = loads.slice(-7).reduce((acc, curr) => acc + (curr.total_load || 0), 0) / 7;
@@ -86,6 +95,7 @@ export default function SporcuDetayDinamik() {
       }
 
       setPlayer(res.profile as ProfileBasic);
+      setPositionDraft(((res.profile as ProfileBasic).position || "").trim());
 
       const results = (res.results || []) as FieldTestResultRow[];
       setTableMetrics(results);
@@ -117,6 +127,11 @@ export default function SporcuDetayDinamik() {
       } else {
         setWeeklyLoads([]);
         setAcwrStatus({ ratio: 0, label: "Veri Bekleniyor", color: "text-gray-500" });
+      }
+
+      const positionsRes = await listPositionOptionsForManagement();
+      if (!("error" in positionsRes)) {
+        setPositionOptions(positionsRes.positions || []);
       }
     } catch (e) {
       console.error("Veri hatası:", e);
@@ -193,6 +208,52 @@ export default function SporcuDetayDinamik() {
               <MetricBadge icon={<Heart size={14} />} label="AĞIRLIK" val={`${player.weight || "--"} KG`} />
               <MetricBadge icon={<Droplets size={14} />} label="FORMA" val={`#${player.number || "--"}`} color="text-[#7c3aed]" />
             </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!id) return;
+                setUpdatingPosition(true);
+                setPositionMessage(null);
+                const result = await updateAthletePositionForManagement(id, positionDraft);
+                if ("success" in result && result.success) {
+                  setPlayer((prev) => (prev ? { ...prev, position: positionDraft.trim() || null } : prev));
+                  setPositionMessage("Pozisyon guncellendi.");
+                } else {
+                  setPositionMessage(("error" in result && result.error) || "Pozisyon guncellenemedi.");
+                }
+                setUpdatingPosition(false);
+              }}
+              className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
+            >
+              <input
+                value={positionDraft}
+                onChange={(e) => setPositionDraft(e.target.value.toUpperCase())}
+                list="athlete-position-options"
+                placeholder="Pozisyon guncelle (opsiyonel)"
+                className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              />
+              <datalist id="athlete-position-options">
+                {positionOptions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+              <button
+                type="submit"
+                disabled={updatingPosition}
+                className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:hover:bg-[#6d28d9]"
+              >
+                {updatingPosition ? "Guncelleniyor..." : "Pozisyonu Kaydet"}
+              </button>
+            </form>
+            {positionMessage ? (
+              <div className="mt-2 min-w-0 break-words">
+                <Notification
+                  message={positionMessage}
+                  variant={positionMessage.toLowerCase().includes("guncellendi") ? "success" : "error"}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 

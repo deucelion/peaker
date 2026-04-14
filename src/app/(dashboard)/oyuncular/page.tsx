@@ -5,12 +5,14 @@ import { Search, UserPlus, ChevronRight, X, Filter, Loader2, UserCircle, UserMin
 import Link from "next/link";
 import { addPlayer, deactivateAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
 import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
+import { listTeamsForActor } from "@/lib/actions/teamActions";
 import type { PlayerWithPayments } from "@/types/domain";
 import Notification from "@/components/Notification";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
 
 export default function OyuncuYonetimi() {
   const [players, setPlayers] = useState<PlayerWithPayments[]>([]);
+  const [teamRegistry, setTeamRegistry] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,20 +29,36 @@ export default function OyuncuYonetimi() {
 
   // Mevcut takımları dinamik olarak çek (Filtre için)
   const availableTeams = useMemo(() => {
-    const teams = new Set(players.map((p) => p.team).filter((team): team is string => typeof team === "string" && team.length > 0));
+    const teams = new Set([
+      ...players.map((p) => p.team).filter((team): team is string => typeof team === "string" && team.length > 0),
+      ...teamRegistry,
+    ]);
     return ["Tüm Takımlar", ...Array.from(teams)];
+  }, [players, teamRegistry]);
+
+  const positionRegistry = useMemo(() => {
+    const set = new Set(
+      players
+        .map((p) => p.position)
+        .filter((position): position is string => typeof position === "string" && position.trim().length > 0)
+        .map((position) => position.trim())
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "tr"));
   }, [players]);
 
   async function fetchPlayers() {
     setLoading(true);
     try {
-      const result = await listManagementDirectory();
+      const [result, teamsResult] = await Promise.all([listManagementDirectory(), listTeamsForActor()]);
       if ("error" in result) {
         setPlayers([]);
         return;
       }
       setOrgId(result.organizationId);
       setPlayers((result.athletes as PlayerWithPayments[]) || []);
+      if (!("error" in teamsResult)) {
+        setTeamRegistry((teamsResult.teams || []).map((t) => String(t.name)).filter(Boolean));
+      }
     } catch (error) {
       console.error("Sporcular yuklenirken hata:", error);
     } finally {
@@ -297,17 +315,26 @@ export default function OyuncuYonetimi() {
               <input name="password" type="text" required minLength={6} placeholder="GİRİŞ ŞİFRESİ (EN AZ 6)" autoComplete="new-password" className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]" />
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <select name="position" className="min-h-12 w-full min-w-0 touch-manipulation appearance-none rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none sm:px-8 sm:py-5 sm:text-[11px]">
-                  <option value="PG">PG (1)</option>
-                  <option value="SG">SG (2)</option>
-                  <option value="SF">SF (3)</option>
-                  <option value="PF">PF (4)</option>
-                  <option value="C">C (5)</option>
-                </select>
+                <div className="min-w-0">
+                  <input
+                    name="position"
+                    list="position-options"
+                    placeholder="POZISYON (opsiyonel)"
+                    className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]"
+                  />
+                  <datalist id="position-options">
+                    {positionRegistry.map((position) => (
+                      <option key={position} value={position} />
+                    ))}
+                  </datalist>
+                </div>
                 <select name="team" className="min-h-12 w-full min-w-0 touch-manipulation appearance-none rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none sm:px-8 sm:py-5 sm:text-[11px]">
-                  <option value="A TAKIM">A TAKIM</option>
-                  <option value="U16 ELITE A">U16 ELITE A</option>
-                  <option value="U14 GELİŞİM">U14 GELİŞİM</option>
+                  <option value="">TAKIM SECMEDEN DEVAM ET</option>
+                  {teamRegistry.map((teamName) => (
+                    <option key={teamName} value={teamName}>
+                      {teamName}
+                    </option>
+                  ))}
                 </select>
               </div>
 
