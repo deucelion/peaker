@@ -6,6 +6,45 @@ import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { revalidatePath } from "next/cache";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
+import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
+
+async function resolveActorProfileWithFallback(userId: string) {
+  const sessionClient = await createServerSupabaseClient();
+  const { data: actorProfile, error: actorError } = await sessionClient
+    .from("profiles")
+    .select("id, role, organization_id, is_active")
+    .eq("id", userId)
+    .maybeSingle();
+  if (actorProfile) return { actorProfile, actorError: null };
+
+  const adminClient = createSupabaseAdminClient();
+  const byId = await adminClient
+    .from("profiles")
+    .select("id, role, organization_id, is_active")
+    .eq("id", userId)
+    .maybeSingle();
+  if (byId.data) return { actorProfile: byId.data, actorError: null };
+
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData.user;
+  if (user) {
+    const claimRole = extractSessionRole(user);
+    const claimOrg = extractSessionOrganizationId(user);
+    if (claimRole && claimOrg) {
+      return {
+        actorProfile: {
+          id: user.id,
+          role: claimRole,
+          organization_id: claimOrg,
+          is_active: true,
+        },
+        actorError: null,
+      };
+    }
+  }
+
+  return { actorProfile: null, actorError: actorError || byId.error || null };
+}
 
 export async function addPlayer(formData: FormData) {
   // 1. VERİLERİ TEMİZLE VE AL
@@ -27,11 +66,7 @@ export async function addPlayer(formData: FormData) {
       return { error: "Oturum doğrulanamadı. Lütfen tekrar giriş yapın." };
     }
 
-    const { data: actorProfile, error: actorError } = await sessionClient
-      .from("profiles")
-      .select("role, organization_id, is_active")
-      .eq("id", userData.user.id)
-      .single();
+    const { actorProfile, actorError } = await resolveActorProfileWithFallback(userData.user.id);
 
     if (actorError || !actorProfile?.organization_id) {
       return { error: "Kullanıcı profil doğrulaması başarısız." };
@@ -109,11 +144,7 @@ async function assertCanMutateAthleteLifecycle(playerId: string) {
     return { error: "Oturum dogrulanamadi. Lutfen tekrar giris yapin." as const };
   }
 
-  const { data: actorProfile, error: actorError } = await sessionClient
-    .from("profiles")
-    .select("id, role, organization_id, is_active")
-    .eq("id", userData.user.id)
-    .single();
+  const { actorProfile, actorError } = await resolveActorProfileWithFallback(userData.user.id);
 
   if (actorError || !actorProfile?.organization_id) {
     return { error: "Kullanici profil dogrulamasi basarisiz." as const };
