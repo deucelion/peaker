@@ -238,15 +238,19 @@ function CoachProfilePageInner() {
         ) : null}
         <div className="grid md:grid-cols-2 gap-3">
           {[
-            { key: "can_create_lessons", label: "Ders Oluşturma" },
-            { key: "can_edit_lessons", label: "Ders Duzenleme" },
-            { key: "can_view_all_athletes", label: "Tüm Sporcuları Görme" },
-            { key: "can_add_athletes_to_lessons", label: "Derse Sporcu Ekleme" },
-            { key: "can_take_attendance", label: "Yoklama Alma" },
-            { key: "can_view_reports", label: "Raporlari Gorme" },
-            { key: "can_manage_training_notes", label: "Not/Program Yönetimi" },
-              { key: "can_manage_athlete_profiles", label: "Sporcu Profil Yonetimi" },
-              { key: "can_manage_teams", label: "Takim Yonetimi" },
+            { key: "can_create_lessons", label: "Ders oluşturma" },
+            { key: "can_edit_lessons", label: "Ders düzenleme / iptal (yalnızca kendi dersi)" },
+            {
+              key: "can_view_all_organization_lessons",
+              label: "Tüm organizasyon dersleri (yoklama, liste, katılımcı)",
+            },
+            { key: "can_view_all_athletes", label: "Tüm sporcuları görme" },
+            { key: "can_add_athletes_to_lessons", label: "Derse sporcu ekleme / çıkarma" },
+            { key: "can_take_attendance", label: "Yoklama alma" },
+            { key: "can_view_reports", label: "Raporları görme" },
+            { key: "can_manage_training_notes", label: "Not / program yönetimi" },
+            { key: "can_manage_athlete_profiles", label: "Sporcu profil yönetimi" },
+            { key: "can_manage_teams", label: "Takım yönetimi" },
           ].map((item) => {
             const checked = permissions[item.key as CoachPermissionKey];
             return (

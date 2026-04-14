@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
+import { COACH_PERMISSION_KEYS, DEFAULT_COACH_PERMISSIONS, type CoachPermissions } from "@/lib/types";
+import { normalizeCoachPermissions } from "@/lib/auth/coachPermissions";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { isUuid } from "@/lib/validation/uuid";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
@@ -41,6 +42,7 @@ async function ensureCoachPermissionsRow(
       organization_id: organizationId,
       can_create_lessons: DEFAULT_COACH_PERMISSIONS.can_create_lessons,
       can_edit_lessons: DEFAULT_COACH_PERMISSIONS.can_edit_lessons,
+      can_view_all_organization_lessons: DEFAULT_COACH_PERMISSIONS.can_view_all_organization_lessons,
       can_view_all_athletes: DEFAULT_COACH_PERMISSIONS.can_view_all_athletes,
       can_add_athletes_to_lessons: DEFAULT_COACH_PERMISSIONS.can_add_athletes_to_lessons,
       can_take_attendance: DEFAULT_COACH_PERMISSIONS.can_take_attendance,
@@ -369,26 +371,14 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
 
   const { data: permissionRow } = await adminClient
     .from("coach_permissions")
-    .select(
-      "can_create_lessons, can_edit_lessons, can_view_all_athletes, can_add_athletes_to_lessons, can_take_attendance, can_view_reports, can_manage_training_notes, can_manage_athlete_profiles, can_manage_teams"
-    )
+    .select(COACH_PERMISSION_KEYS.join(","))
     .eq("coach_id", coachId)
     .maybeSingle();
 
   return {
     row: base.row,
     scheduleRows: (scheduleRows || []) as CoachAdminScheduleRow[],
-    permissions: {
-      can_create_lessons: permissionRow?.can_create_lessons ?? true,
-      can_edit_lessons: permissionRow?.can_edit_lessons ?? true,
-      can_view_all_athletes: permissionRow?.can_view_all_athletes ?? true,
-      can_add_athletes_to_lessons: permissionRow?.can_add_athletes_to_lessons ?? true,
-      can_take_attendance: permissionRow?.can_take_attendance ?? true,
-      can_view_reports: permissionRow?.can_view_reports ?? true,
-      can_manage_training_notes: permissionRow?.can_manage_training_notes ?? true,
-      can_manage_athlete_profiles: permissionRow?.can_manage_athlete_profiles ?? true,
-      can_manage_teams: permissionRow?.can_manage_teams ?? true,
-    },
+    permissions: normalizeCoachPermissions((permissionRow ?? null) as Partial<CoachPermissions> | null),
   };
 }
 

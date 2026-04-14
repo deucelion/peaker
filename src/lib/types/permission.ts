@@ -1,6 +1,8 @@
+/** Koç yetki sütunları (coach_permissions). */
 export const COACH_PERMISSION_KEYS = [
   "can_create_lessons",
   "can_edit_lessons",
+  "can_view_all_organization_lessons",
   "can_view_all_athletes",
   "can_add_athletes_to_lessons",
   "can_take_attendance",
@@ -17,6 +19,7 @@ export type CoachPermissions = Record<CoachPermissionKey, boolean>;
 export const DEFAULT_COACH_PERMISSIONS: CoachPermissions = {
   can_create_lessons: true,
   can_edit_lessons: true,
+  can_view_all_organization_lessons: true,
   can_view_all_athletes: true,
   can_add_athletes_to_lessons: true,
   can_take_attendance: true,

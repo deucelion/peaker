@@ -50,6 +50,11 @@ type ParticipantWithSchedule = {
     | null;
 };
 
+function coachMayCoordinateOrgLesson(permissions: CoachPermissions, lessonCoachId: string | null | undefined, actorId: string) {
+  if (!lessonCoachId || lessonCoachId === actorId) return true;
+  return Boolean(permissions.can_view_all_organization_lessons);
+}
+
 async function resolveActor(): Promise<{ actor: ActorProfile } | { error: string }> {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
   if ("error" in resolved) return { error: resolved.error };
@@ -215,9 +220,10 @@ export async function addLessonParticipants(lessonId: string, participantIds: st
   const { actor } = resolved;
   const role = getSafeRole(actor.role);
   if (role !== "admin" && role !== "coach") return { error: "Bu islem icin yetkiniz yok." };
+  let coordPermissions: CoachPermissions | null = null;
   if (role === "coach") {
-    const permissions = await getCoachPermissions(actor.id, actor.organization_id);
-    if (!hasCoachPermission(permissions, "can_add_athletes_to_lessons")) {
+    coordPermissions = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!hasCoachPermission(coordPermissions, "can_add_athletes_to_lessons")) {
       return { error: "Derse sporcu ekleme yetkiniz yok." };
     }
   }
@@ -233,7 +239,9 @@ export async function addLessonParticipants(lessonId: string, participantIds: st
     .maybeSingle();
 
   if (!lesson) return { error: "Ders bulunamadi." };
-  if (role === "coach" && lesson.coach_id !== actor.id) return { error: "Sadece kendi dersinizi duzenleyebilirsiniz." };
+  if (role === "coach" && !coachMayCoordinateOrgLesson(coordPermissions!, lesson.coach_id, actor.id)) {
+    return { error: "Sadece kendi dersinizi duzenleyebilirsiniz." };
+  }
   if (lesson.status === "cancelled") return { error: "Iptal edilmis derse sporcu eklenemez." };
 
   const uniqueAthletes = Array.from(new Set(participantIds.filter(Boolean)));
@@ -312,9 +320,10 @@ export async function removeLessonParticipant(lessonId: string, participantId: s
   const { actor } = resolved;
   const role = getSafeRole(actor.role);
   if (role !== "admin" && role !== "coach") return { error: "Bu islem icin yetkiniz yok." };
+  let removeCoordPermissions: CoachPermissions | null = null;
   if (role === "coach") {
-    const permissions = await getCoachPermissions(actor.id, actor.organization_id);
-    if (!hasCoachPermission(permissions, "can_add_athletes_to_lessons")) {
+    removeCoordPermissions = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!hasCoachPermission(removeCoordPermissions, "can_add_athletes_to_lessons")) {
       return { error: "Ders katilimci yonetimi yetkiniz yok." };
     }
   }
@@ -328,7 +337,9 @@ export async function removeLessonParticipant(lessonId: string, participantId: s
     .eq("organization_id", orgId)
     .maybeSingle();
   if (!lesson) return { error: "Ders bulunamadi." };
-  if (role === "coach" && lesson.coach_id !== actor.id) return { error: "Sadece kendi dersinizi duzenleyebilirsiniz." };
+  if (role === "coach" && !coachMayCoordinateOrgLesson(removeCoordPermissions!, lesson.coach_id, actor.id)) {
+    return { error: "Sadece kendi dersinizi duzenleyebilirsiniz." };
+  }
 
   const { error } = await adminClient
     .from("training_participants")
@@ -589,7 +600,7 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
   if (lessonErr || !lessonRow) return { error: "Ders bulunamadi." };
 
   const lesson = mapLesson(lessonRow);
-  if (role === "coach" && lesson.coachId !== actor.id) {
+  if (role === "coach" && !coachMayCoordinateOrgLesson(permissions, lesson.coachId ?? null, actor.id)) {
     return { error: "Sadece kendi ders detayinizi gorebilirsiniz." };
   }
 

@@ -137,7 +137,12 @@ export async function listCoachDayLessonsSnapshot(coachId: string, lessonDate: s
   const { actor } = resolved;
   if (!actor.organizationId) return { error: "Organizasyon bilgisi eksik." };
   if (actor.role !== "admin" && actor.role !== "coach") return { error: "Bu sayfa icin yetkiniz yok." };
-  if (actor.role === "coach" && actor.id !== coachId) return { error: "Sadece kendi derslerinizi gorebilirsiniz." };
+  if (actor.role === "coach" && actor.id !== coachId) {
+    const coachPerms = await getCoachPermissions(actor.id, actor.organizationId);
+    if (!coachPerms.can_view_all_organization_lessons) {
+      return { error: "Sadece kendi derslerinizi gorebilirsiniz." };
+    }
+  }
   const day = lessonDate?.trim();
   if (!day) return { lessons: [] };
 
@@ -170,13 +175,36 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
   const pager = normalizePagination(page, pageSize, 300);
   const adminClient = createSupabaseAdminClient();
 
-  const trainingsRes = await adminClient
+  let trainingsQuery = adminClient
     .from("training_schedule")
     .select("*", { count: "exact" })
     .eq("organization_id", actor.organizationId)
     .order("start_time", { ascending: false })
     .range(pager.from, pager.to);
+  if (actor.role === "coach" && !permissions.can_view_all_organization_lessons) {
+    trainingsQuery = trainingsQuery.eq("coach_id", actor.id);
+  }
+  const trainingsRes = await trainingsQuery;
   if (trainingsRes.error) return { error: `Dersler alinamadi: ${trainingsRes.error.message}` };
+
+  const rawTrainings = (trainingsRes.data || []) as Array<Record<string, unknown> & { id: string; coach_id?: string | null }>;
+  const coachIds = Array.from(new Set(rawTrainings.map((r) => r.coach_id).filter((id): id is string => Boolean(id))));
+  let coachLabelById = new Map<string, string>();
+  if (coachIds.length > 0) {
+    const { data: coachRows, error: coachRowsErr } = await adminClient
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", coachIds)
+      .eq("organization_id", actor.organizationId);
+    if (coachRowsErr) return { error: `Koc bilgileri alinamadi: ${coachRowsErr.message}` };
+    coachLabelById = new Map(
+      (coachRows || []).map((c) => [c.id, toDisplayName(c.full_name, c.email, "Koc")])
+    );
+  }
+  const trainingsWithCoach = rawTrainings.map((row) => ({
+    ...row,
+    coach_display_name: row.coach_id ? coachLabelById.get(row.coach_id) ?? null : null,
+  }));
 
   const canViewAllAthletes = actor.role !== "coach" || permissions.can_view_all_athletes;
   let athletes: Array<{ id: string; full_name: string }> = [];
@@ -196,7 +224,7 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
     role: actor.role,
     permissions,
     organizationId: actor.organizationId,
-    trainings: (trainingsRes.data || []) as Array<Record<string, unknown>>,
+    trainings: trainingsWithCoach as Array<Record<string, unknown>>,
     total: trainingsRes.count || 0,
     page: pager.page,
     pageSize: pager.pageSize,
@@ -219,7 +247,13 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
     .eq("organization_id", actor.organizationId)
     .maybeSingle();
   if (trainingRes.error || !trainingRes.data) return { error: "Ders bulunamadi." };
-  if (actor.role === "coach" && trainingRes.data.coach_id !== actor.id) return { error: "Sadece kendi dersinizi gorebilirsiniz." };
+  if (actor.role === "coach") {
+    const coachPerms = await getCoachPermissions(actor.id, actor.organizationId);
+    const lessonCoachId = trainingRes.data.coach_id as string | null;
+    if (!coachPerms.can_view_all_organization_lessons && lessonCoachId !== actor.id) {
+      return { error: "Sadece kendi dersinizi gorebilirsiniz." };
+    }
+  }
 
   const pager = normalizePagination(page, pageSize, 500);
   const res = await adminClient
@@ -238,11 +272,14 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
     marked_at?: string | null;
   }>;
   const profileIds = Array.from(new Set(rows.map((row) => row.profile_id).filter(Boolean)));
-  let profileMap = new Map<string, { id: string; full_name: string; email: string | null; position: string | null }>();
+  let profileMap = new Map<
+    string,
+    { id: string; full_name: string; email: string | null; position: string | null; team: string | null; number: string | null }
+  >();
   if (profileIds.length > 0) {
     const { data: profileRows, error: profileErr } = await adminClient
       .from("profiles")
-      .select("id, full_name, email, position")
+      .select("id, full_name, email, position, team, number")
       .in("id", profileIds)
       .eq("organization_id", actor.organizationId);
     if (profileErr) return { error: `Katilimci profilleri alinamadi: ${profileErr.message}` };
@@ -254,6 +291,8 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
           full_name: toDisplayName(p.full_name, p.email, "Sporcu"),
           email: p.email ?? null,
           position: p.position ?? null,
+          team: p.team ?? null,
+          number: p.number != null && String(p.number).trim() !== "" ? String(p.number) : null,
         },
       ])
     );
@@ -261,9 +300,17 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
 
   const participants = rows.map((row) => {
     const profile = profileMap.get(row.profile_id);
+    const fallbackProfile = {
+      id: row.profile_id,
+      full_name: "Profil bulunamadı",
+      email: null as string | null,
+      position: null as string | null,
+      team: null as string | null,
+      number: null as string | null,
+    };
     return {
       ...row,
-      profiles: profile || null,
+      profiles: profile ?? fallbackProfile,
     };
   }) as Array<Record<string, unknown>>;
   return { participants, total: res.count || 0, page: pager.page, pageSize: pager.pageSize };

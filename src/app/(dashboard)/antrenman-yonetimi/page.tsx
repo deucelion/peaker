@@ -1,45 +1,75 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Plus,
-  Calendar,
   Clock,
   Users,
   Check,
   X,
-  UserPlus,
   MapPin,
   Activity,
   Loader2,
 } from "lucide-react";
 import { listAttendanceSnapshot, listTrainingParticipantsSnapshot } from "@/lib/actions/snapshotActions";
-import type { ProfileBasic, TrainingParticipantRow, TrainingScheduleRow } from "@/types/domain";
+import type { TrainingParticipantRow, TrainingScheduleRow } from "@/types/domain";
 import Notification from "@/components/Notification";
-import Link from "next/link";
-import { addTrainingParticipant, setAttendanceStatus } from "@/lib/actions/attendanceActions";
+import { setAttendanceStatus } from "@/lib/actions/attendanceActions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 
 function toAttendanceBadgeLabel(
   status: "registered" | "attended" | "missed" | "cancelled" | null | undefined
 ) {
   if (status === "attended") return "KATILDI";
-  if (status === "missed") return "GELMEDI";
-  if (status === "cancelled") return "IPTAL";
+  if (status === "missed") return "GELMEDİ";
+  if (status === "cancelled") return "İPTAL";
   return "KAYITLI";
+}
+
+function notificationVariantFromMessage(message: string): "success" | "error" {
+  const m = message.toLowerCase();
+  if (
+    m.includes("başarı") ||
+    m.includes("basari") ||
+    m.includes("güncellendi") ||
+    m.includes("guncellendi") ||
+    m.includes("başarılı") ||
+    m.includes("basarili")
+  ) {
+    return "success";
+  }
+  return "error";
+}
+
+function lessonOptionLabel(t: TrainingScheduleRow) {
+  const coach = t.coach_display_name?.trim();
+  return coach ? `${t.title} · ${coach}` : t.title;
+}
+
+/** Filtrelerden bağımsız; liste ile aynı normalizasyon. */
+function normalizedAttendanceStatus(p: TrainingParticipantRow): "registered" | "attended" | "missed" | "cancelled" {
+  return (p.attendance_status ||
+    (p.is_present === true ? "attended" : p.is_present === false ? "missed" : "registered")) as
+    | "registered"
+    | "attended"
+    | "missed"
+    | "cancelled";
 }
 
 export default function AntrenmanYonetimi() {
   const searchParams = useSearchParams();
   const requestedTrainingId = searchParams.get("trainingId");
   const [trainings, setTrainings] = useState<TrainingScheduleRow[]>([]);
-  const [allPlayers, setAllPlayers] = useState<ProfileBasic[]>([]);
   const [selectedTrainingId, setSelectedTrainingId] = useState<string>("");
   const [participants, setParticipants] = useState<TrainingParticipantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actorRole, setActorRole] = useState<"admin" | "coach" | "sporcu">("sporcu");
   const [permissions, setPermissions] = useState(DEFAULT_COACH_PERMISSIONS);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "registered" | "attended" | "missed" | "cancelled">("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [rowSavingIds, setRowSavingIds] = useState<string[]>([]);
   
   const selectedTraining = trainings.find((t) => t.id === selectedTrainingId);
 
@@ -75,13 +105,6 @@ export default function AntrenmanYonetimi() {
     setActorRole(resolvedRole);
     setPermissions(resolvedPermissions);
 
-    const canViewAllAthletes = resolvedRole !== "coach" || resolvedPermissions.can_view_all_athletes;
-    if (canViewAllAthletes) {
-      setAllPlayers((snapshot.allPlayers || []) as ProfileBasic[]);
-    } else {
-      setAllPlayers([]);
-    }
-
     const tData = (snapshot.trainings || []) as unknown as TrainingScheduleRow[];
     if (tData && tData.length > 0) {
       setTrainings(tData);
@@ -107,20 +130,10 @@ export default function AntrenmanYonetimi() {
     return () => clearTimeout(id);
   }, [loadInitialData]);
 
-  // ANTRENMANA OYUNCU EKLEME
-  async function addPlayerToTraining(profileId: string) {
-    if (!selectedTrainingId) return;
-    const result = await addTrainingParticipant(selectedTrainingId, profileId);
-    if (result?.success) {
-      loadParticipants(selectedTrainingId);
-    } else {
-      setActionMessage(result?.error || "Sporcu eklenemedi.");
-    }
-  }
-
   // YOKLAMA DURUMUNU GÜNCELLEME
   async function updateAttendance(profileId: string, status: "registered" | "attended" | "missed" | "cancelled") {
     if (!selectedTrainingId) return;
+    setRowSavingIds((prev) => [...prev, profileId]);
     const result = await setAttendanceStatus(selectedTrainingId, profileId, status);
     if (result?.success) {
       setParticipants((prev) => prev.map((p) => 
@@ -135,6 +148,69 @@ export default function AntrenmanYonetimi() {
     } else {
       setActionMessage(result?.error || "Yoklama guncellenemedi.");
     }
+    setRowSavingIds((prev) => prev.filter((id) => id !== profileId));
+  }
+
+  const rosterAttendanceSummary = useMemo(() => {
+    const counts = { total: participants.length, registered: 0, attended: 0, missed: 0, cancelled: 0 };
+    for (const p of participants) {
+      const s = normalizedAttendanceStatus(p);
+      if (s === "attended") counts.attended += 1;
+      else if (s === "missed") counts.missed += 1;
+      else if (s === "cancelled") counts.cancelled += 1;
+      else counts.registered += 1;
+    }
+    return counts;
+  }, [participants]);
+
+  const filteredParticipants = participants.filter((p) => {
+    const normalized = normalizedAttendanceStatus(p);
+    const matchesStatus = statusFilter === "all" || normalized === statusFilter;
+    const q = search.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      (p.profiles.full_name || "").toLowerCase().includes(q) ||
+      (p.profiles.position || "").toLowerCase().includes(q) ||
+      (p.profiles.team || "").toLowerCase().includes(q) ||
+      (p.profiles.number != null ? String(p.profiles.number) : "").toLowerCase().includes(q);
+    return matchesStatus && matchesSearch;
+  });
+
+  async function applyBulkStatus(status: "registered" | "attended" | "missed" | "cancelled", onlySelected: boolean) {
+    if (!selectedTrainingId) return;
+    const targetIds = onlySelected
+      ? selectedIds
+      : filteredParticipants.map((p) => p.profile_id);
+    if (targetIds.length === 0) {
+      setActionMessage("Toplu işlem için sporcu seçilmedi.");
+      return;
+    }
+    setBulkSaving(true);
+    const results = await Promise.all(
+      targetIds.map(async (profileId) => {
+        const res = await setAttendanceStatus(selectedTrainingId, profileId, status);
+        return { profileId, ok: Boolean(res?.success), error: res?.error || null };
+      })
+    );
+    const failed = results.filter((r) => !r.ok);
+    setParticipants((prev) =>
+      prev.map((p) =>
+        targetIds.includes(p.profile_id)
+          ? {
+              ...p,
+              attendance_status: status,
+              is_present: status === "attended" ? true : status === "missed" ? false : null,
+            }
+          : p
+      )
+    );
+    setSelectedIds([]);
+    if (failed.length > 0) {
+      setActionMessage(`${failed.length} kayıt güncellenemedi; diğerleri başarılı.`);
+    } else {
+      setActionMessage("Toplu yoklama başarıyla güncellendi.");
+    }
+    setBulkSaving(false);
   }
 
   if (loading)
@@ -150,76 +226,16 @@ export default function AntrenmanYonetimi() {
       <header className="min-w-0">
         <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white break-words sm:text-4xl">SAHA YÖNETİMİ</h1>
         <p className="text-gray-500 font-bold text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.4em] mt-2 italic border-l-2 border-[#7c3aed] pl-3 sm:pl-4 break-words">
-          Antrenman Planlama ve Dijital Yoklama
+          Ders seçin, kadroyu filtreleyin ve yoklamayı güncelleyin
         </p>
       </header>
       {actionMessage ? (
         <div className="min-w-0 break-words">
-          <Notification message={actionMessage} variant={actionMessage.toLowerCase().includes("basari") ? "success" : "error"} />
+          <Notification message={actionMessage} variant={notificationVariantFromMessage(actionMessage)} />
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8 min-w-0">
-        
-        {/* SOL KOLON: PLANLAMA VE ATAMA */}
-        <div className="lg:col-span-4 space-y-5 sm:space-y-6 min-w-0">
-          
-          {/* ANTRENMAN OLUŞTURUCU YONLENDIRME */}
-          <div className="bg-[#121215] border border-white/5 p-5 sm:p-6 rounded-[1.75rem] sm:rounded-[2rem] shadow-xl relative overflow-hidden min-w-0">
-            <div className="relative z-10">
-              <h3 className="text-white font-black italic uppercase tracking-widest text-xs mb-6 flex items-center gap-2">
-                <Calendar size={18} className="text-[#7c3aed]" aria-hidden /> Ders Olusturma
-              </h3>
-              <p className="text-[10px] text-gray-500 font-bold uppercase italic tracking-widest leading-relaxed">
-                Ders olusturma akisi merkezi olarak <span className="text-[#7c3aed]">Dersler</span> sayfasina tasindi.
-                Burasi yoklama ve katilimci yonetimi icin kullanilir.
-              </p>
-              <Link
-                href="/dersler"
-                className="mt-4 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-[#7c3aed] px-5 py-3 text-[10px] font-black uppercase italic tracking-tighter text-white shadow-lg shadow-[#7c3aed]/20 transition-all sm:w-auto sm:hover:bg-[#6d28d9]"
-              >
-                <Plus size={14} aria-hidden /> DERSLER SAYFASINA GİT
-              </Link>
-            </div>
-          </div>
-
-          {/* SPORCU HAVUZU (HIZLI EKLE) */}
-          <div className="bg-[#121215] border border-white/5 p-5 sm:p-6 rounded-[1.75rem] sm:rounded-[2rem] min-w-0">
-            <h3 className="text-white font-black italic uppercase tracking-widest text-xs mb-6 flex items-center gap-2">
-              <UserPlus size={18} className="text-[#7c3aed]" aria-hidden /> Gruba Sporcu Ekle
-            </h3>
-            {actorRole === "coach" && !permissions.can_view_all_athletes && (
-              <p className="text-[10px] text-gray-500 font-bold uppercase italic mb-3">Sporcu listesini gorme yetkiniz yok.</p>
-            )}
-            {actorRole === "coach" && !permissions.can_add_athletes_to_lessons && (
-              <p className="text-[10px] text-gray-500 font-bold uppercase italic mb-3">Derse sporcu ekleme yetkiniz yok.</p>
-            )}
-            <div className="max-h-[350px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-              {allPlayers.map(p => (
-                <button
-                  type="button"
-                  key={p.id}
-                  onClick={() => addPlayerToTraining(p.id)}
-                  disabled={actorRole === "coach" && (!permissions.can_add_athletes_to_lessons || !permissions.can_view_all_athletes)}
-                  className="group flex min-h-[56px] w-full touch-manipulation items-center justify-between gap-2 rounded-2xl border border-transparent bg-white/5 p-4 text-left transition-all sm:min-h-[60px] sm:hover:border-[#7c3aed]/30 sm:hover:bg-[#7c3aed]/10"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-8 h-8 shrink-0 rounded-lg bg-[#1c1c21] flex items-center justify-center text-[10px] font-black text-gray-500 sm:group-hover:text-[#7c3aed]">
-                      {p.full_name[0]}
-                    </div>
-                    <span className="text-xs font-bold text-gray-400 sm:group-hover:text-white uppercase italic break-words min-w-0">
-                      {p.full_name}
-                    </span>
-                  </div>
-                  <Plus size={14} className="shrink-0 text-[#7c3aed]" aria-hidden />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* SAĞ KOLON: AKTİF YOKLAMA EKRANI */}
-        <div className="lg:col-span-8 space-y-5 sm:space-y-6 min-w-0">
+      <div className="space-y-5 sm:space-y-6 min-w-0">
           <div className="bg-[#121215] border border-white/5 p-5 sm:p-8 rounded-[1.75rem] sm:rounded-[2.5rem] shadow-xl min-h-[min(480px,70vh)] lg:min-h-[560px] min-w-0">
             
             {/* SEÇİLEN ANTRENMAN BİLGİSİ */}
@@ -234,8 +250,10 @@ export default function AntrenmanYonetimi() {
                     value={selectedTrainingId}
                     onChange={e => { setSelectedTrainingId(e.target.value); loadParticipants(e.target.value); }}
                   >
-                    {trainings.map(t => (
-                      <option key={t.id} value={t.id} className="bg-[#121215] text-white text-sm font-black uppercase italic">{t.title}</option>
+                    {trainings.map((t) => (
+                      <option key={t.id} value={t.id} className="bg-[#121215] text-white text-sm font-black uppercase italic">
+                        {lessonOptionLabel(t)}
+                      </option>
                     ))}
                   </select>
                   <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-xs font-bold text-gray-500 uppercase italic tracking-wide sm:tracking-widest">
@@ -246,22 +264,135 @@ export default function AntrenmanYonetimi() {
               </div>
               <div className="bg-white/5 px-5 py-3 sm:px-6 sm:py-4 rounded-2xl text-center shrink-0 w-full sm:w-auto">
                 <p className="text-[9px] font-black text-[#7c3aed] uppercase tracking-widest mb-1">Kadro Mevcudu</p>
-                <p className="text-3xl font-black italic text-white leading-none">{participants.length}</p>
+                <p className="text-3xl font-black italic text-white leading-none tabular-nums">{participants.length}</p>
               </div>
+            </div>
+
+            {/* Tüm kadro özeti (A): arama/filtre etkilemez */}
+            {selectedTrainingId ? (
+              <div className="mb-6 min-w-0 space-y-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-600">
+                  Yoklama özeti — tüm kadro
+                </p>
+                <div className="grid grid-cols-2 gap-3 min-[480px]:grid-cols-4">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-3 sm:px-4 sm:py-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400/90">Katıldı</p>
+                    <p className="mt-1 text-2xl font-black italic tabular-nums text-white sm:text-3xl">
+                      {rosterAttendanceSummary.attended}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-3 py-3 sm:px-4 sm:py-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-red-400/90">Gelmedi</p>
+                    <p className="mt-1 text-2xl font-black italic tabular-nums text-white sm:text-3xl">
+                      {rosterAttendanceSummary.missed}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 py-3 sm:px-4 sm:py-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-300/90">Kayıtlı</p>
+                    <p className="mt-1 text-2xl font-black italic tabular-nums text-white sm:text-3xl">
+                      {rosterAttendanceSummary.registered}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:px-4 sm:py-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">İptal</p>
+                    <p className="mt-1 text-2xl font-black italic tabular-nums text-white sm:text-3xl">
+                      {rosterAttendanceSummary.cancelled}
+                    </p>
+                  </div>
+                </div>
+                {rosterAttendanceSummary.total > 0 ? (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-emerald-500/80 transition-[width] duration-300"
+                      style={{
+                        width: `${Math.round((rosterAttendanceSummary.attended / rosterAttendanceSummary.total) * 100)}%`,
+                      }}
+                      title={`Katılım: %${Math.round((rosterAttendanceSummary.attended / rosterAttendanceSummary.total) * 100)}`}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,200px)_auto] lg:items-center">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="İsim, pozisyon, takım veya forma no..."
+                className="ui-input min-h-11 w-full min-w-0 bg-black px-3 text-base sm:text-sm"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "all" | "registered" | "attended" | "missed" | "cancelled")}
+                className="ui-select min-h-11 w-full min-w-0 bg-black px-3 sm:max-lg:col-span-2 lg:col-span-1"
+              >
+                <option value="all">Tüm durumlar</option>
+                <option value="registered">Kayıtlı</option>
+                <option value="attended">Katıldı</option>
+                <option value="missed">Gelmedi</option>
+                <option value="cancelled">İptal</option>
+              </select>
+              <div className="flex min-h-11 items-center text-[10px] font-black uppercase text-gray-400 sm:max-lg:col-span-2 lg:justify-end">
+                <span className="tabular-nums">{filteredParticipants.length} sporcu</span>
+              </div>
+            </div>
+            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              {bulkSaving ? (
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-500 sm:mr-2">
+                  <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-hidden />
+                  Kaydediliyor...
+                </span>
+              ) : null}
+              <button
+                type="button"
+                disabled={bulkSaving || selectedIds.length === 0 || (actorRole === "coach" && !permissions.can_take_attendance)}
+                onClick={() => void applyBulkStatus("attended", true)}
+                className="min-h-11 w-full touch-manipulation rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-[10px] font-black uppercase text-emerald-300 disabled:opacity-40 sm:w-auto"
+              >
+                Seçilenleri katıldı yap
+              </button>
+              <button
+                type="button"
+                disabled={bulkSaving || selectedIds.length === 0 || (actorRole === "coach" && !permissions.can_take_attendance)}
+                onClick={() => void applyBulkStatus("missed", true)}
+                className="min-h-11 w-full touch-manipulation rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300 disabled:opacity-40 sm:w-auto"
+              >
+                Seçilenleri gelmedi yap
+              </button>
+              <button
+                type="button"
+                disabled={bulkSaving || filteredParticipants.length === 0 || (actorRole === "coach" && !permissions.can_take_attendance)}
+                onClick={() => void applyBulkStatus("registered", false)}
+                className="min-h-11 w-full touch-manipulation rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 disabled:opacity-40 sm:w-auto"
+              >
+                Görünenleri kayıtlıya al
+              </button>
             </div>
 
             {/* YOKLAMA LİSTESİ */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {participants.length > 0 ? participants.map((p) => (
+              {filteredParticipants.length > 0 ? filteredParticipants.map((p) => (
                 <div
-                  key={p.id}
-                  className="group flex min-h-[88px] min-w-0 flex-col gap-4 rounded-[1.5rem] border border-white/5 bg-[#1c1c21] p-4 transition-all sm:min-h-[92px] sm:flex-row sm:items-center sm:justify-between sm:rounded-[2rem] sm:p-5 sm:hover:border-white/10"
+                  key={`${p.training_id}-${p.profile_id}`}
+                  className="group flex min-w-0 flex-col gap-4 rounded-[1.5rem] border border-white/5 bg-[#1c1c21] p-4 transition-all sm:min-h-[92px] sm:flex-row sm:items-stretch sm:justify-between sm:rounded-[2rem] sm:p-5 sm:hover:border-white/10"
                 >
-                  <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                  <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(p.profile_id)}
+                      onChange={(e) =>
+                        setSelectedIds((prev) =>
+                          e.target.checked ? [...prev, p.profile_id] : prev.filter((id) => id !== p.profile_id)
+                        )
+                      }
+                      className="mt-3 size-4 accent-[#7c3aed] shrink-0 touch-manipulation"
+                      aria-label={`${p.profiles.full_name} seç`}
+                    />
                     <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-[#121215] flex items-center justify-center font-black text-[#7c3aed] italic border border-white/5 text-base sm:text-lg">
-                      {p.profiles.full_name[0]}
+                      {(p.profiles.full_name || "?").charAt(0)}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <span
                         className="block min-w-0 truncate font-black italic text-gray-200 uppercase tracking-tight leading-tight"
                         title={p.profiles.full_name || ""}
@@ -270,77 +401,97 @@ export default function AntrenmanYonetimi() {
                       </span>
                       <span
                         className="block min-w-0 truncate text-[10px] text-gray-600 font-bold uppercase tracking-widest italic"
-                        title={p.profiles.position || ""}
+                        title={p.profiles.position || "Pozisyon belirtilmedi"}
                       >
-                        {p.profiles.position || "POZISYON BELIRTILMEDI"}
+                        {p.profiles.position || "Pozisyon belirtilmedi"}
                       </span>
+                      <p
+                        className="text-[9px] font-bold uppercase tracking-wide text-gray-500 truncate"
+                        title={[p.profiles.team?.trim() || null, p.profiles.number != null && String(p.profiles.number).trim() !== "" ? `#${p.profiles.number}` : null]
+                          .filter(Boolean)
+                          .join(" · ") || "Takım / forma no yok"}
+                      >
+                        {[p.profiles.team?.trim() || null, p.profiles.number != null && String(p.profiles.number).trim() !== "" ? `#${p.profiles.number}` : null]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </p>
                     </div>
                   </div>
                   
-                  <div className="flex min-w-0 items-center gap-2 flex-wrap justify-start sm:justify-end w-full sm:w-auto shrink-0">
-                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${
-                      p.attendance_status === "attended"
-                        ? "text-green-400 border-green-500/20 bg-green-500/10"
-                        : p.attendance_status === "missed"
-                        ? "text-red-400 border-red-500/20 bg-red-500/10"
-                        : p.attendance_status === "cancelled"
-                        ? "text-gray-300 border-white/10 bg-white/5"
-                        : "text-amber-300 border-amber-500/20 bg-amber-500/10"
-                    }`}>
-                      {toAttendanceBadgeLabel(p.attendance_status)}
-                    </span>
+                  <div className="flex min-w-0 flex-col gap-3 border-t border-white/5 pt-3 sm:w-[min(100%,280px)] sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${
+                          p.attendance_status === "attended"
+                            ? "text-green-400 border-green-500/20 bg-green-500/10"
+                            : p.attendance_status === "missed"
+                              ? "text-red-400 border-red-500/20 bg-red-500/10"
+                              : p.attendance_status === "cancelled"
+                                ? "text-gray-300 border-white/10 bg-white/5"
+                                : "text-amber-300 border-amber-500/20 bg-amber-500/10"
+                        }`}
+                      >
+                        {toAttendanceBadgeLabel(p.attendance_status)}
+                      </span>
+                      {rowSavingIds.includes(p.profile_id) ? (
+                        <Loader2 className="size-4 shrink-0 animate-spin text-[#7c3aed]" aria-hidden />
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <button 
                       type="button"
                       onClick={() => updateAttendance(p.profile_id, "attended")} 
-                      disabled={actorRole === "coach" && !permissions.can_take_attendance}
-                      className={`flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-xl transition-all ${p.attendance_status === "attended" ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "bg-white/5 text-gray-600 sm:hover:text-green-500"}`}
-                      title="KATILDI"
+                      disabled={(actorRole === "coach" && !permissions.can_take_attendance) || rowSavingIds.includes(p.profile_id)}
+                      className={`flex min-h-11 touch-manipulation items-center justify-center gap-1 rounded-xl text-[9px] font-black uppercase transition-all ${p.attendance_status === "attended" ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "border border-white/10 bg-white/5 text-gray-400 sm:hover:border-green-500/30 sm:hover:text-green-400"}`}
+                      title="Katıldı"
                     >
-                      <Check size={20} aria-hidden />
+                      <Check size={18} className="shrink-0" aria-hidden />
+                      <span className="max-[380px]:sr-only">Katıldı</span>
                     </button>
                     <button 
                       type="button"
                       onClick={() => updateAttendance(p.profile_id, "missed")} 
-                      disabled={actorRole === "coach" && !permissions.can_take_attendance}
-                      className={`flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-xl transition-all ${p.attendance_status === "missed" ? "bg-red-500 text-white shadow-lg shadow-red-500/20" : "bg-white/5 text-gray-600 sm:hover:text-red-500"}`}
-                      title="GELMEDI"
+                      disabled={(actorRole === "coach" && !permissions.can_take_attendance) || rowSavingIds.includes(p.profile_id)}
+                      className={`flex min-h-11 touch-manipulation items-center justify-center gap-1 rounded-xl text-[9px] font-black uppercase transition-all ${p.attendance_status === "missed" ? "bg-red-500 text-white shadow-lg shadow-red-500/20" : "border border-white/10 bg-white/5 text-gray-400 sm:hover:border-red-500/30 sm:hover:text-red-400"}`}
+                      title="Gelmedi"
                     >
-                      <X size={20} aria-hidden />
+                      <X size={18} className="shrink-0" aria-hidden />
+                      <span className="max-[380px]:sr-only">Gelmedi</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => updateAttendance(p.profile_id, "registered")}
-                      disabled={actorRole === "coach" && !permissions.can_take_attendance}
-                      className={`min-h-11 touch-manipulation rounded-xl px-3 text-[9px] font-black uppercase transition-all ${
-                        p.attendance_status === "registered" ? "bg-amber-500/20 text-amber-300" : "bg-white/5 text-gray-500 sm:hover:text-amber-300"
+                      disabled={(actorRole === "coach" && !permissions.can_take_attendance) || rowSavingIds.includes(p.profile_id)}
+                      className={`min-h-11 touch-manipulation rounded-xl px-2 text-[9px] font-black uppercase transition-all ${
+                        p.attendance_status === "registered" ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30" : "border border-white/10 bg-white/5 text-gray-500 sm:hover:text-amber-300"
                       }`}
-                      title="KAYITLI"
+                      title="Kayıtlı (henüz işaretlenmedi)"
                     >
-                      REG
+                      Kayıtlı
                     </button>
                     <button
                       type="button"
                       onClick={() => updateAttendance(p.profile_id, "cancelled")}
-                      disabled={actorRole === "coach" && !permissions.can_take_attendance}
-                      className={`min-h-11 touch-manipulation rounded-xl px-3 text-[9px] font-black uppercase transition-all ${
-                        p.attendance_status === "cancelled" ? "bg-white/10 text-gray-300" : "bg-white/5 text-gray-500 sm:hover:text-gray-300"
+                      disabled={(actorRole === "coach" && !permissions.can_take_attendance) || rowSavingIds.includes(p.profile_id)}
+                      className={`min-h-11 touch-manipulation rounded-xl px-2 text-[9px] font-black uppercase transition-all ${
+                        p.attendance_status === "cancelled" ? "bg-white/15 text-gray-200 ring-1 ring-white/20" : "border border-white/10 bg-white/5 text-gray-500 sm:hover:text-gray-300"
                       }`}
-                      title="IPTAL"
+                      title="İptal"
                     >
-                      CNL
+                      İptal
                     </button>
+                    </div>
                   </div>
                 </div>
               )) : (
                 <div className="col-span-2 text-center py-20 bg-white/[0.01] rounded-[2rem] border border-dashed border-white/5">
                    <Users size={40} className="mx-auto mb-4 text-gray-800" aria-hidden />
-                   <p className="text-gray-600 font-black italic uppercase tracking-[0.2em] text-sm">Bu ders için henüz sporcu seçilmedi.</p>
-                   <p className="text-gray-700 text-[10px] font-bold mt-2">Sol panelden sporcu ekleyerek başlayın.</p>
+                   <p className="text-gray-600 font-black italic uppercase tracking-[0.2em] text-sm">Bu filtrede sporcu bulunamadı.</p>
+                   <p className="text-gray-700 text-[10px] font-bold mt-2">Arama ve durum filtresini temizleyerek tekrar deneyin.</p>
                 </div>
               )}
             </div>
           </div>
-        </div>
       </div>
     </div>
   );

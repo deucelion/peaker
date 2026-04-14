@@ -64,6 +64,7 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
       "organization_id",
       "can_create_lessons",
       "can_edit_lessons",
+      "can_view_all_organization_lessons",
       "can_view_all_athletes",
       "can_add_athletes_to_lessons",
       "can_take_attendance",
@@ -72,7 +73,7 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
       "can_manage_athlete_profiles",
       "can_manage_teams",
     ],
-    "20260330_coach_permissions.sql"
+    "20260415_coach_permissions_org_lessons_scope.sql"
   );
 
   await checkColumns(

@@ -13,6 +13,8 @@ export function normalizeCoachPermissions(raw?: RawPermissionRow): CoachPermissi
   return {
     can_create_lessons: raw?.can_create_lessons ?? DEFAULT_COACH_PERMISSIONS.can_create_lessons,
     can_edit_lessons: raw?.can_edit_lessons ?? DEFAULT_COACH_PERMISSIONS.can_edit_lessons,
+    can_view_all_organization_lessons:
+      raw?.can_view_all_organization_lessons ?? DEFAULT_COACH_PERMISSIONS.can_view_all_organization_lessons,
     can_view_all_athletes: raw?.can_view_all_athletes ?? DEFAULT_COACH_PERMISSIONS.can_view_all_athletes,
     can_add_athletes_to_lessons: raw?.can_add_athletes_to_lessons ?? DEFAULT_COACH_PERMISSIONS.can_add_athletes_to_lessons,
     can_take_attendance: raw?.can_take_attendance ?? DEFAULT_COACH_PERMISSIONS.can_take_attendance,

@@ -43,8 +43,10 @@ async function canManageTraining(actor: { id: string; role: string; organization
   if (!training) return { error: "Ders bulunamadi." };
 
   if (role === "coach") {
-    if (training.coach_id !== actor.id) return { error: "Sadece kendi dersinizde islem yapabilirsiniz." };
     const permissions = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!permissions.can_view_all_organization_lessons && training.coach_id !== actor.id) {
+      return { error: "Sadece kendi dersinizde islem yapabilirsiniz." };
+    }
     return { role, permissions, adminClient };
   }
   return { role, adminClient };

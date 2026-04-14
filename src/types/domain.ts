@@ -56,6 +56,9 @@ export interface TrainingScheduleRow {
   start_time: string;
   end_time: string | null;
   location: string | null;
+  coach_id?: string | null;
+  /** Antrenman yönetimi / liste için opsiyonel; snapshot tarafından doldurulabilir. */
+  coach_display_name?: string | null;
 }
 
 export interface TrainingParticipantRow {
