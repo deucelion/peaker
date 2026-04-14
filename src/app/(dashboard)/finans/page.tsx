@@ -35,6 +35,8 @@ export default function FinansYonetimi() {
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithPayments | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<'aylik' | 'paket'>('aylik');
+  const [isCreatingPayment, setIsCreatingPayment] = useState(false);
+  const [modalMessage, setModalMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"tum" | "bekliyor" | "odendi">("tum");
   const [typeFilter, setTypeFilter] = useState<"tum" | "aylik" | "paket">("tum");
 
@@ -77,15 +79,41 @@ export default function FinansYonetimi() {
     const formData = new FormData(form);
     formData.set("profile_id", selectedPlayer.id);
     formData.set("payment_type", paymentType);
+    const amount = Number(formData.get("amount"));
+    const dueDate = String(formData.get("due_date") || "").trim();
+    const sessions = Number(formData.get("sessions"));
 
-    const result = await createOrgPayment(formData);
-    if ("error" in result && result.error) {
-      setActionMessage(result.error);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setModalMessage("Lutfen gecerli bir tutar girin.");
       return;
     }
-    setIsModalOpen(false);
-    setActionMessage(null);
-    void fetchData();
+    if (!dueDate) {
+      setModalMessage("Lutfen odeme tarihi secin.");
+      return;
+    }
+    if (paymentType === "paket" && (!Number.isInteger(sessions) || sessions < 1)) {
+      setModalMessage("Paket icin gecerli ders sayisi girin.");
+      return;
+    }
+
+    setIsCreatingPayment(true);
+    setModalMessage(null);
+    try {
+      const result = await createOrgPayment(formData);
+      if ("error" in result && result.error) {
+        setModalMessage(result.error);
+        return;
+      }
+      setIsModalOpen(false);
+      setActionMessage("Odeme kaydi olusturuldu.");
+      setModalMessage(null);
+      void fetchData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Odeme kaydi olusturulamadi.";
+      setModalMessage(message);
+    } finally {
+      setIsCreatingPayment(false);
+    }
   };
 
   const updatePaymentStatus = async (paymentId: string, status: string) => {
@@ -401,7 +429,11 @@ export default function FinansYonetimi() {
 
               <div className="bg-[#1c1c21]/40 p-5 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[3rem] border border-white/5 shadow-inner min-w-0">
                 <h3 className="text-xs font-black italic text-green-500 uppercase tracking-widest mb-6 sm:mb-10 text-center italic">YENİ ÖDEME/PAKET TANIMLA</h3>
-                <form onSubmit={(ev) => void handleCreatePayment(ev)} className="space-y-5 sm:space-y-6 [&_input]:min-h-11 [&_input]:text-base [&_input]:sm:text-sm [&_input]:touch-manipulation">
+                <form
+                  noValidate
+                  onSubmit={(ev) => void handleCreatePayment(ev)}
+                  className="space-y-5 sm:space-y-6 [&_input]:min-h-11 [&_input]:text-base [&_input]:sm:text-sm [&_input]:touch-manipulation"
+                >
                   <div className="flex gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
                     <button type="button" onClick={() => setPaymentType('aylik')} className={`min-h-11 flex-1 touch-manipulation rounded-xl py-3 text-[9px] font-black uppercase italic tracking-[0.1em] transition-all sm:text-[10px] ${paymentType === 'aylik' ? 'bg-green-600 text-white shadow-lg shadow-green-600/20' : 'text-gray-500 sm:hover:text-white'}`}>AYLIK AİDAT</button>
                     <button type="button" onClick={() => setPaymentType('paket')} className={`min-h-11 flex-1 touch-manipulation rounded-xl py-3 text-[9px] font-black uppercase italic tracking-[0.1em] transition-all sm:text-[10px] ${paymentType === 'paket' ? 'bg-green-600 text-white shadow-lg shadow-green-600/20' : 'text-gray-500 sm:hover:text-white'}`}>ÖZEL DERS PAKETİ</button>
@@ -426,7 +458,18 @@ export default function FinansYonetimi() {
 
                   <input name="desc" type="text" className="w-full min-w-0 bg-black/30 border border-white/5 p-4 rounded-xl font-bold text-white focus:border-green-500 outline-none transition-all shadow-inner" placeholder="Açıklama (Örn: Mart Aidatı)" />
 
-                  <button type="submit" className="mt-2 min-h-12 w-full touch-manipulation rounded-[1.5rem] bg-green-600 py-4 text-xs font-black uppercase italic tracking-[0.2em] text-white shadow-lg shadow-green-600/30 transition-all active:scale-[0.99] sm:mt-4 sm:min-h-14 sm:rounded-[2rem] sm:py-5 sm:tracking-[0.3em] sm:hover:bg-green-500">ÖDEMEYİ SİSTEME İŞLE</button>
+                  {modalMessage ? (
+                    <div className="min-w-0 break-words">
+                      <Notification message={modalMessage} variant="error" />
+                    </div>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={isCreatingPayment}
+                    className="mt-2 min-h-12 w-full touch-manipulation rounded-[1.5rem] bg-green-600 py-4 text-xs font-black uppercase italic tracking-[0.2em] text-white shadow-lg shadow-green-600/30 transition-all active:scale-[0.99] disabled:opacity-60 sm:mt-4 sm:min-h-14 sm:rounded-[2rem] sm:py-5 sm:tracking-[0.3em] sm:hover:bg-green-500"
+                  >
+                    {isCreatingPayment ? "ISLENIYOR..." : "ÖDEMEYİ SİSTEME İŞLE"}
+                  </button>
                 </form>
               </div>
             </div>

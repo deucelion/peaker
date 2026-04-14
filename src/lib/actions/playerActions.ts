@@ -245,3 +245,43 @@ export async function reactivateAthlete(playerId: string) {
     return { error: message };
   }
 }
+
+/** Kalici silme: profile + auth user hard delete (geri alinmaz). */
+export async function hardDeleteAthlete(playerId: string) {
+  try {
+    const gate = await assertCanMutateAthleteLifecycle(playerId);
+    if ("error" in gate) return { error: gate.error };
+
+    const { adminClient, actorProfile, targetProfile } = gate;
+
+    const { error: deleteProfileErr } = await adminClient
+      .from("profiles")
+      .delete()
+      .eq("id", playerId)
+      .eq("organization_id", actorProfile.organization_id);
+    if (deleteProfileErr) {
+      return { error: `Sporcu silinemedi: ${deleteProfileErr.message}` };
+    }
+
+    const { error: deleteAuthErr } = await adminClient.auth.admin.deleteUser(playerId);
+    if (deleteAuthErr) {
+      return { error: `Auth hesabi silinemedi: ${deleteAuthErr.message}` };
+    }
+
+    await logAuditEvent({
+      organizationId: actorProfile.organization_id,
+      actorUserId: actorProfile.id,
+      actorRole: actorProfile.role,
+      action: "athlete.lifecycle.update",
+      entityType: "athlete",
+      entityId: playerId,
+      metadata: { targetRole: targetProfile.role, hardDelete: true },
+    });
+
+    revalidatePath("/oyuncular");
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Beklenmedik bir hata oluştu.";
+    return { error: message };
+  }
+}

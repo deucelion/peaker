@@ -1,9 +1,9 @@
 "use client";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
-import { Search, UserPlus, ChevronRight, X, Filter, Loader2, UserCircle, UserMinus, UserCheck } from "lucide-react";
+import { Search, UserPlus, ChevronRight, X, Filter, Loader2, UserCircle, UserMinus, UserCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { addPlayer, deactivateAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
+import { addPlayer, deactivateAthlete, hardDeleteAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
 import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
 import { listTeamsForActor } from "@/lib/actions/teamActions";
 import type { PlayerWithPayments } from "@/types/domain";
@@ -91,6 +91,23 @@ export default function OyuncuYonetimi() {
       setActionMessage("Sporcu tekrar aktif edildi.");
     } else {
       setActionMessage("Islem hatasi: " + (result?.error || "Bilinmeyen hata"));
+    }
+  };
+
+  const handleHardDelete = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `${name} adlı sporcuyu kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+      )
+    ) {
+      return;
+    }
+    const result = await hardDeleteAthlete(id);
+    if (result?.success) {
+      setPlayers((prev) => prev.filter((p) => p.id !== id));
+      setActionMessage("Sporcu kalıcı olarak silindi.");
+    } else {
+      setActionMessage("Silme hatası: " + (result?.error || "Bilinmeyen hata"));
     }
   };
 
@@ -209,29 +226,55 @@ export default function OyuncuYonetimi() {
           filteredPlayers.map(player => (
             <div key={player.id} className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-[2rem] border border-white/5 bg-[#121215] p-5 shadow-xl transition-all sm:rounded-[3rem] sm:p-6 sm:hover:border-[#7c3aed]/40">
               {profileRowIsActive(player.is_active) ? (
-                <button
-                  type="button"
-                  title="Pasife al"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleDeactivate(player.id, player.full_name || "Sporcu");
-                  }}
-                  className="absolute top-4 right-4 sm:top-8 sm:right-8 min-h-11 min-w-11 inline-flex items-center justify-center p-0 sm:p-3 bg-amber-500/10 text-amber-400 rounded-xl opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all sm:hover:bg-amber-500 sm:hover:text-black z-20 touch-manipulation"
-                >
-                  <UserMinus size={16} aria-hidden />
-                </button>
+                <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-20 flex items-center gap-2 opacity-100 transition-all md:opacity-0 md:group-hover:opacity-100">
+                  <button
+                    type="button"
+                    title="Kalıcı sil"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleHardDelete(player.id, player.full_name || "Sporcu");
+                    }}
+                    className="min-h-11 min-w-11 inline-flex touch-manipulation items-center justify-center rounded-xl bg-red-500/10 p-0 text-red-400 transition-all sm:hover:bg-red-500 sm:hover:text-white"
+                  >
+                    <Trash2 size={16} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    title="Pasife al"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleDeactivate(player.id, player.full_name || "Sporcu");
+                    }}
+                    className="min-h-11 min-w-11 inline-flex touch-manipulation items-center justify-center rounded-xl bg-amber-500/10 p-0 text-amber-400 transition-all sm:hover:bg-amber-500 sm:hover:text-black"
+                  >
+                    <UserMinus size={16} aria-hidden />
+                  </button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  title="Tekrar aktif et"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleReactivate(player.id, player.full_name || "Sporcu");
-                  }}
-                  className="absolute top-4 right-4 sm:top-8 sm:right-8 min-h-11 min-w-11 inline-flex items-center justify-center p-0 sm:p-3 bg-emerald-500/10 text-emerald-400 rounded-xl opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all sm:hover:bg-emerald-500 sm:hover:text-black z-20 touch-manipulation"
-                >
-                  <UserCheck size={16} aria-hidden />
-                </button>
+                <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-20 flex items-center gap-2 opacity-100 transition-all md:opacity-0 md:group-hover:opacity-100">
+                  <button
+                    type="button"
+                    title="Kalıcı sil"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleHardDelete(player.id, player.full_name || "Sporcu");
+                    }}
+                    className="min-h-11 min-w-11 inline-flex touch-manipulation items-center justify-center rounded-xl bg-red-500/10 p-0 text-red-400 transition-all sm:hover:bg-red-500 sm:hover:text-white"
+                  >
+                    <Trash2 size={16} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    title="Tekrar aktif et"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleReactivate(player.id, player.full_name || "Sporcu");
+                    }}
+                    className="min-h-11 min-w-11 inline-flex touch-manipulation items-center justify-center rounded-xl bg-emerald-500/10 p-0 text-emerald-400 transition-all sm:hover:bg-emerald-500 sm:hover:text-black"
+                  >
+                    <UserCheck size={16} aria-hidden />
+                  </button>
+                </div>
               )}
 
               <div className="flex items-center gap-5 mb-6 min-w-0">
