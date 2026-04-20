@@ -1,9 +1,9 @@
 "use client";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
-import { Search, UserPlus, ChevronRight, X, Filter, Loader2, UserCircle, UserMinus, UserCheck, Trash2 } from "lucide-react";
+import { Search, UserPlus, ChevronRight, Filter, Loader2, UserCircle, UserMinus, UserCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { addPlayer, deactivateAthlete, hardDeleteAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
+import { deactivateAthlete, hardDeleteAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
 import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
 import { listTeamsForActor } from "@/lib/actions/teamActions";
 import type { PlayerWithPayments } from "@/types/domain";
@@ -13,10 +13,7 @@ import { profileRowIsActive } from "@/lib/coach/lifecycle";
 export default function OyuncuYonetimi() {
   const [players, setPlayers] = useState<PlayerWithPayments[]>([]);
   const [teamRegistry, setTeamRegistry] = useState<string[]>([]);
-  const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -36,16 +33,6 @@ export default function OyuncuYonetimi() {
     return ["Tüm Takımlar", ...Array.from(teams)];
   }, [players, teamRegistry]);
 
-  const positionRegistry = useMemo(() => {
-    const set = new Set(
-      players
-        .map((p) => p.position)
-        .filter((position): position is string => typeof position === "string" && position.trim().length > 0)
-        .map((position) => position.trim())
-    );
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "tr"));
-  }, [players]);
-
   async function fetchPlayers() {
     setLoading(true);
     try {
@@ -54,7 +41,6 @@ export default function OyuncuYonetimi() {
         setPlayers([]);
         return;
       }
-      setOrgId(result.organizationId);
       setPlayers((result.athletes as PlayerWithPayments[]) || []);
       if (!("error" in teamsResult)) {
         setTeamRegistry((teamsResult.teams || []).map((t) => String(t.name)).filter(Boolean));
@@ -111,28 +97,6 @@ export default function OyuncuYonetimi() {
     }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!orgId) return;
-
-    setIsSubmitting(true);
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    formData.append("organization_id", orgId);
-    
-    const result = await addPlayer(formData);
-    
-    if (result?.success) {
-      setIsModalOpen(false);
-      form.reset();
-      void fetchPlayers();
-      setActionMessage("Yeni sporcu basariyla eklendi.");
-    } else {
-      setActionMessage(result?.error || "Kayit sirasinda bir hata olustu.");
-    }
-    setIsSubmitting(false);
-  };
-
   const filteredPlayers = useMemo(() => {
     const rows = players.filter((player) => {
       const nameMatch = player.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -152,6 +116,19 @@ export default function OyuncuYonetimi() {
     });
   }, [players, searchTerm, selectedTeam, lifecycleFilter]);
 
+  const paymentStatusLabel = (status: string | null | undefined) => {
+    if (status === "paid") return "Ödendi";
+    if (status === "partial") return "Kısmi Ödeme";
+    if (status === "unpaid" || status === "pending") return "Ödeme Bekliyor";
+    return "Ödeme Bekliyor";
+  };
+
+  const paymentStatusClass = (status: string | null | undefined) => {
+    if (status === "paid") return "border-emerald-500/35 bg-emerald-500/10 text-emerald-200";
+    if (status === "partial") return "border-amber-500/35 bg-amber-500/10 text-amber-200";
+    return "border-rose-500/35 bg-rose-500/10 text-rose-200";
+  };
+
   return (
     <div className="ui-page-loose animate-in fade-in duration-700 min-w-0 overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
       <header className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -163,13 +140,12 @@ export default function OyuncuYonetimi() {
             Atletik Profil & Kadro Yönetimi
           </p>
         </div>
-        <button 
-          type="button"
-          onClick={() => setIsModalOpen(true)}
+        <Link
+          href="/sporcular/yeni"
           className="ui-btn-primary w-full min-h-12 sm:w-auto sm:min-h-11 px-6 rounded-2xl inline-flex items-center justify-center gap-3 shadow-xl shadow-[#7c3aed]/20 touch-manipulation shrink-0"
         >
           <UserPlus size={20} /> YENİ SPORCU EKLE
-        </button>
+        </Link>
       </header>
       {actionMessage ? (
         <div className="min-w-0 break-words">
@@ -319,6 +295,21 @@ export default function OyuncuYonetimi() {
                 </div>
               </div>
 
+              <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-black/25 p-3 text-[10px] font-bold">
+                <p className="text-gray-500">Aktif paket</p>
+                <p className="text-right text-white">{player.activePackageName || "Yok"}</p>
+                <p className="text-gray-500">Kalan ders</p>
+                <p className="text-right text-white tabular-nums">{player.remainingLessons ?? "—"}</p>
+                <p className="text-gray-500">Ödeme durumu</p>
+                <div className="text-right">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${paymentStatusClass(player.packagePaymentStatus)}`}>
+                    {paymentStatusLabel(player.packagePaymentStatus)}
+                  </span>
+                </div>
+                <p className="text-gray-500">Son ders</p>
+                <p className="text-right text-white">{player.lastLessonAt ? new Date(player.lastLessonAt).toLocaleDateString("tr-TR") : "—"}</p>
+              </div>
+
               <Link href={`/sporcu/${player.id}`} className="mt-auto touch-manipulation">
                 <span className="ui-btn-ghost inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl text-[9px] uppercase tracking-[0.2em] shadow-xl sm:min-h-11 sm:tracking-[0.3em] sm:hover:bg-[#7c3aed] sm:hover:text-white">
                   PROFİLİ İNCELE <ChevronRight size={14} aria-hidden />
@@ -334,60 +325,6 @@ export default function OyuncuYonetimi() {
         )}
       </div>
 
-      {/* MODAL (Hafif Görsel İyileştirme ile) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex min-w-0 items-center justify-center overflow-x-hidden overflow-y-auto bg-black/95 p-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-2xl animate-in fade-in duration-300">
-          <div className="relative my-auto min-h-0 w-full max-w-lg min-w-0 max-h-[min(92dvh,100%)] overflow-y-auto overscroll-y-contain rounded-[2rem] border border-white/10 bg-[#121215] p-6 shadow-2xl animate-in zoom-in duration-200 sm:rounded-[3.5rem] sm:p-10">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 sm:top-10 sm:right-10 min-h-11 min-w-11 inline-flex items-center justify-center text-gray-600 sm:hover:text-white transition-all touch-manipulation rounded-xl sm:hover:bg-white/5"
-              aria-label="Kapat"
-            >
-              <X size={24} aria-hidden />
-            </button>
-            <header className="text-center mb-8 sm:mb-10 pr-10">
-              <h2 className="text-2xl sm:text-3xl font-black italic text-white uppercase tracking-tighter leading-none mb-3 break-words">
-                KADROYA <span className="text-[#7c3aed]">EKLE</span>
-              </h2>
-              <div className="h-1 w-20 bg-[#7c3aed] mx-auto rounded-full" />
-            </header>
-            <form onSubmit={handleFormSubmit} className="space-y-4 sm:space-y-5">
-              <input name="fullName" required placeholder="AD SOYAD" autoComplete="name" className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]" />
-              <input name="email" type="email" required placeholder="E-POSTA ADRESİ" autoComplete="email" className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]" />
-              <input name="password" type="text" required minLength={6} placeholder="GİRİŞ ŞİFRESİ (EN AZ 6)" autoComplete="new-password" className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]" />
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="min-w-0">
-                  <input
-                    name="position"
-                    list="position-options"
-                    placeholder="POZISYON (opsiyonel)"
-                    className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none focus:border-[#7c3aed] sm:px-8 sm:py-5 sm:text-[11px]"
-                  />
-                  <datalist id="position-options">
-                    {positionRegistry.map((position) => (
-                      <option key={position} value={position} />
-                    ))}
-                  </datalist>
-                </div>
-                <select name="team" className="min-h-12 w-full min-w-0 touch-manipulation appearance-none rounded-2xl border border-white/5 bg-[#1c1c21] px-5 py-4 text-base font-black uppercase italic text-white outline-none sm:px-8 sm:py-5 sm:text-[11px]">
-                  <option value="">TAKIM SECMEDEN DEVAM ET</option>
-                  {teamRegistry.map((teamName) => (
-                    <option key={teamName} value={teamName}>
-                      {teamName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button type="submit" disabled={isSubmitting} className={`w-full min-h-12 sm:min-h-14 py-4 sm:py-6 rounded-2xl sm:rounded-3xl font-black italic uppercase tracking-[0.25em] sm:tracking-[0.4em] text-white transition-all shadow-2xl mt-2 sm:mt-4 touch-manipulation ${isSubmitting ? 'bg-gray-800' : 'bg-[#7c3aed] sm:hover:shadow-[#7c3aed]/40'}`}>
-                {isSubmitting ? "İŞLENİYOR..." : "KAYDI TAMAMLA"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

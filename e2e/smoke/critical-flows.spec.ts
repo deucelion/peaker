@@ -76,3 +76,63 @@ test("athlete: giriş → sporcu paneli", async ({ page }) => {
   await expect(page).toHaveURL(/\/sporcu/);
   await expect(page.getByRole("heading", { name: /KİŞİSEL|ANALİZ/i })).toBeVisible();
 });
+
+test("injury-notes smoke: admin create → athlete view + athlete write yok", async ({ page }) => {
+  test.skip(
+    !hasPair(process.env.E2E_ADMIN_EMAIL, process.env.E2E_ADMIN_PASSWORD) ||
+      !hasPair(process.env.E2E_ATHLETE_EMAIL, process.env.E2E_ATHLETE_PASSWORD),
+    "E2E_ADMIN_* ve E2E_ATHLETE_* tanımlı değil"
+  );
+
+  // 1) Athlete login: ad bilgisini al (admin tarafta doğru sporcuyu bulmak için)
+  await loginViaUi(page, process.env.E2E_ATHLETE_EMAIL!, process.env.E2E_ATHLETE_PASSWORD!);
+  await waitForDashboardShell(page);
+  await expect(page).toHaveURL(/\/sporcu/);
+  const athleteName = ((await page.locator("aside h2").first().textContent()) || "").trim();
+  test.skip(!athleteName, "Sporcu adı okunamadı; smoke eşleme yapılamadı.");
+
+  // Aynı context'te kullanıcı değişimi için oturumu temizle.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await page.context().clearCookies();
+
+  // 2) Admin login: sporcuyu bul ve sakatlık kaydı oluştur
+  await loginViaUi(page, process.env.E2E_ADMIN_EMAIL!, process.env.E2E_ADMIN_PASSWORD!);
+  await waitForDashboardShell(page);
+  await page.goto("/oyuncular");
+  await page.getByPlaceholder(/KADRODA ARA/i).fill(athleteName);
+
+  const athleteCardLink = page.locator(`a[href^="/sporcu/"]`).first();
+  await expect(athleteCardLink).toBeVisible();
+  await athleteCardLink.click();
+  await expect(page).toHaveURL(/\/sporcu\/[0-9a-f-]{20,}/i);
+
+  const uniqueToken = `SMOKE-${Date.now()}`;
+  await page.getByPlaceholder(/Sakatlık türü/i).fill("Hamstring Zorlanması");
+  await page.getByPlaceholder(/Antrenör notu/i).fill(`Smoke notu ${uniqueToken}`);
+  await page.getByRole("button", { name: /Sakatlık Kaydı Ekle/i }).click();
+  await expect(page.getByText(/Sakatlik kaydi eklendi/i)).toBeVisible();
+
+  // Admin tarafında kaydın göründüğünü doğrula.
+  await expect(page.getByText(uniqueToken)).toBeVisible();
+
+  // Tekrar oturum temizle ve athlete olarak doğrula.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await page.context().clearCookies();
+
+  // 3) Athlete login: kayıt görünmeli, yazma kontrolü olmamalı
+  await loginViaUi(page, process.env.E2E_ATHLETE_EMAIL!, process.env.E2E_ATHLETE_PASSWORD!);
+  await waitForDashboardShell(page);
+  await expect(page).toHaveURL(/\/sporcu/);
+  await expect(page.getByText(uniqueToken)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sakatlık Kaydı Ekle/i })).toHaveCount(0);
+  await expect(page.getByPlaceholder(/Sakatlık türü/i)).toHaveCount(0);
+  await expect(page.getByPlaceholder(/Antrenör notu/i)).toHaveCount(0);
+});

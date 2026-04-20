@@ -31,6 +31,10 @@ export interface PaymentRow {
 
 export interface PlayerWithPayments extends ProfileBasic {
   payments?: PaymentRow[];
+  activePackageName?: string | null;
+  remainingLessons?: number | null;
+  packagePaymentStatus?: string | null;
+  lastLessonAt?: string | null;
 }
 
 export interface TestDefinitionRow {

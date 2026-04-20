@@ -24,11 +24,15 @@ import {
 
 import { updateAthleteSelfProfile, uploadAthleteAvatar } from "@/lib/actions/athleteSelfProfileActions";
 import { getAthletePanelSnapshot } from "@/lib/actions/snapshotActions";
+import { listMyAthleteInjuryNotes } from "@/lib/actions/injuryNoteActions";
+import { getMyFinanceDetailForAthlete } from "@/lib/actions/financeActions";
 import PerformanceRadar from "@/components/PerformanceRadar";
 import Notification from "@/components/Notification";
 import Link from "next/link";
 import type { ProfileBasic, PaymentRow } from "@/types/domain";
 import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
+import type { AthleteInjuryNoteRecord } from "@/lib/types";
+import type { FinanceStatusSummary } from "@/lib/types";
 
 export default function SporcuPanel() {
   const [profile, setProfile] = useState<ProfileBasic | null>(null);
@@ -42,6 +46,8 @@ export default function SporcuPanel() {
   const [attendancePreview, setAttendancePreview] = useState<
     Array<{ title: string; at: string; status: string }>
   >([]);
+  const [injuryNotes, setInjuryNotes] = useState<AthleteInjuryNoteRecord[]>([]);
+  const [financeSummary, setFinanceSummary] = useState<FinanceStatusSummary | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -56,6 +62,16 @@ export default function SporcuPanel() {
       setPayment((snapshot.payment as PaymentRow | null) || null);
       setMetrics(snapshot.metrics || []);
       setAttendancePreview((snapshot.attendancePreview || []).filter((r) => r.at));
+      const injuryRes = await listMyAthleteInjuryNotes();
+      if ("error" in injuryRes) {
+        setProfileMessage(injuryRes.error || "Sakatlik gecmisi alinamadi.");
+      } else {
+        setInjuryNotes(injuryRes.notes || []);
+      }
+      const financeRes = await getMyFinanceDetailForAthlete();
+      if (!("error" in financeRes)) {
+        setFinanceSummary(financeRes.summary);
+      }
     } catch (e) { 
       console.error("Veri çekme hatası:", e); 
     } finally { 
@@ -118,7 +134,9 @@ export default function SporcuPanel() {
     </div>
   );
 
-  const isPaid = payment?.status === 'odendi';
+  const isPaid = financeSummary ? financeSummary.tone === "paid" : payment?.status === 'odendi';
+  const isApproaching = financeSummary?.tone === "approaching";
+  const financeLabel = financeSummary?.label || (isPaid ? "AİDAT ÖDENDİ" : "ÖDEME BEKLİYOR");
   if (!permissions.can_view_development_profile) {
     return (
       <div className="min-w-0 px-2 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
@@ -156,6 +174,36 @@ export default function SporcuPanel() {
         <Notification message={profileMessage} variant={profileMessage.toLowerCase().includes("hata") ? "error" : "success"} />
       )}
 
+      <section className="rounded-[2rem] border border-white/10 bg-[#121215] p-5 sm:p-6">
+        <h3 className="text-sm font-black italic uppercase tracking-tight text-white">Bugün Öncelik</h3>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <Link
+            href={permissions.can_view_morning_report ? "/sporcu/sabah-raporu" : "/sporcu"}
+            className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+          >
+            {permissions.can_view_morning_report ? "Önce sabah raporunu gir" : "Bugün profilini kontrol et"}
+          </Link>
+          <Link
+            href="/sporcu/finans"
+            className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${
+              isPaid
+                ? "border-green-500/20 bg-green-500/10 text-green-300"
+                : isApproaching
+                  ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
+                  : "border-red-500/20 bg-red-500/10 text-red-300"
+            }`}
+          >
+            {isPaid ? "Aidat tamam, detayı kontrol et" : "Aidat durumunu kontrol et"}
+          </Link>
+          <Link
+            href={permissions.can_view_programs ? "/programlarim" : "/sporcu"}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+          >
+            {permissions.can_view_programs ? "Günün programını aç" : "Bugün için odak notu yok"}
+          </Link>
+        </div>
+      </section>
+
       {permissions.can_view_development_profile && (
         <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="bg-[#121215] border border-white/10 rounded-[2rem] p-6">
@@ -164,7 +212,7 @@ export default function SporcuPanel() {
               <Clock className="text-[#7c3aed]" size={20} />
             </div>
             {attendancePreview.length === 0 ? (
-              <p className="text-[10px] text-gray-500 font-bold uppercase">Henüz yoklama kaydı yok.</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Henüz yoklama kaydı yok. İlk dersten sonra burada görünecek.</p>
             ) : (
               <ul className="space-y-2">
                 {attendancePreview.map((row, i) => (
@@ -197,7 +245,58 @@ export default function SporcuPanel() {
               <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-2 sm:group-hover:text-gray-400">
                 Haftalık plan ve notlara git →
               </p>
+            <p className="text-[10px] font-bold text-gray-400">Bugün için programı açıp yapılacakları işaretleyin.</p>
             </Link>
+          )}
+        </section>
+      )}
+
+      {permissions.can_view_development_profile && (
+        <section className="rounded-[2rem] border border-white/10 bg-[#121215] p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-black italic uppercase text-white tracking-tight">
+              Sakatlık <span className="text-[#7c3aed]">Geçmişi</span>
+            </h3>
+            <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">Sadece görüntüleme</span>
+          </div>
+          {injuryNotes.length === 0 ? (
+            <p className="text-[10px] text-gray-500 font-bold uppercase">Henüz sakatlık kaydı bulunmuyor.</p>
+          ) : (
+            <div className="space-y-3">
+              {injuryNotes.map((item) => (
+                <article key={item.id} className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs font-black uppercase text-white break-words">{item.injuryType}</p>
+                    <span className="text-[10px] text-gray-500 font-bold uppercase">
+                      {new Date(item.createdAt).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm font-bold text-gray-300">{item.note}</p>
+                  {item.assets.length > 0 ? (
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {item.assets.map((asset) => (
+                        <a
+                          key={asset.path}
+                          href={asset.signedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                        >
+                          <Image
+                            src={asset.signedUrl}
+                            alt={item.injuryType}
+                            width={240}
+                            height={160}
+                            unoptimized
+                            className="h-20 w-full object-cover"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
           )}
         </section>
       )}
@@ -216,26 +315,48 @@ export default function SporcuPanel() {
         )}
 
         {permissions.can_view_financial_status && (
-        <div className={`p-8 rounded-[2.75rem] border flex flex-col justify-between shadow-xl ${isPaid ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+        <Link
+          href="/sporcu/finans"
+          className={`p-8 rounded-[2.75rem] border flex flex-col justify-between shadow-xl transition-colors ${
+            isPaid
+              ? 'bg-green-500/5 border-green-500/20 sm:hover:border-green-500/40'
+              : isApproaching
+                ? 'bg-amber-500/5 border-amber-500/20 sm:hover:border-amber-500/40'
+                : 'bg-red-500/5 border-red-500/20 sm:hover:border-red-500/40'
+          }`}
+        >
           <div className="flex justify-between items-start">
             <div className="space-y-4">
-              <div className={`flex items-center gap-2 ${isPaid ? 'text-green-400' : 'text-red-500'}`}><CreditCard size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Finansal Statü</span></div>
-              <h3 className={`text-3xl font-black italic uppercase leading-none ${isPaid ? 'text-green-400' : 'text-red-500'}`}>
+              <div className={`flex items-center gap-2 ${isPaid ? 'text-green-400' : isApproaching ? 'text-amber-400' : 'text-red-500'}`}><CreditCard size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Finansal Statü</span></div>
+              <h3 className={`text-3xl font-black italic uppercase leading-none ${isPaid ? 'text-green-400' : isApproaching ? 'text-amber-400' : 'text-red-500'}`}>
                 {isPaid ? (
                   <>
-                    KAYIT <br /> AKTIF
+                    AİDAT <br /> ÖDENDİ
+                  </>
+                ) : isApproaching ? (
+                  <>
+                    ÖDEME <br /> YAKLAŞIYOR
                   </>
                 ) : (
                   <>
-                    ODEME <br /> BEKLIYOR
+                    ÖDEME <br /> BEKLİYOR
                   </>
                 )}
               </h3>
             </div>
-            <div className={`p-4 rounded-3xl ${isPaid ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-500'}`}>{isPaid ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}</div>
+            <div className={`p-4 rounded-3xl ${isPaid ? 'bg-green-500/20 text-green-400' : isApproaching ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-500'}`}>{isPaid ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}</div>
           </div>
-          {!isPaid && <div className="mt-8 pt-6 border-t border-red-500/10 flex justify-between items-center"><span className="text-[10px] font-black text-gray-500 uppercase italic">Son: {payment?.due_date}</span><span className="text-2xl font-black italic text-white">₺{payment?.amount}</span></div>}
-        </div>
+          {!isPaid && (
+            <div className={`mt-8 pt-6 flex justify-between items-center ${isApproaching ? "border-t border-amber-500/10" : "border-t border-red-500/10"}`}>
+              <span className="text-[10px] font-black text-gray-500 uppercase italic">Sonraki: {financeSummary?.nextDueDate || payment?.due_date || "-"}</span>
+              <span className="text-2xl font-black italic text-white">₺{financeSummary?.nextAmount ?? payment?.amount ?? 0}</span>
+            </div>
+          )}
+          <p className="mt-3 text-[9px] font-bold uppercase tracking-widest text-gray-500">{financeLabel}</p>
+          <p className="mt-2 text-[10px] font-bold text-gray-400">
+            {isPaid ? "Bu ay ödeme tamamlandı. Sonraki tarihi kontrol edin." : "Ödeme durumunu finans detayından takip edin."}
+          </p>
+        </Link>
         )}
       </div>
 

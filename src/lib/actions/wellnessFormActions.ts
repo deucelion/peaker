@@ -175,14 +175,7 @@ export async function listWellnessArchiveForManagement(): Promise<
     adminClient
       .from("wellness_reports")
       .select(
-        `
-        *,
-        profiles!inner (
-          full_name,
-          organization_id,
-          avatar_url
-        )
-      `
+        "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles(full_name, organization_id, avatar_url)"
       )
       .eq("profiles.organization_id", orgId)
       .order("report_date", { ascending: false }),
@@ -197,11 +190,14 @@ export async function listWellnessArchiveForManagement(): Promise<
   if (countErr) return { error: `Sporcu sayisi alinamadi: ${countErr.message}` };
 
   type RawWellness = WellnessReportRow & {
-    profiles?: { full_name?: string | null; organization_id?: string; avatar_url?: string | null } | null;
+    profiles?:
+      | { full_name?: string | null; organization_id?: string; avatar_url?: string | null }
+      | Array<{ full_name?: string | null; organization_id?: string; avatar_url?: string | null }>
+      | null;
   };
 
   const reports: WellnessReportRow[] = (reportRows || []).map((raw: RawWellness) => {
-    const p = raw.profiles;
+    const p = Array.isArray(raw.profiles) ? raw.profiles[0] : raw.profiles;
     return {
       ...raw,
       profiles: p

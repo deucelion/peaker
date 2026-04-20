@@ -11,6 +11,8 @@ import { PATHS } from "@/lib/navigation/routeRegistry";
 import { mapNotification, mapLesson, mapTeamPaymentSummaries } from "@/lib/mappers";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
+import { getWeekEndExclusiveIso, getWeekStartMondayIso } from "@/lib/schedule/weeklySchedule";
+import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
 
 type TrainingParticipantLite = { attendance_status?: string | null };
 type ScheduleSnippet = { title?: string | null; start_time?: string | null };
@@ -76,6 +78,198 @@ function normalizePagination(page: number, pageSize: number, maxPageSize = 100) 
   const p = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
   const size = Number.isFinite(pageSize) ? Math.min(maxPageSize, Math.max(1, Math.floor(pageSize))) : 25;
   return { from: (p - 1) * size, to: (p - 1) * size + size - 1, page: p, pageSize: size };
+}
+
+type WeeklyScheduleFilters = {
+  weekStart?: string;
+  lessonType?: WeeklyLessonTypeFilter;
+  coachId?: string;
+  location?: string;
+};
+
+type GroupScheduleRow = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  start_time: string;
+  end_time: string;
+  status: string | null;
+  coach_id: string | null;
+  coach_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
+  training_participants?:
+    | Array<{
+        profile_id: string | null;
+        athlete_profile?:
+          | { full_name?: string | null; email?: string | null }
+          | { full_name?: string | null; email?: string | null }[]
+          | null;
+      }>
+    | null;
+};
+
+type PrivateScheduleRow = {
+  id: string;
+  package_id: string;
+  starts_at: string;
+  ends_at: string;
+  location: string | null;
+  note: string | null;
+  status: string | null;
+  coach_id: string;
+  coach_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
+  athlete_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
+  pkg?: { package_name?: string | null } | { package_name?: string | null }[] | null;
+};
+
+function firstJoined<T>(value: T | T[] | null | undefined): T | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export async function listWeeklyLessonScheduleSnapshot(
+  filters: WeeklyScheduleFilters = {}
+): Promise<WeeklyLessonScheduleSnapshot | { error: string }> {
+  const resolved = await resolveSessionActor();
+  if ("error" in resolved) return { error: resolved.error };
+  const { actor } = resolved;
+  if (!actor.organizationId) return { error: "Organizasyon bilgisi eksik." };
+  if (actor.role !== "admin" && actor.role !== "coach") return { error: "Bu sayfa için yetkiniz yok." };
+  if (actor.role === "coach") {
+    const block = messageIfCoachCannotOperate(actor.role, actor.isActive);
+    if (block) return { error: block };
+  }
+
+  const adminClient = createSupabaseAdminClient();
+  const permissions: CoachPermissions =
+    actor.role === "coach" ? await getCoachPermissions(actor.id, actor.organizationId) : DEFAULT_COACH_PERMISSIONS;
+
+  const lessonType = filters.lessonType === "group" || filters.lessonType === "private" ? filters.lessonType : "all";
+  const weekStartIso = getWeekStartMondayIso(filters.weekStart);
+  const weekEndIso = getWeekEndExclusiveIso(weekStartIso);
+  const locationFilter = filters.location?.trim() || "";
+
+  const { data: coachRows, error: coachErr } = await adminClient
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .eq("organization_id", actor.organizationId)
+    .order("full_name", { ascending: true });
+  if (coachErr) return { error: `Koç listesi alınamadı: ${coachErr.message}` };
+
+  const coachOptions = (coachRows || [])
+    .filter((row) => getSafeRole(row.role) === "coach")
+    .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Koç") }));
+
+  let selectedCoachId = filters.coachId?.trim() || null;
+  if (actor.role === "coach" && !permissions.can_view_all_organization_lessons) {
+    selectedCoachId = actor.id;
+  } else if (selectedCoachId && !coachOptions.some((c) => c.id === selectedCoachId)) {
+    selectedCoachId = null;
+  }
+
+  const items: WeeklyLessonScheduleItem[] = [];
+
+  if (lessonType !== "private") {
+    let groupQuery = adminClient
+      .from("training_schedule")
+      .select(
+        "id, title, description, location, start_time, end_time, status, coach_id, coach_profile:profiles!training_schedule_coach_id_fkey(full_name, email), training_participants(profile_id, athlete_profile:profiles!training_participants_profile_id_fkey(full_name, email))"
+      )
+      .eq("organization_id", actor.organizationId)
+      .gte("start_time", weekStartIso)
+      .lt("start_time", weekEndIso)
+      .neq("status", "cancelled")
+      .order("start_time", { ascending: true });
+
+    if (selectedCoachId) groupQuery = groupQuery.eq("coach_id", selectedCoachId);
+    if (locationFilter) groupQuery = groupQuery.ilike("location", `%${locationFilter}%`);
+
+    const { data: groupRows, error: groupErr } = await groupQuery;
+    if (groupErr) return { error: `Grup dersleri alınamadı: ${groupErr.message}` };
+
+    items.push(
+      ...((groupRows || []) as GroupScheduleRow[]).map((row) => {
+        const coach = firstJoined(row.coach_profile);
+        const participants = (row.training_participants || []).map((p) => firstJoined(p.athlete_profile));
+        const participantNames = participants
+          .map((p) => toDisplayName(p?.full_name ?? null, p?.email ?? null, "Sporcu"))
+          .filter(Boolean);
+
+        return {
+          id: row.id,
+          sourceType: "group",
+          title: row.title?.trim() || "Grup Dersi",
+          subtitle: row.description?.trim() || null,
+          coachId: row.coach_id,
+          coachName: coach ? toDisplayName(coach.full_name, coach.email, "Koç") : null,
+          participantCount: participantNames.length,
+          participantNames,
+          startsAt: row.start_time,
+          endsAt: row.end_time,
+          location: row.location?.trim() || null,
+          note: row.description?.trim() || null,
+          detailHref: `${PATHS.dersler}/${row.id}`,
+          status: row.status || "scheduled",
+        } satisfies WeeklyLessonScheduleItem;
+      })
+    );
+  }
+
+  if (lessonType !== "group") {
+    let privateQuery = adminClient
+      .from("private_lesson_sessions")
+      .select(
+        "id, package_id, starts_at, ends_at, location, note, status, coach_id, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name)"
+      )
+      .eq("organization_id", actor.organizationId)
+      .gte("starts_at", weekStartIso)
+      .lt("starts_at", weekEndIso)
+      .neq("status", "cancelled")
+      .order("starts_at", { ascending: true });
+
+    if (selectedCoachId) privateQuery = privateQuery.eq("coach_id", selectedCoachId);
+    if (locationFilter) privateQuery = privateQuery.ilike("location", `%${locationFilter}%`);
+
+    const { data: privateRows, error: privateErr } = await privateQuery;
+    if (privateErr) return { error: `Özel ders planları alınamadı: ${privateErr.message}` };
+
+    items.push(
+      ...((privateRows || []) as PrivateScheduleRow[]).map((row) => {
+        const coach = firstJoined(row.coach_profile);
+        const athlete = firstJoined(row.athlete_profile);
+        const pkg = firstJoined(row.pkg);
+        const athleteName = toDisplayName(athlete?.full_name ?? null, athlete?.email ?? null, "Sporcu");
+        return {
+          id: row.id,
+          sourceType: "private",
+          title: pkg?.package_name?.trim() || "Özel Ders",
+          subtitle: "Özel ders oturumu",
+          coachId: row.coach_id,
+          coachName: coach ? toDisplayName(coach.full_name, coach.email, "Koç") : null,
+          participantCount: 1,
+          participantNames: [athleteName],
+          startsAt: row.starts_at,
+          endsAt: row.ends_at,
+          location: row.location?.trim() || null,
+          note: row.note?.trim() || null,
+          detailHref: `${PATHS.ozelDersPaketleri}/${row.package_id}`,
+          status: row.status || "planned",
+        } satisfies WeeklyLessonScheduleItem;
+      })
+    );
+  }
+
+  items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+
+  return {
+    role: actor.role,
+    permissions,
+    weekStartIso,
+    weekEndIso,
+    selectedCoachId,
+    coachOptions,
+    items,
+  };
 }
 
 export async function listLessonsSnapshot(page = 1, pageSize = 50) {

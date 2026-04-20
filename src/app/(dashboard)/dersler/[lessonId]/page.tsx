@@ -13,6 +13,7 @@ import {
   updateLesson,
 } from "@/lib/actions/lessonActions";
 import { combineLocalDateAndTime, formatLessonDateTimeTr, splitIsoToDateAndTime } from "@/lib/forms/datetimeLocal";
+import { lessonStatusBadgeClass, lessonStatusLabelTr } from "@/lib/lesson/lessonStatusUi";
 import type { Lesson } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
@@ -212,8 +213,13 @@ export default function LessonDetailPage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 shrink-0 w-full lg:w-auto">
+            <span
+              className={`shrink-0 text-center text-[11px] font-bold !normal-case sm:text-left ${lessonStatusBadgeClass(lesson.status)}`}
+            >
+              {lessonStatusLabelTr(lesson.status)}
+            </span>
             <span className="px-3 py-2 sm:py-1 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/20 text-[#c4b5fd] text-[10px] font-black uppercase text-center sm:text-left">
-              KAPASITE {lesson.capacity}
+              Kapasite {lesson.capacity}
             </span>
             <Link
               href={`/antrenman-yonetimi?trainingId=${lesson.id}`}

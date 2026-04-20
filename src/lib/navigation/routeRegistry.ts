@@ -31,12 +31,15 @@ export const PATHS = {
   sahaTestleri: "/saha-testleri",
   idmanRaporu: "/idman-raporu",
   oyuncular: "/oyuncular",
+  sporcularYeni: "/sporcular/yeni",
   takimlar: "/takimlar",
   antrenmanYonetimi: "/antrenman-yonetimi",
   dersler: "/dersler",
+  haftalikDersProgrami: "/haftalik-ders-programi",
   notlarHaftalikProgram: "/notlar-haftalik-program",
   ozelDersPaketleri: "/ozel-ders-paketleri",
   finans: "/finans",
+  sporcuFinans: "/sporcu/finans",
   koclar: "/koclar",
   bildirimler: "/bildirimler",
   anket: "/anket",
@@ -61,7 +64,7 @@ export const SPORCU_ACCOUNT_INFO_ROUTE = PATHS.athleteAccount;
 export const SUPER_ADMIN_EXCLUSIVE_PREFIXES = [PATHS.superAdmin, PATHS.sistemSaglik] as const;
 
 /** Yalnızca organizasyon admini */
-export const ADMIN_ONLY_PREFIXES = [PATHS.finans, PATHS.koclar] as const;
+export const ADMIN_ONLY_PREFIXES = [PATHS.koclar] as const;
 
 /** Yönetim & analiz: admin + coach (coach için proxy'de ek izin kontrolleri var) */
 export const MANAGEMENT_ROUTE_PREFIXES = [
@@ -71,11 +74,14 @@ export const MANAGEMENT_ROUTE_PREFIXES = [
   PATHS.sahaTestleri,
   PATHS.idmanRaporu,
   PATHS.oyuncular,
+  PATHS.sporcularYeni,
   PATHS.takimlar,
   PATHS.antrenmanYonetimi,
   PATHS.dersler,
+  PATHS.haftalikDersProgrami,
   PATHS.notlarHaftalikProgram,
   PATHS.ozelDersPaketleri,
+  PATHS.finans,
   PATHS.bildirimler,
 ] as const;
 
@@ -87,6 +93,7 @@ export const ATHLETE_SHARED_ROUTE_PREFIXES = [
   PATHS.anket,
   PATHS.takvim,
   PATHS.sporcu,
+  PATHS.sporcuFinans,
   PATHS.bildirimler,
   PATHS.programlarim,
   PATHS.ozelDersPaketlerim,
@@ -123,6 +130,7 @@ export function isSporcuBranchAllowedForAthlete(pathname: string): boolean {
   const p = normalizePathname(pathname);
   if (isAthleteManagementProfilePath(p)) return false;
   if (p === PATHS.sporcu) return true;
+  if (p === PATHS.sporcuFinans || p.startsWith(`${PATHS.sporcuFinans}/`)) return true;
   if (p === PATHS.sporcuSabahRaporu || p.startsWith(`${PATHS.sporcuSabahRaporu}/`)) return true;
   return false;
 }
@@ -150,6 +158,7 @@ export const ATHLETE_ROUTE_PERMISSION_RULES: readonly AthleteRoutePermissionRule
   { path: PATHS.sporcuSabahRaporu, match: "prefix", permission: "can_view_morning_report" },
   { path: PATHS.programlarim, match: "exact", permission: "can_view_programs" },
   { path: PATHS.ozelDersPaketlerim, match: "exact", permission: "can_view_programs" },
+  { path: PATHS.sporcuFinans, match: "exact", permission: "can_view_financial_status" },
   { path: PATHS.takvim, match: "exact", permission: "can_view_calendar" },
   { path: PATHS.bildirimler, match: "exact", permission: "can_view_notifications" },
   { path: PATHS.anket, match: "exact", permission: "can_view_rpe_entry" },

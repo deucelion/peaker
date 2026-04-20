@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Radar,
   RadarChart,
@@ -23,6 +24,10 @@ import {
   Droplets,
   TrendingUp,
   Loader2,
+  CreditCard,
+  ClipboardList,
+  BarChart2,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -33,10 +38,18 @@ import {
   loadAthleteDetailForManagement,
   updateAthleteProfileForManagement,
 } from "@/lib/actions/athleteDetailActions";
+import {
+  createAthleteInjuryNote,
+  deactivateAthleteInjuryNote,
+  listAthleteInjuryNotesForManagement,
+} from "@/lib/actions/injuryNoteActions";
 import { listTeamsForActor } from "@/lib/actions/teamActions";
 import { AthleteFieldTestsPanel, type FieldTestResultRow } from "./AthleteFieldTestsPanel";
 import { AthletePerformanceInsightsPanel, type BodyMetricRow } from "./AthletePerformanceInsightsPanel";
 import Notification from "@/components/Notification";
+import type { AthleteInjuryNoteRecord } from "@/lib/types";
+import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
+type TimelineEvent = { id: string; type: "lesson" | "payment" | "injury" | "note"; at: string; title: string; detail: string };
 
 interface RadarPoint {
   subject: string;
@@ -75,6 +88,100 @@ export default function SporcuDetayDinamik() {
   });
   const [positionMessage, setPositionMessage] = useState<string | null>(null);
   const [updatingPosition, setUpdatingPosition] = useState(false);
+  const [injuryNotes, setInjuryNotes] = useState<AthleteInjuryNoteRecord[]>([]);
+  const [injuryType, setInjuryType] = useState("");
+  const [injuryNoteText, setInjuryNoteText] = useState("");
+  const [injuryImages, setInjuryImages] = useState<File[]>([]);
+  const [injurySaving, setInjurySaving] = useState(false);
+  const [injuryMessage, setInjuryMessage] = useState<string | null>(null);
+  const [deactivatingInjuryId, setDeactivatingInjuryId] = useState<string | null>(null);
+  const [financePackage, setFinancePackage] = useState<{
+    activePackageName: string | null;
+    remainingLessons: number | null;
+    paymentStatus: string | null;
+    packageSummary: { totalLessons: number; usedLessons: number; totalPrice: number; amountPaid: number } | null;
+  } | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+
+  const latestWellness = useMemo(() => {
+    if (!wellnessReports.length) return null;
+    return [...wellnessReports].sort(
+      (a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime()
+    )[0];
+  }, [wellnessReports]);
+
+  const activeInjuryCount = useMemo(
+    () => injuryNotes.filter((n) => n.isActive).length,
+    [injuryNotes]
+  );
+
+  const localizedPaymentStatus = useMemo(() => {
+    const raw = (financePackage?.paymentStatus || "").trim().toLowerCase();
+    if (!raw) return "—";
+    if (["paid", "odendi", "ödendi"].includes(raw)) return "Ödendi";
+    if (["partial", "partially_paid", "kısmi", "kismi"].includes(raw)) return "Kısmi ödendi";
+    if (["unpaid", "beklemede"].includes(raw)) return "Beklemede";
+    if (["overdue", "gecikmis", "gecikmiş"].includes(raw)) return "Gecikmiş";
+    return financePackage?.paymentStatus || "—";
+  }, [financePackage?.paymentStatus]);
+
+  const hasProfileDraftChanges = useMemo(() => {
+    if (!player) return false;
+    const normalize = (v: unknown) => String(v ?? "").trim();
+    return (
+      normalize(profileDraft.fullName) !== normalize(player.full_name) ||
+      normalize(profileDraft.team) !== normalize(player.team) ||
+      normalize(profileDraft.position) !== normalize(player.position) ||
+      normalize(profileDraft.number) !== normalize(player.number) ||
+      normalize(profileDraft.height) !== normalize(player.height) ||
+      normalize(profileDraft.weight) !== normalize(player.weight)
+    );
+  }, [player, profileDraft]);
+
+  useUnsavedChangesGuard({ enabled: hasProfileDraftChanges && !updatingPosition });
+
+  const priorityCue = useMemo((): { text: string; wrapClass: string; textClass: string } => {
+    if (acwrStatus.label === "YÜKSEK RİSK") {
+      return {
+        text: "ACWR yüksek risk bandında. Hacmi ve dinlenmeyi birlikte değerlendirin.",
+        wrapClass: "border-red-500/30 bg-red-500/10",
+        textClass: "text-red-200",
+      };
+    }
+    if (activeInjuryCount > 0) {
+      return {
+        text: `Aktif sakatlık kaydı: ${activeInjuryCount}. Antrenman yükü ve programı buna göre güncel tutun.`,
+        wrapClass: "border-amber-500/30 bg-amber-500/10",
+        textClass: "text-amber-200",
+      };
+    }
+    if (acwrStatus.label === "YORGUN") {
+      return {
+        text: "Sporcu yorgunluk bandında (ACWR). Birkaç gün daha muhafazakâr ilerleyin.",
+        wrapClass: "border-amber-500/25 bg-amber-500/5",
+        textClass: "text-amber-200",
+      };
+    }
+    if (trainingLoads.length === 0) {
+      return {
+        text: "Antrenman yükü kaydı yok. Önce düzenli yük girişi sağlayın.",
+        wrapClass: "border-white/10 bg-white/[0.04]",
+        textClass: "text-gray-300",
+      };
+    }
+    if (!latestWellness) {
+      return {
+        text: "Son wellness raporu görünmüyor. Sabah raporu akışını kontrol edin.",
+        wrapClass: "border-white/10 bg-white/[0.04]",
+        textClass: "text-gray-300",
+      };
+    }
+    return {
+      text: "Belirgin kritik uyarı yok. Finans, program ve raporları rutin takip edin.",
+      wrapClass: "border-emerald-500/25 bg-emerald-500/5",
+      textClass: "text-emerald-200",
+    };
+  }, [acwrStatus.label, activeInjuryCount, latestWellness, trainingLoads.length]);
 
   const calculateACWR = useCallback((loads: TrainingLoadRow[]) => {
     const last7Days = loads.slice(-7).reduce((acc, curr) => acc + (curr.total_load || 0), 0) / 7;
@@ -87,6 +194,16 @@ export default function SporcuDetayDinamik() {
     else if (ratio < 0.8 && ratio > 0) status = { ratio: parseFloat(ratio.toFixed(2)), label: "DÜŞÜK YÜK", color: "text-blue-500" };
 
     setAcwrStatus(status);
+  }, []);
+
+  const loadInjuryNotes = useCallback(async (athleteId: string) => {
+    const notesRes = await listAthleteInjuryNotesForManagement(athleteId);
+    if ("error" in notesRes) {
+      setInjuryMessage(notesRes.error || "Sakatlık geçmişi alınamadı.");
+      setInjuryNotes([]);
+      return;
+    }
+    setInjuryNotes(notesRes.notes || []);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -118,6 +235,8 @@ export default function SporcuDetayDinamik() {
       setTableMetrics(results);
       setWellnessReports((res.wellnessReports || []) as WellnessReportRow[]);
       setBodyMetrics((res.bodyMetrics || []) as BodyMetricRow[]);
+      setFinancePackage((res.financeAndPackage as never) || null);
+      setTimelineEvents((res.timelineEvents || []) as TimelineEvent[]);
 
       const latestMap: Record<string, RadarPoint> = {};
       results.forEach((r) => {
@@ -154,17 +273,57 @@ export default function SporcuDetayDinamik() {
       if (!("error" in teamsRes)) {
         setTeamOptions((teamsRes.teams || []).map((t) => String(t.name)).filter(Boolean));
       }
+      await loadInjuryNotes(id);
     } catch (e) {
       console.error("Veri hatası:", e);
       router.push("/oyuncular");
     } finally {
       setLoading(false);
     }
-  }, [id, router, calculateACWR]);
+  }, [id, router, calculateACWR, loadInjuryNotes]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  async function handleInjuryCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setInjurySaving(true);
+    setInjuryMessage(null);
+
+    const fd = new FormData();
+    fd.append("athleteId", id);
+    fd.append("injuryType", injuryType);
+    fd.append("note", injuryNoteText);
+    injuryImages.forEach((file) => fd.append("images", file));
+
+    const result = await createAthleteInjuryNote(fd);
+    if ("success" in result && result.success) {
+      setInjuryType("");
+      setInjuryNoteText("");
+      setInjuryImages([]);
+      setInjuryMessage("Sakatlık kaydı eklendi.");
+      await loadInjuryNotes(id);
+    } else {
+      setInjuryMessage(("error" in result && result.error) || "Sakatlık kaydı eklenemedi.");
+    }
+    setInjurySaving(false);
+  }
+
+  async function handleInjuryDeactivate(noteId: string) {
+    if (!id) return;
+    setDeactivatingInjuryId(noteId);
+    setInjuryMessage(null);
+    const result = await deactivateAthleteInjuryNote(noteId);
+    if ("success" in result && result.success) {
+      setInjuryMessage("Sakatlık kaydı pasife alındı.");
+      await loadInjuryNotes(id);
+    } else {
+      setInjuryMessage(("error" in result && result.error) || "Kayıt pasife alınamadı.");
+    }
+    setDeactivatingInjuryId(null);
+  }
 
   if (loading || !player) {
     return (
@@ -198,7 +357,120 @@ export default function SporcuDetayDinamik() {
         </div>
       </div>
 
-      <section className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden group min-w-0">
+      <section
+        id="sporcu-ozet"
+        className="rounded-2xl md:rounded-3xl border border-white/5 bg-[#121215] p-5 md:p-7 shadow-xl min-w-0"
+      >
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <h2 className="text-sm font-black italic uppercase tracking-tight text-white md:text-base">
+              Sporcu <span className="text-[#7c3aed]">özeti</span>
+            </h2>
+            <div className={`rounded-xl border px-4 py-3 ${priorityCue.wrapClass}`}>
+              <p className={`text-[11px] font-bold leading-relaxed ${priorityCue.textClass}`}>{priorityCue.text}</p>
+            </div>
+            {id ? (
+              <p className="text-[10px] font-bold text-gray-500">
+                Şimdi:{" "}
+                <Link
+                  href={`/finans/${id}`}
+                  className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
+                >
+                  Finansı
+                </Link>
+                ,{" "}
+                <a href="#sakatlik-gecmisi" className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]">
+                  sakatlığı
+                </a>
+                ,{" "}
+                <Link
+                  href="/performans/wellness-detay"
+                  className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
+                >
+                  wellness arşivini
+                </Link>{" "}
+                ve{" "}
+                <Link
+                  href="/notlar-haftalik-program"
+                  className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
+                >
+                  program notlarını
+                </Link>{" "}
+                kontrol edin.
+              </p>
+            ) : null}
+          </div>
+          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-xl lg:shrink-0">
+            <QuickStat label="ACWR" value={String(acwrStatus.ratio)} sub={acwrStatus.label} />
+            <QuickStat label="Aktif sakatlık" value={activeInjuryCount} sub="kayıt" />
+            <QuickStat
+              label="Son wellness"
+              value={latestWellness ? new Date(latestWellness.report_date).toLocaleDateString("tr-TR") : "—"}
+              sub={latestWellness ? "Tarih" : "Kayıt yok"}
+            />
+            <QuickStat label="Yük kaydı" value={trainingLoads.length} sub="satır" />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-2 rounded-2xl border border-white/10 bg-black/25 p-4 text-[11px] font-bold sm:grid-cols-4">
+          <div>
+            <p className="text-gray-500">Aktif paket</p>
+            <p className="mt-1 text-white">{financePackage?.activePackageName || "Yok"}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Kalan ders</p>
+            <p className="mt-1 text-white tabular-nums">{financePackage?.remainingLessons ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Ödeme durumu</p>
+            <p className="mt-1 text-white">{localizedPaymentStatus}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Finans & Paket</p>
+            {id ? (
+              <Link href={`/finans/${id}`} className="mt-1 inline-block text-[#c4b5fd] sm:hover:text-[#e9d5ff]">
+                Detaya git →
+              </Link>
+            ) : (
+              <p className="mt-1 text-white">—</p>
+            )}
+          </div>
+        </div>
+
+        {id ? (
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-white/5 pt-5">
+            <Link
+              href={`/finans/${id}`}
+              className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:border-[#7c3aed]/50"
+            >
+              <CreditCard size={14} aria-hidden /> Finans
+            </Link>
+            <a
+              href="#sakatlik-gecmisi"
+              className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            >
+              <ClipboardList size={14} aria-hidden /> Sakatlık
+            </a>
+            <Link
+              href="/performans/wellness-detay"
+              className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            >
+              <BarChart2 size={14} aria-hidden /> Wellness
+            </Link>
+            <Link
+              href="/notlar-haftalik-program"
+              className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            >
+              <FileText size={14} aria-hidden /> Program
+            </Link>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        id="sporcu-profil"
+        className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden group min-w-0"
+      >
         <div className="flex flex-col xl:flex-row gap-6 md:gap-8 items-center relative z-10">
           <div className="flex h-24 w-24 shrink-0 transform items-center justify-center rounded-2xl border-2 border-white/10 bg-gradient-to-br from-[#7c3aed] to-[#2e1065] text-3xl font-black italic text-white shadow-lg shadow-[#7c3aed]/15 transition-transform duration-500 sm:h-28 sm:w-28 sm:text-4xl md:rounded-3xl sm:group-hover:rotate-2">
             {player.full_name?.substring(0, 1).toUpperCase()}
@@ -207,10 +479,15 @@ export default function SporcuDetayDinamik() {
           <div className="flex-1 space-y-4 text-center xl:text-left min-w-0">
             <div>
               <div className="flex flex-wrap justify-center xl:justify-start items-center gap-2 mb-2">
-                <span className="bg-[#7c3aed] text-white px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest italic">
-                  PRO ELITE
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest italic ${
+                    player.team?.trim()
+                      ? "border-white/10 bg-white/10 text-white"
+                      : "border-amber-500/35 bg-amber-500/15 text-amber-200"
+                  }`}
+                >
+                  {player.team?.trim() ? player.team : "Takım belirtilmedi"}
                 </span>
-                <span className="text-gray-600 font-black text-[8px] uppercase tracking-widest">{player.team || "AKADEMİ"}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-black italic text-white uppercase tracking-tight leading-tight break-words">
                 <span className="block sm:inline break-words">{player.full_name?.split(" ")[0]}</span>
@@ -227,7 +504,7 @@ export default function SporcuDetayDinamik() {
               <MetricBadge
                 icon={<Target size={14} />}
                 label="MEVKI"
-                val={player.position ? player.position : "MEVKI BELIRTILMEDI"}
+                val={player.position ? player.position : "MEVKİ BELİRTİLMEDİ"}
                 color={player.position ? "text-white" : "text-amber-300"}
               />
               <MetricBadge icon={<ShieldCheck size={14} />} label="BOY" val={`${player.height || "--"} CM`} />
@@ -263,9 +540,9 @@ export default function SporcuDetayDinamik() {
                         }
                       : prev
                   );
-                  setPositionMessage("Sporcu profili guncellendi.");
+                  setPositionMessage("Sporcu profili güncellendi.");
                 } else {
-                  setPositionMessage(("error" in result && result.error) || "Sporcu profili guncellenemedi.");
+                  setPositionMessage(("error" in result && result.error) || "Sporcu profili güncellenemedi.");
                 }
                 setUpdatingPosition(false);
               }}
@@ -281,7 +558,7 @@ export default function SporcuDetayDinamik() {
                 value={profileDraft.team}
                 onChange={(e) => setProfileDraft((prev) => ({ ...prev, team: e.target.value.toUpperCase() }))}
                 list="athlete-team-options"
-                placeholder="Takim (opsiyonel)"
+                placeholder="Takım (opsiyonel)"
                 className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
               />
               <datalist id="athlete-team-options">
@@ -293,7 +570,7 @@ export default function SporcuDetayDinamik() {
                 value={profileDraft.position}
                 onChange={(e) => setProfileDraft((prev) => ({ ...prev, position: e.target.value.toUpperCase() }))}
                 list="athlete-position-options"
-                placeholder="Pozisyon guncelle (opsiyonel)"
+                placeholder="Pozisyon güncelle (opsiyonel)"
                 className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
               />
               <input
@@ -330,14 +607,19 @@ export default function SporcuDetayDinamik() {
                 disabled={updatingPosition}
                 className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:hover:bg-[#6d28d9] sm:col-span-2 sm:w-fit"
               >
-                {updatingPosition ? "Guncelleniyor..." : "Profili Kaydet"}
+                {updatingPosition ? "Güncelleniyor..." : "Profili Kaydet"}
               </button>
             </form>
             {positionMessage ? (
               <div className="mt-2 min-w-0 break-words">
                 <Notification
                   message={positionMessage}
-                  variant={positionMessage.toLowerCase().includes("guncellendi") ? "success" : "error"}
+                  variant={
+                    positionMessage.toLowerCase().includes("güncellendi") ||
+                    positionMessage.toLowerCase().includes("guncellendi")
+                      ? "success"
+                      : "error"
+                  }
                 />
               </div>
             ) : null}
@@ -347,6 +629,174 @@ export default function SporcuDetayDinamik() {
         <div className="absolute top-0 right-0 w-[280px] h-[280px] md:w-[360px] md:h-[360px] bg-[#7c3aed]/10 blur-[100px] -z-0 pointer-events-none rounded-full" />
       </section>
 
+      <div className="grid min-w-0 gap-5 md:gap-6 lg:grid-cols-2 lg:items-start">
+        <section
+          id="sakatlik-gecmisi"
+          className="space-y-5 rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7 min-w-0"
+        >
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <h2 className="text-base sm:text-lg font-black italic uppercase tracking-tight text-white break-words">
+            Sakatlık <span className="text-[#7c3aed]">geçmişi</span>
+          </h2>
+          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Kayıt yönetimi</span>
+        </div>
+
+        {injuryMessage ? (
+          <Notification message={injuryMessage} variant={injuryMessage.toLowerCase().includes("eklendi") || injuryMessage.toLowerCase().includes("pasife") ? "success" : "error"} />
+        ) : null}
+
+        <form onSubmit={handleInjuryCreate} className="grid grid-cols-1 gap-3 rounded-2xl border border-white/5 bg-black/30 p-4 sm:grid-cols-2">
+          <input
+            value={injuryType}
+            onChange={(e) => setInjuryType(e.target.value)}
+            placeholder="Sakatlık türü (örn: Hamstring zorlanması)"
+            className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+          />
+          <textarea
+            value={injuryNoteText}
+            onChange={(e) => setInjuryNoteText(e.target.value)}
+            placeholder="Antrenör notu"
+            rows={3}
+            className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+          />
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(e) => setInjuryImages(Array.from(e.target.files || []))}
+            className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-bold text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[#7c3aed] file:px-3 file:py-1.5 file:text-[10px] file:font-black file:text-white sm:col-span-2"
+          />
+          <p className="text-[9px] font-bold text-gray-600 uppercase tracking-wider sm:col-span-2">
+            En fazla 5 görsel, her biri max 6 MB (JPEG/PNG/WebP/GIF)
+          </p>
+          <button
+            type="submit"
+            disabled={injurySaving}
+            className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:w-fit"
+          >
+            {injurySaving ? "Kaydediliyor..." : "Sakatlık Kaydı Ekle"}
+          </button>
+        </form>
+
+        {injuryNotes.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-600">Henüz sakatlık kaydı bulunmuyor.</p>
+            <p className="mt-2 text-[10px] font-bold text-gray-500">Yeni kayıt için aşağıdaki formu doldurun; görsel eklemek opsiyoneldir.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {injuryNotes.map((item) => (
+              <article key={item.id} className="rounded-2xl border border-white/5 bg-black/25 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase text-white break-words">{item.injuryType}</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+                      {new Date(item.createdAt).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" })} · {item.createdByName}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={deactivatingInjuryId === item.id}
+                    onClick={() => void handleInjuryDeactivate(item.id)}
+                    className="min-h-11 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300 disabled:opacity-40"
+                  >
+                    {deactivatingInjuryId === item.id ? "Pasife alınıyor..." : "Pasife al"}
+                  </button>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm font-bold text-gray-300">{item.note}</p>
+                {item.assets.length > 0 ? (
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {item.assets.map((asset) => (
+                      <a
+                        key={asset.path}
+                        href={asset.signedUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                      >
+                        <Image
+                          src={asset.signedUrl}
+                          alt={item.injuryType}
+                          width={320}
+                          height={192}
+                          unoptimized
+                          className="h-24 w-full object-cover transition-transform sm:group-hover:scale-105"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+        </section>
+
+        <aside
+          id="son-wellness"
+          className="flex min-w-0 flex-col gap-4 self-stretch rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7"
+        >
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <h2 className="text-base font-black italic uppercase tracking-tight text-white sm:text-lg">
+              Son <span className="text-[#7c3aed]">wellness</span>
+            </h2>
+            <Link
+              href="/performans/wellness-detay"
+              className="shrink-0 text-[9px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
+            >
+              Arşiv
+            </Link>
+          </div>
+          {latestWellness ? (
+            <div className="space-y-3 rounded-2xl border border-white/5 bg-black/30 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Rapor tarihi</p>
+              <p className="text-sm font-black text-white">
+                {new Date(latestWellness.report_date).toLocaleDateString("tr-TR", { dateStyle: "long" })}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-gray-400">
+                {latestWellness.fatigue != null ? <span>Yorgunluk: {latestWellness.fatigue}/10</span> : null}
+                {latestWellness.sleep_quality != null ? <span>Uyku: {latestWellness.sleep_quality}/10</span> : null}
+                {latestWellness.energy_level != null ? <span>Enerji: {latestWellness.energy_level}/10</span> : null}
+                {latestWellness.stress_level != null ? <span>Stres: {latestWellness.stress_level}/10</span> : null}
+              </div>
+              <Link
+                href="#performans-analitigi"
+                className="inline-block text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
+              >
+                Grafikler ve trendler için aşağı kaydırın →
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-center">
+              <p className="text-[10px] font-bold text-gray-500">Kayıtlı wellness raporu yok.</p>
+              <p className="mt-2 text-[10px] text-gray-600">
+                Sabah raporu veya wellness girişi yapıldığında burada son kayıt görünür. Tüm arşiv için{" "}
+                <Link href="/performans/wellness-detay" className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]">
+                  wellness ekranına
+                </Link>{" "}
+                gidin.
+              </p>
+            </div>
+          )}
+          <p className="mt-auto text-[10px] font-bold text-gray-500">
+            Derin analiz:{" "}
+            <a href="#performans-analitigi" className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]">
+              Performans analitiği
+            </a>
+          </p>
+        </aside>
+      </div>
+
+      <section id="hizli-performans" className="min-w-0 space-y-3">
+        <div className="mb-1 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-xs font-black italic uppercase tracking-tight text-gray-400 sm:text-sm">Hızlı performans görünümü</h2>
+          <Link
+            href="#performans-analitigi"
+            className="shrink-0 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
+          >
+            ACWR ve wellness analitiği →
+          </Link>
+        </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6 min-w-0">
         <div className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden min-w-0">
           <div className="flex items-center gap-3 mb-5">
@@ -419,6 +869,42 @@ export default function SporcuDetayDinamik() {
           </div>
         </div>
       </div>
+      </section>
+
+      <section id="operasyon-zaman-cizelgesi" className="rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-black uppercase tracking-wide text-white">Operasyon timeline</h2>
+          <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">Ders · Ödeme · Sakatlık · Not</span>
+        </div>
+        {timelineEvents.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-5 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Henüz timeline kaydı yok.</p>
+            <p className="mt-2 text-[10px] font-bold text-gray-600">
+              İlk kaydı oluşturmak için{" "}
+              <Link href="/dersler" className="text-[#c4b5fd] sm:hover:text-[#e9d5ff]">
+                ders planlamaya
+              </Link>{" "}
+              veya{" "}
+              <Link href={id ? `/finans/${id}` : "/finans"} className="text-[#c4b5fd] sm:hover:text-[#e9d5ff]">
+                finans ekranına
+              </Link>{" "}
+              geçin.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {timelineEvents.slice(0, 60).map((event) => (
+              <li key={event.id} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[11px] font-bold">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-white">{event.title}</p>
+                  <span className="text-gray-500">{new Date(event.at).toLocaleString("tr-TR")}</span>
+                </div>
+                <p className="mt-1 text-gray-400">{event.detail}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <AthletePerformanceInsightsPanel
         loads={trainingLoads}
@@ -427,6 +913,16 @@ export default function SporcuDetayDinamik() {
       />
 
       <AthleteFieldTestsPanel results={tableMetrics} />
+    </div>
+  );
+}
+
+function QuickStat({ label, value, sub }: { label: string; value: string | number; sub: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5">
+      <p className="text-[8px] font-black uppercase tracking-wider text-gray-600">{label}</p>
+      <p className="mt-1 text-sm font-black text-white">{value}</p>
+      <p className="text-[8px] font-bold uppercase text-gray-500">{sub}</p>
     </div>
   );
 }

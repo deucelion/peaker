@@ -81,7 +81,13 @@ export default function WellnessDetay() {
   }
 
   const filteredReports = reports.filter((r) => 
-    r.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    (() => {
+      const profile = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+      const fullName = (profile?.full_name || "").toLowerCase();
+      const term = searchTerm.toLowerCase().trim();
+      if (!term) return true;
+      return fullName.includes(term);
+    })()
   );
 
   const avgHeartRate =
@@ -159,23 +165,26 @@ export default function WellnessDetay() {
               <div className="flex items-center gap-4 sm:gap-6 min-w-0 w-full xl:w-auto xl:max-w-md shrink-0">
                 <div className="relative shrink-0">
                   <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#1c1c21] rounded-2xl border border-white/10 flex items-center justify-center font-black text-xl sm:text-2xl italic text-[#7c3aed] sm:group-hover:scale-110 transition-transform">
-                    {report.profiles?.avatar_url ? (
+                    {(Array.isArray(report.profiles) ? report.profiles[0]?.avatar_url : report.profiles?.avatar_url) ? (
                       <Image
-                        src={report.profiles.avatar_url}
+                        src={(Array.isArray(report.profiles) ? report.profiles[0]?.avatar_url : report.profiles?.avatar_url) || ""}
                         className="h-full w-full object-cover rounded-2xl"
                         alt=""
                         width={64}
                         height={64}
                       />
                     ) : (
-                      report.profiles?.full_name?.[0]
+                      (Array.isArray(report.profiles) ? report.profiles[0]?.full_name : report.profiles?.full_name)?.[0] || "?"
                     )}
                   </div>
                   <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-4 border-[#121215] rounded-full"></div>
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg sm:text-2xl font-black italic uppercase text-white tracking-tighter sm:group-hover:text-[#7c3aed] transition-colors leading-tight break-words">
-                    {report.profiles?.full_name}
+                    {(() => {
+                      const profile = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles;
+                      return profile?.full_name || "Sporcu";
+                    })()}
                   </h3>
                   <div className="flex items-start gap-2 mt-2 opacity-60 min-w-0">
                     <Calendar size={12} className="text-[#7c3aed] shrink-0 mt-0.5" aria-hidden />

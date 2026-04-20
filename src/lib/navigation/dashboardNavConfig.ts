@@ -80,6 +80,15 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     managementGroup: "analysis",
   },
   {
+    href: PATHS.haftalikDersProgrami,
+    icon: "Calendar",
+    label: "Haftalık Ders Programı",
+    section: "management",
+    roles: ["admin", "coach"],
+    activeMatch: "exact",
+    managementGroup: "analysis",
+  },
+  {
     href: PATHS.sahaTestleri,
     icon: "BarChart3",
     label: "Saha Testleri",
@@ -122,9 +131,9 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "CreditCard",
     label: "Aidat Takibi",
     section: "management",
-    roles: ["admin"],
-    adminOnly: true,
-    activeMatch: "exact",
+    roles: ["admin", "coach"],
+    coachNeedsAll: ["can_view_reports"],
+    activeMatch: "prefix",
     managementGroup: "operations",
   },
   {

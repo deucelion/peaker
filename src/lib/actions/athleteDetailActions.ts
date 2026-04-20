@@ -120,12 +120,116 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     .order("measurement_date", { ascending: true });
   const bodyMetrics = bodyRes.error ? [] : bodyRes.data ?? [];
 
+  const [packageRes, privatePaymentRes, aidatRes, lessonRes, injuryRes, programRes] = await Promise.all([
+    adminClient
+      .from("private_lesson_packages")
+      .select("id, package_name, remaining_lessons, payment_status, is_active, total_lessons, used_lessons, total_price, amount_paid, updated_at")
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", athleteId)
+      .order("updated_at", { ascending: false })
+      .limit(5),
+    adminClient
+      .from("private_lesson_payments")
+      .select("id, amount, paid_at, note")
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", athleteId)
+      .order("paid_at", { ascending: false })
+      .limit(40),
+    adminClient
+      .from("payments")
+      .select("id, amount, payment_date, due_date, status, payment_type, description")
+      .eq("organization_id", actor.organization_id)
+      .eq("profile_id", athleteId)
+      .order("due_date", { ascending: false })
+      .limit(40),
+    adminClient
+      .from("training_participants")
+      .select("training_schedule!inner(id, title, start_time, end_time, location, status)")
+      .eq("profile_id", athleteId)
+      .eq("training_schedule.organization_id", actor.organization_id)
+      .order("start_time", { ascending: false, referencedTable: "training_schedule" })
+      .limit(30),
+    adminClient
+      .from("athlete_injury_notes")
+      .select("id, injury_type, note, created_at, is_active")
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", athleteId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    adminClient
+      .from("athlete_programs")
+      .select("id, title, created_at, note, is_active")
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", athleteId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ]);
+
+  const activePackage = (packageRes.data || []).find((p) => p.is_active) || (packageRes.data || [])[0] || null;
+
+  const timelineEvents = [
+    ...((lessonRes.data || []).map((row) => {
+      const schedule = Array.isArray(row.training_schedule) ? row.training_schedule[0] : row.training_schedule;
+      return {
+        id: `lesson-${schedule?.id || crypto.randomUUID()}`,
+        type: "lesson",
+        at: schedule?.start_time || new Date(0).toISOString(),
+        title: schedule?.title || "Ders",
+        detail: `${schedule?.location || "Lokasyon yok"} · ${schedule?.status || "scheduled"}`,
+      };
+    }) || []),
+    ...((privatePaymentRes.data || []).map((row) => ({
+      id: `private-payment-${row.id}`,
+      type: "payment",
+      at: row.paid_at || new Date(0).toISOString(),
+      title: `Özel ders ödeme: ₺${Number(row.amount || 0)}`,
+      detail: row.note || "Özel ders tahsilatı",
+    })) || []),
+    ...((aidatRes.data || []).map((row) => ({
+      id: `aidat-${row.id}`,
+      type: "payment",
+      at: row.payment_date || row.due_date || new Date(0).toISOString(),
+      title: `${row.payment_type === "aylik" ? "Aidat" : "Paket"} ödeme: ₺${Number(row.amount || 0)}`,
+      detail: `${row.status || "bekliyor"} · ${row.description || "Ödeme kaydı"}`,
+    })) || []),
+    ...((injuryRes.data || []).map((row) => ({
+      id: `injury-${row.id}`,
+      type: "injury",
+      at: row.created_at || new Date(0).toISOString(),
+      title: row.injury_type || "Sakatlık kaydı",
+      detail: row.note || (row.is_active ? "Aktif sakatlık kaydı" : "Pasif sakatlık kaydı"),
+    })) || []),
+    ...((programRes.data || []).map((row) => ({
+      id: `program-${row.id}`,
+      type: "note",
+      at: row.created_at || new Date(0).toISOString(),
+      title: row.title || "Program notu",
+      detail: row.note || (row.is_active ? "Aktif program notu" : "Pasif program notu"),
+    })) || []),
+  ]
+    .filter((event) => event.at && !Number.isNaN(new Date(event.at).getTime()))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
   return {
     profile: prof,
     results: results ?? [],
     loads: loads ?? [],
     wellnessReports: wellnessRows ?? [],
     bodyMetrics,
+    financeAndPackage: {
+      activePackageName: activePackage?.package_name ?? null,
+      remainingLessons: activePackage?.remaining_lessons ?? null,
+      paymentStatus: activePackage?.payment_status ?? null,
+      packageSummary: activePackage
+        ? {
+            totalLessons: activePackage.total_lessons,
+            usedLessons: activePackage.used_lessons,
+            totalPrice: Number(activePackage.total_price || 0),
+            amountPaid: Number(activePackage.amount_paid || 0),
+          }
+        : null,
+    },
+    timelineEvents,
   };
 }
 

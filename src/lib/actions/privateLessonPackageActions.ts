@@ -8,7 +8,7 @@ import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
-import { computeIncrementalAmountPaid, computePaymentStatus, computeRemainingLessons, normalizeMoney } from "@/lib/privateLessons/packageMath";
+import { computePaymentStatus, normalizeMoney } from "@/lib/privateLessons/packageMath";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -19,6 +19,7 @@ import type {
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
+import { captureServerActionSignal } from "@/lib/observability/serverActionError";
 
 type Actor = {
   id: string;
@@ -296,7 +297,7 @@ export async function listPrivateLessonUsageForPackage(
   | { rows: Array<{ id: string; usedAt: string; note: string | null }> }
   | { error: string }
 > {
-  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready"]);
+  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "production_hardening_atomicity_ready"]);
   if (schemaError) return { error: schemaError };
 
   const resolved = await resolvePackageActor();
@@ -334,6 +335,11 @@ export async function listPrivateLessonUsageForPackage(
   };
 }
 
+/**
+ * Plansız / geçmiş ders kaydı: takvime bağlanmamış veya geçmişte yapılmış dersler için paketten 1 ders düşürür.
+ * Planlı özel ders oturumları yalnızca `complete_private_lesson_session` (“Ders yapıldı”) ile düşer; bu action,
+ * aynı pakette açık (`planned`) oturum varken çalışmaz — çift düşüm ve yanlış akış riskini engeller.
+ */
 export async function addPrivateLessonUsage(formData: FormData) {
   return withServerActionGuard("privateLesson.addPrivateLessonUsage", async () => {
   const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready"]);
@@ -352,6 +358,26 @@ export async function addPrivateLessonUsage(formData: FormData) {
   if (!packageId) return { error: "Paket secimi zorunludur." };
 
   const adminClient = createSupabaseAdminClient();
+
+  const sessionsSchemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready"]);
+  if (!sessionsSchemaError) {
+    const { count: plannedOpen, error: plannedErr } = await adminClient
+      .from("private_lesson_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("package_id", packageId)
+      .eq("organization_id", actor.organization_id!)
+      .eq("status", "planned");
+    if (plannedErr) {
+      return { error: `Plan kontrolü başarısız: ${plannedErr.message}` };
+    }
+    if ((plannedOpen ?? 0) > 0) {
+      return {
+        error:
+          "Bu pakette açık (planlı) özel ders oturumu var. Ders düşümü yalnızca “Özel ders planı” sekmesinden ilgili oturumu “Ders yapıldı” ile tamamlanarak yapılır. Plansız veya geçmiş ders kaydı eklemek için önce tüm açık planları tamamlayın veya iptal edin.",
+      };
+    }
+  }
+
   const { data: pkg } = await adminClient
     .from("private_lesson_packages")
     .select(
@@ -367,31 +393,33 @@ export async function addPrivateLessonUsage(formData: FormData) {
     return { error: "Paket dersi bitmis; yeni kullanim eklenemez." };
   }
 
-  const nextUsed = pkg.used_lessons + 1;
-  const nextRemaining = computeRemainingLessons(pkg.total_lessons, nextUsed);
-  const { error: updateErr } = await adminClient
-    .from("private_lesson_packages")
-    .update({
-      used_lessons: nextUsed,
-      remaining_lessons: nextRemaining,
-      is_active: nextRemaining > 0 ? pkg.is_active : false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", packageId)
-    .eq("organization_id", actor.organization_id!)
-    .gt("remaining_lessons", 0);
-
-  if (updateErr) return { error: `Kullanim sayaci guncellenemedi: ${updateErr.message}` };
-
   const usageCoachId = pkg.coach_id || (getSafeRole(actor.role) === "coach" ? actor.id : null);
-  const { error: usageErr } = await adminClient.from("private_lesson_usage").insert({
-    package_id: packageId,
-    athlete_id: pkg.athlete_id,
-    coach_id: usageCoachId,
-    used_at: usedAt,
-    note,
+  const { data: atomicRows, error: atomicErr } = await adminClient.rpc("private_lesson_apply_usage_atomic", {
+    p_package_id: packageId,
+    p_organization_id: actor.organization_id!,
+    p_actor_id: actor.id,
+    p_fallback_coach_id: usageCoachId,
+    p_used_at: usedAt,
+    p_note: note,
   });
-  if (usageErr) return { error: `Kullanim kaydi olusturulamadi: ${usageErr.message}` };
+  if (atomicErr) {
+    captureServerActionSignal("privateLesson.addPrivateLessonUsage", "atomic_usage_rpc_failed", {
+      packageId,
+      organizationId: actor.organization_id,
+      actorId: actor.id,
+      errorMessage: atomicErr.message,
+    });
+    return { error: `Kullanim islemi tamamlanamadi: ${atomicErr.message}` };
+  }
+  if (!Array.isArray(atomicRows) || atomicRows.length === 0) {
+    captureServerActionSignal("privateLesson.addPrivateLessonUsage", "atomic_usage_no_rows", {
+      packageId,
+      organizationId: actor.organization_id,
+      actorId: actor.id,
+    });
+    return { error: "Kullanim islemi tamamlanamadi." };
+  }
+  const nextRemaining = Number((atomicRows[0] as { next_remaining?: number }).next_remaining ?? 0);
 
   const label = (pkg as { package_name?: string }).package_name || "Ozel ders paketi";
   try {
@@ -412,13 +440,18 @@ export async function addPrivateLessonUsage(formData: FormData) {
 
   revalidatePath("/ozel-ders-paketleri");
   revalidatePath("/ozel-ders-paketlerim");
+  revalidatePath(`/ozel-ders-paketleri/${packageId}`);
   return { success: true as const };
   });
 }
 
 export async function updatePrivateLessonPayment(formData: FormData) {
   return withServerActionGuard("privateLesson.updatePrivateLessonPayment", async () => {
-  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "private_lesson_payments_ready"]);
+  const schemaError = await assertCriticalSchemaReady([
+    "private_lesson_packages_ready",
+    "private_lesson_payments_ready",
+    "production_hardening_atomicity_ready",
+  ]);
   if (schemaError) return { error: schemaError };
 
   const resolved = await resolvePackageActor();
@@ -442,39 +475,52 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     .maybeSingle();
   if (!pkg) return { error: "Paket bulunamadi." };
 
-  const nextAmountPaid = computeIncrementalAmountPaid(pkg.amount_paid, paymentAmount);
-  const paymentStatus = computePaymentStatus(pkg.total_price, nextAmountPaid);
-  const { error } = await adminClient
-    .from("private_lesson_packages")
-    .update({
-      amount_paid: nextAmountPaid,
-      payment_status: paymentStatus,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", packageId)
-    .eq("organization_id", actor.organization_id!);
-  if (error) return { error: `Odeme guncellenemedi: ${error.message}` };
-
   const paymentCoachId = pkg.coach_id || (getSafeRole(actor.role) === "coach" ? actor.id : null);
-  const { error: paymentInsertErr } = await adminClient.from("private_lesson_payments").insert({
-    package_id: packageId,
-    organization_id: actor.organization_id,
-    athlete_id: pkg.athlete_id,
-    coach_id: paymentCoachId,
-    amount: paymentAmount,
-    paid_at: new Date().toISOString(),
-    note,
-    created_by: actor.id,
-  });
-  if (paymentInsertErr) return { error: `Odeme hareketi kaydedilemedi: ${paymentInsertErr.message}` };
+  const { data: atomicPaymentRows, error: atomicPaymentErr } = await adminClient.rpc(
+    "private_lesson_apply_payment_atomic",
+    {
+      p_package_id: packageId,
+      p_organization_id: actor.organization_id!,
+      p_actor_id: actor.id,
+      p_fallback_coach_id: paymentCoachId,
+      p_payment_amount: paymentAmount,
+      p_paid_at: new Date().toISOString(),
+      p_note: note,
+    }
+  );
+  if (atomicPaymentErr) {
+    captureServerActionSignal("privateLesson.updatePrivateLessonPayment", "atomic_payment_rpc_failed", {
+      packageId,
+      organizationId: actor.organization_id,
+      actorId: actor.id,
+      errorMessage: atomicPaymentErr.message,
+    });
+    return { error: `Odeme guncellenemedi: ${atomicPaymentErr.message}` };
+  }
+  if (!Array.isArray(atomicPaymentRows) || atomicPaymentRows.length === 0) {
+    captureServerActionSignal("privateLesson.updatePrivateLessonPayment", "atomic_payment_no_rows", {
+      packageId,
+      organizationId: actor.organization_id,
+      actorId: actor.id,
+    });
+    return { error: "Odeme islemi tamamlanamadi." };
+  }
+  const atomicRow = atomicPaymentRows[0] as {
+    next_amount_paid?: number;
+    payment_status?: "unpaid" | "partial" | "paid";
+    total_price?: number;
+  };
+  const nextAmountPaid = Number(atomicRow.next_amount_paid ?? 0);
+  const paymentStatus = (atomicRow.payment_status ?? "unpaid") as "unpaid" | "partial" | "paid";
+  const totalPrice = Number(atomicRow.total_price ?? pkg.total_price ?? 0);
 
   const pName = (pkg as { package_name?: string }).package_name || "Ozel ders paketi";
-  const remainingBalance = normalizeMoney(pkg.total_price - nextAmountPaid);
+  const remainingBalance = normalizeMoney(totalPrice - nextAmountPaid);
   try {
     if (paymentStatus !== "paid") {
       await insertNotificationsForUsers(
         [pkg.athlete_id as string],
-        `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(pkg.total_price)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`
+        `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(totalPrice)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`
       );
     } else {
       await insertNotificationsForUsers(
@@ -488,6 +534,7 @@ export async function updatePrivateLessonPayment(formData: FormData) {
 
   revalidatePath("/ozel-ders-paketleri");
   revalidatePath("/ozel-ders-paketlerim");
+  revalidatePath(`/ozel-ders-paketleri/${packageId}`);
   return { success: true as const };
   });
 }
@@ -555,9 +602,26 @@ export async function getPrivateLessonPackageDetail(
     note: (row.note as string | null) ?? null,
   }));
 
+  let plannedPrivateSessionCount = 0;
+  const sessionsSchemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready"]);
+  if (!sessionsSchemaError) {
+    const { count, error: plannedCountErr } = await adminClient
+      .from("private_lesson_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("package_id", id)
+      .eq("organization_id", actor.organization_id)
+      .eq("status", "planned");
+    if (!plannedCountErr) {
+      plannedPrivateSessionCount = count ?? 0;
+    }
+  }
+
   return {
     package: mappedPackage,
     usageRows: mappedUsage,
     paymentRows: (paymentRows || []).map((row) => mapPaymentRow(row as never)),
+    plannedPrivateSessionCount,
+    viewerRole: role,
+    viewerId: actor.id,
   };
 }

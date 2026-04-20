@@ -25,7 +25,7 @@ export default function GenelTakimRaporu() {
     try {
       const res = await loadFieldTestTeamReportForActor();
       if ("error" in res) {
-        setLoadError(res.error ?? "Rapor yuklenemedi.");
+        setLoadError(res.error ?? "Rapor yüklenemedi.");
         setTotalPlayers(0);
         setStats([]);
         return;
@@ -38,7 +38,7 @@ export default function GenelTakimRaporu() {
       }
     } catch (error) {
       console.error("Dashboard veri hatası:", error);
-      setLoadError("Rapor yuklenemedi.");
+      setLoadError("Rapor yüklenemedi.");
       setStats([]);
     } finally {
       setLoading(false);
@@ -82,12 +82,12 @@ export default function GenelTakimRaporu() {
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:justify-between lg:items-center min-w-0">
+      <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center min-w-0">
         <Link href="/saha-testleri" className="flex items-center gap-3 sm:gap-4 text-gray-500 sm:hover:text-[#7c3aed] transition-all group self-start min-h-11 touch-manipulation">
           <div className="p-3 bg-[#121215] border border-white/5 rounded-2xl sm:group-hover:border-[#7c3aed]/50 transition-all shadow-xl shrink-0">
             <ChevronLeft size={20} aria-hidden />
           </div>
-          <span className="text-[10px] font-black uppercase italic tracking-[0.15em] sm:tracking-[0.2em]">Saha Testleri</span>
+          <span className="text-[10px] font-black uppercase italic tracking-[0.15em] sm:tracking-[0.2em]">Veri girişi ekranına dön</span>
         </Link>
         
         <div className="text-center min-w-0 flex-1 order-first lg:order-none">
@@ -96,7 +96,7 @@ export default function GenelTakimRaporu() {
           </h1>
           <div className="flex items-center justify-center gap-2 sm:gap-3 mt-3 sm:mt-4 flex-wrap px-2">
              <div className="h-[1px] w-6 sm:w-8 bg-[#7c3aed]/30 shrink-0" />
-             <p className="text-[8px] sm:text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em] sm:tracking-[0.4em] italic break-words">Performans Dashboard v2.0</p>
+             <p className="text-[8px] sm:text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em] sm:tracking-[0.4em] italic break-words">Takım saha test raporu</p>
              <div className="h-[1px] w-6 sm:w-8 bg-[#7c3aed]/30 shrink-0" />
           </div>
         </div>
@@ -104,20 +104,20 @@ export default function GenelTakimRaporu() {
       </div>
 
       {/* ÖZET KARTLARI */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 min-w-0">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 min-w-0">
         <SummaryCard title="Kadro Genişliği" val={totalPlayers.toString()} icon={<Users size={20} />} color="text-blue-500" />
         <SummaryCard title="Toplam Veri Girişi" val={stats.length.toString()} icon={<Activity size={20} />} color="text-[#7c3aed]" />
         <SummaryCard title="Aktif Test Sayısı" val={availableTests.length.toString()} icon={<BarChart3 size={20} />} color="text-emerald-500" />
       </div>
 
       {/* TEST SEÇİCİ */}
-      <div className="flex flex-wrap gap-2 sm:gap-3 p-2 bg-[#121215] border border-white/5 rounded-[1.25rem] sm:rounded-[2rem] w-full min-w-0 sm:w-fit">
+      <div className="flex flex-wrap gap-2 p-2 bg-[#121215] border border-white/10 rounded-xl w-full min-w-0">
         {availableTests.map((testName) => (
           <button
             type="button"
             key={testName}
             onClick={() => setSelectedTest(testName)}
-            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 sm:py-4 rounded-[1.25rem] sm:rounded-[1.5rem] font-black italic text-[9px] sm:text-[10px] uppercase transition-all flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-w-0 ${
+            className={`min-h-10 flex-1 sm:flex-none px-4 py-2.5 rounded-lg font-black text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation min-w-0 ${
               selectedTest === testName 
               ? "bg-[#7c3aed] text-white shadow-2xl shadow-[#7c3aed]/20" 
               : "text-gray-500 sm:hover:text-white sm:hover:bg-white/5"
@@ -130,36 +130,36 @@ export default function GenelTakimRaporu() {
       </div>
 
       {/* GRAFİK PANELİ */}
-      <div className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[3rem] p-4 sm:p-6 md:p-10 shadow-xl relative overflow-hidden group min-w-0">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-8 sm:mb-12 md:mb-16 relative z-10 gap-6 sm:gap-8 min-w-0">
+      <div className="bg-[#121215] border border-white/10 rounded-2xl p-4 sm:p-5 md:p-6 shadow-xl relative overflow-hidden group min-w-0">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-5 sm:mb-6 relative z-10 gap-4 sm:gap-5 min-w-0">
           <div className="space-y-3 sm:space-y-4 min-w-0 flex-1">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 shrink-0 bg-[#7c3aed]/10 rounded-xl flex items-center justify-center">
                 <TrendingUp size={18} className="text-[#7c3aed]" aria-hidden />
               </div>
               <h3 className="text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] sm:tracking-[0.4em] italic break-words">
-                Saha Performans Kıyaslaması
+                Takım karşılaştırması
               </h3>
             </div>
-            <h4 className="text-2xl sm:text-3xl md:text-4xl font-black italic uppercase text-white tracking-tighter break-words">
+            <h4 className="text-xl sm:text-2xl md:text-3xl font-black italic uppercase text-white tracking-tighter break-words">
               {selectedTest || "Test Bekleniyor"} 
               <span className="text-[#7c3aed] opacity-30 ml-2 sm:ml-4 text-base sm:text-xl block sm:inline mt-1 sm:mt-0">[{currentUnit}]</span>
             </h4>
           </div>
           
-          <div className="bg-black/40 border border-white/5 p-5 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] backdrop-blur-xl w-full sm:min-w-[240px] sm:w-auto sm:group-hover:border-[#7c3aed]/30 transition-all shrink-0 min-w-0">
+          <div className="bg-black/40 border border-white/10 p-4 sm:p-5 rounded-xl backdrop-blur-xl w-full sm:min-w-[220px] sm:w-auto sm:group-hover:border-[#7c3aed]/30 transition-all shrink-0 min-w-0">
             <div className="flex items-center gap-3 mb-2">
               <Trophy size={16} className="text-yellow-500 shrink-0" aria-hidden />
-              <span className="text-[9px] font-black text-gray-500 uppercase tracking-wide sm:tracking-widest italic">Kategori Lideri</span>
+              <span className="text-[9px] font-black text-gray-500 uppercase tracking-wide sm:tracking-widest italic">En iyi değer</span>
             </div>
-            <span className="text-3xl sm:text-4xl md:text-5xl font-black italic text-white tracking-tighter tabular-nums break-all">
+            <span className="text-3xl sm:text-4xl font-black italic text-white tracking-tighter tabular-nums break-all">
               {bestValue > 0 ? bestValue.toFixed(2) : "--"}
               <small className="text-xs ml-2 text-gray-600 not-italic uppercase">{currentUnit}</small>
             </span>
           </div>
         </div>
 
-        <div className="h-[min(55vh,420px)] sm:h-[min(50vh,480px)] md:h-[500px] w-full min-h-[240px] relative z-10">
+        <div className="h-[min(50vh,340px)] sm:h-[min(50vh,380px)] w-full min-h-[230px] relative z-10">
           {currentTestData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={currentTestData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
@@ -199,9 +199,13 @@ export default function GenelTakimRaporu() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-[3rem] bg-black/20">
-               <Activity className="text-gray-800 mb-6 animate-pulse" size={64} aria-hidden />
-               <p className="text-gray-600 font-black italic text-sm uppercase tracking-[0.4em]">Sistem Veri Bekliyor</p>
+            <div className="h-full flex flex-col items-center justify-center border border-dashed border-white/10 rounded-2xl bg-black/20 p-6 text-center">
+               <Activity className="text-gray-700 mb-3" size={40} aria-hidden />
+               <p className="text-gray-400 font-black text-sm uppercase tracking-wide">Bu test için henüz veri yok</p>
+               <p className="mt-1 text-[11px] font-bold text-gray-600">İlk veri girişini saha testleri ekranından yapabilirsiniz.</p>
+               <Link href="/saha-testleri" className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]">
+                 Veri girişine git
+               </Link>
             </div>
           )}
         </div>
@@ -213,12 +217,12 @@ export default function GenelTakimRaporu() {
 
 function SummaryCard({ title, val, icon, color }: { title: string; val: string; icon: ReactNode; color: string }) {
   return (
-    <div className="bg-[#121215] border border-white/5 p-5 sm:p-7 rounded-[1.5rem] sm:rounded-[2.25rem] flex items-center justify-between gap-3 group sm:hover:border-[#7c3aed]/20 transition-all shadow-xl relative overflow-hidden min-w-0">
+    <div className="bg-[#121215] border border-white/10 p-4 sm:p-5 rounded-xl flex items-center justify-between gap-3 group sm:hover:border-[#7c3aed]/20 transition-all shadow-xl relative overflow-hidden min-w-0">
       <div className="relative z-10 min-w-0 flex-1">
-        <p className="text-[9px] sm:text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-2 sm:mb-3 italic break-words">{title}</p>
-        <p className={`text-3xl sm:text-4xl md:text-5xl font-black italic ${color} tracking-tighter leading-none tabular-nums`}>{val}</p>
+        <p className="text-[9px] sm:text-[10px] font-black text-gray-600 uppercase tracking-[0.15em] sm:tracking-[0.2em] mb-1 italic break-words">{title}</p>
+        <p className={`text-2xl sm:text-3xl font-black italic ${color} tracking-tighter leading-none tabular-nums`}>{val}</p>
       </div>
-      <div className={`p-4 sm:p-6 shrink-0 bg-white/[0.02] rounded-[1.25rem] sm:rounded-[2rem] ${color} sm:group-hover:scale-110 sm:group-hover:bg-[#7c3aed]/10 transition-all relative z-10`} aria-hidden>
+      <div className={`p-3 sm:p-4 shrink-0 bg-white/[0.02] rounded-lg ${color} sm:group-hover:scale-110 sm:group-hover:bg-[#7c3aed]/10 transition-all relative z-10`} aria-hidden>
         {icon}
       </div>
     </div>

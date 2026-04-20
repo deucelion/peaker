@@ -9,3 +9,6 @@ export * from "./diagnostics";
 export * from "./athletePermission";
 export * from "./superAdmin";
 export * from "./privateLesson";
+export * from "./injuryNote";
+export * from "./finance";
+export * from "./schedule";

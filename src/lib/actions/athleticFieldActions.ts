@@ -13,6 +13,22 @@ function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
 }
 
+function toUserFriendlyFieldTestWriteError(
+  err: { message?: string | null; code?: string | null } | null | undefined,
+  fallback: string
+) {
+  const code = (err?.code || "").toLowerCase();
+  const msg = (err?.message || "").toLowerCase();
+
+  if (code === "42p10" || msg.includes("no unique or exclusion constraint")) {
+    return "Saha testi kayıt altyapısı eksik görünüyor. Lütfen tekrar deneyin veya yöneticinize bilgi verin.";
+  }
+  if (code === "23505" || msg.includes("duplicate key")) {
+    return "Aynı sporcu, metrik ve tarih için yalnızca tek kayıt tutulabilir.";
+  }
+  return fallback;
+}
+
 type TestDefinitionOrgShape = {
   hasOrganizationId: boolean;
   hasOrgId: boolean;
@@ -234,7 +250,7 @@ export async function saveAthleticFieldResults(input: {
         .eq("profile_id", cell.profileId)
         .eq("test_id", cell.testId)
         .eq("test_date", testDate);
-      if (delErr) return { error: `Silme hatasi: ${delErr.message}` };
+      if (delErr) return { error: toUserFriendlyFieldTestWriteError(delErr, "Saha testi kaydı silinemedi.") };
     } else {
       const v = Number(cell.value);
       if (!Number.isFinite(v)) return { error: "Gecersiz olcum degeri." };
@@ -248,7 +264,7 @@ export async function saveAthleticFieldResults(input: {
         },
         { onConflict: "profile_id,test_id,test_date" }
       );
-      if (upErr) return { error: `Kayit hatasi: ${upErr.message}` };
+      if (upErr) return { error: toUserFriendlyFieldTestWriteError(upErr, "Saha testi kaydı kaydedilemedi.") };
     }
   }
 

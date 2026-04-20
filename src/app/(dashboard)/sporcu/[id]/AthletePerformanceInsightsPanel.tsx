@@ -111,7 +111,10 @@ export function AthletePerformanceInsightsPanel({
   );
 
   return (
-    <div className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl space-y-6 md:space-y-7 min-w-0 overflow-x-hidden">
+    <div
+      id="performans-analitigi"
+      className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl space-y-6 md:space-y-7 min-w-0 overflow-x-hidden"
+    >
       <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6 xl:gap-8 min-w-0">
         <div className="flex items-start gap-4 min-w-0">
           <div className="shrink-0 rounded-xl bg-[#7c3aed]/10 p-2 text-[#7c3aed]">

@@ -151,7 +151,10 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
   };
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-2xl border border-white/5 bg-[#121215] shadow-xl md:rounded-3xl">
+    <div
+      id="alan-testleri"
+      className="min-w-0 overflow-hidden rounded-2xl border border-white/5 bg-[#121215] shadow-xl md:rounded-3xl"
+    >
       <div className="p-5 md:p-7 border-b border-white/5 flex flex-col gap-5 md:gap-6 bg-white/[0.01] min-w-0">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 min-w-0">
           <div className="flex items-start gap-4 min-w-0">

@@ -41,8 +41,39 @@ export interface PrivateLessonUsage {
   note: string | null;
 }
 
+export type PrivateLessonSessionStatus = "planned" | "completed" | "cancelled";
+
+/** Özel ders planı (grup dersi değil); haftalık çizelge için startsAt/endsAt ISO. */
+export interface PrivateLessonSessionListItem {
+  id: string;
+  organizationId: string;
+  packageId: string;
+  packageName: string | null;
+  athleteId: string;
+  athleteName: string | null;
+  coachId: string;
+  coachName: string | null;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
+  note: string | null;
+  status: PrivateLessonSessionStatus;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}
+
 export interface PrivateLessonPackageDetailSnapshot {
   package: PrivateLessonPackage;
   usageRows: PrivateLessonUsage[];
   paymentRows: PrivateLessonPayment[];
+  /**
+   * Açık (`planned`) özel ders oturumu sayısı.
+   * Ürün kuralı: planlı dersler yalnızca “Ders yapıldı” ile düşer; bu sayı > 0 iken plansız/geçmiş kayıt UI ve
+   * `addPrivateLessonUsage` tarafından engellenir (çift düşüm önlenir).
+   */
+  plannedPrivateSessionCount: number;
+  /** Paket detayında plan sekmesi / sporcu salt okunur için. */
+  viewerRole: "admin" | "coach" | "sporcu";
+  /** Oturum satırında tamamlama / iptal yetkisi için. */
+  viewerId: string;
 }

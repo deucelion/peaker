@@ -20,6 +20,20 @@ export function captureServerActionError(
   });
 }
 
+export function captureServerActionSignal(
+  actionName: string,
+  message: string,
+  extra?: Record<string, unknown>
+): void {
+  console.error(`[Peaker][signal] ${actionName}: ${message}`, extra ?? {});
+  if (!isSentryRuntimeEnabled()) return;
+  Sentry.captureMessage(`[${actionName}] ${message}`, {
+    level: "error",
+    tags: { server_action: actionName, signal_type: "handled_error" },
+    extra: extra ?? {},
+  });
+}
+
 /**
  * Beklenmeyen throw'ları raporlar; davranışı korur (aynı hatayı yeniden fırlatır).
  * Çoğu action `{ error: string }` döndüğü için throw seyrek — yine de ağ/seri hata durumunda görünürlük sağlar.

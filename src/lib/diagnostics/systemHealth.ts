@@ -15,8 +15,12 @@ type CriticalCheckKey =
   | "organization_lifecycle"
   | "private_lesson_packages_ready"
   | "private_lesson_payments_ready"
+  | "athlete_injury_notes_ready"
+  | "profiles_next_aidat_plan"
   | "payments_profile_id"
-  | "profiles_integrity";
+  | "profiles_integrity"
+  | "private_lesson_sessions_ready"
+  | "production_hardening_atomicity_ready";
 
 async function runChecksInternal(): Promise<SystemHealthReport> {
   let adminClient: ReturnType<typeof createSupabaseAdminClient> | null = null;
@@ -181,6 +185,53 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
   );
 
   await checkColumns(
+    "private_lesson_sessions_ready",
+    "Private lesson scheduled sessions",
+    "private_lesson_sessions",
+    [
+      "id",
+      "organization_id",
+      "package_id",
+      "athlete_id",
+      "coach_id",
+      "starts_at",
+      "ends_at",
+      "status",
+      "usage_record_id",
+      "created_at",
+      "updated_at",
+    ],
+    "20260419_private_lesson_sessions.sql"
+  );
+
+  await checkColumns(
+    "athlete_injury_notes_ready",
+    "Athlete injury notes schema",
+    "athlete_injury_notes",
+    [
+      "id",
+      "organization_id",
+      "athlete_id",
+      "created_by",
+      "injury_type",
+      "note",
+      "image_paths",
+      "is_active",
+      "created_at",
+      "updated_at",
+    ],
+    "20260417_athlete_injury_notes.sql"
+  );
+
+  await checkColumns(
+    "profiles_next_aidat_plan",
+    "Profiles next aidat plan columns",
+    "profiles",
+    ["id", "organization_id", "next_aidat_due_date", "next_aidat_amount"],
+    "20260417_profiles_next_aidat_plan.sql"
+  );
+
+  await checkColumns(
     "payments_profile_id",
     "Payments table (aidat): owner = profile_id",
     "payments",
@@ -202,6 +253,44 @@ async function runChecksInternal(): Promise<SystemHealthReport> {
     ],
     "20260412_payments_profile_id_canonical.sql"
   );
+
+  if (!adminClient) {
+    checks.push({
+      key: "production_hardening_atomicity_ready",
+      title: "Production hardening RPC/index readiness",
+      passed: false,
+      details: `Health check calisamadi: ${adminClientInitError || "SUPABASE_SERVICE_ROLE_KEY eksik."}`,
+      migration: "20260420_production_hardening_atomicity.sql + 20260420_production_hardening_health.sql",
+    });
+  } else {
+    const { data, error } = await adminClient.rpc("production_hardening_health");
+    if (error) {
+      checks.push({
+        key: "production_hardening_atomicity_ready",
+        title: "Production hardening RPC/index readiness",
+        passed: false,
+        details: error.message,
+        migration: "20260420_production_hardening_atomicity.sql + 20260420_production_hardening_health.sql",
+      });
+    } else {
+      const row = Array.isArray(data) && data.length > 0 ? (data[0] as Record<string, boolean>) : null;
+      const fields = [
+        "onboarding_bundle_rpc_ready",
+        "private_lesson_usage_atomic_rpc_ready",
+        "private_lesson_payment_atomic_rpc_ready",
+        "payments_decrement_atomic_rpc_ready",
+        "payments_unique_due_index_ready",
+      ] as const;
+      const missing = fields.filter((f) => !row?.[f]);
+      checks.push({
+        key: "production_hardening_atomicity_ready",
+        title: "Production hardening RPC/index readiness",
+        passed: missing.length === 0,
+        details: missing.length === 0 ? "Atomic RPC ve constraint yapisi hazir." : `Eksik: ${missing.join(", ")}`,
+        migration: "20260420_production_hardening_atomicity.sql + 20260420_production_hardening_health.sql",
+      });
+    }
+  }
 
   try {
     const integrity = await scanProfileIntegrity();

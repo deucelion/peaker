@@ -1,8 +1,7 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Trophy,
-  Edit3,
   Trash2,
   X,
   Settings2,
@@ -23,14 +22,16 @@ import {
 } from "@/lib/actions/athleticFieldActions";
 import type { AthleticResultRow, ProfileBasic, TestDefinitionRow } from "@/types/domain";
 import Notification from "@/components/Notification";
+import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 
 export default function SahaTestleriFinal() {
-  const [isEditMode, setIsEditMode] = useState(false);
   const [showMetricModal, setShowMetricModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  const [contextPulse, setContextPulse] = useState(false);
   
   const [metrics, setMetrics] = useState<TestDefinitionRow[]>([]); 
   const [players, setPlayers] = useState<ProfileBasic[]>([]); 
@@ -39,6 +40,8 @@ export default function SahaTestleriFinal() {
   const [globalDate, setGlobalDate] = useState(new Date().toISOString().split('T')[0]);
   const [newMetric, setNewMetric] = useState({ name: "", unit: "", category: "Genel" });
   const fetchRunRef = useRef(0);
+  const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const saveFeedbackRef = useRef(saveFeedback);
 
   const fetchData = useCallback(async () => {
     const runId = ++fetchRunRef.current;
@@ -64,7 +67,7 @@ export default function SahaTestleriFinal() {
       const defsRes = await listFieldTestDefinitionsForActor();
       if (runId !== fetchRunRef.current) return;
       if ("error" in defsRes) {
-        setSaveMessage(defsRes.error ?? "Metrik listesi alinamadi.");
+        setSaveMessage(defsRes.error ?? "Metrik listesi alınamadı.");
         setMetrics([]);
       } else {
         setMetrics(((defsRes.metrics || []) as unknown) as TestDefinitionRow[]);
@@ -80,7 +83,7 @@ export default function SahaTestleriFinal() {
         });
         if (runId !== fetchRunRef.current) return;
         if ("error" in res) {
-          setSaveMessage(res.error ?? "Sonuclar alinamadi.");
+          setSaveMessage(res.error ?? "Sonuçlar alınamadı.");
         } else {
           existingResults = res.results;
         }
@@ -93,7 +96,10 @@ export default function SahaTestleriFinal() {
       existingResults.forEach((r) => {
         resultsMap[`${r.profile_id}-${r.test_id}`] = r.value;
       });
-      setTestValues(resultsMap);
+      if (saveFeedbackRef.current !== "dirty") {
+        setTestValues(resultsMap);
+        setSaveFeedback("idle");
+      }
     } catch (error) {
       console.error("Veri çekme hatası:", error);
     } finally {
@@ -106,6 +112,24 @@ export default function SahaTestleriFinal() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (saveFeedback !== "saved") return;
+    const timeout = window.setTimeout(() => {
+      setSaveFeedback("idle");
+    }, 1400);
+    return () => window.clearTimeout(timeout);
+  }, [saveFeedback]);
+
+  useEffect(() => {
+    saveFeedbackRef.current = saveFeedback;
+  }, [saveFeedback]);
+
+  useEffect(() => {
+    setContextPulse(true);
+    const timeout = window.setTimeout(() => setContextPulse(false), 260);
+    return () => window.clearTimeout(timeout);
+  }, [selectedPlayers.length, metrics.length, globalDate, saveFeedback]);
 
   const togglePlayerSelection = (id: string) => {
     setSelectedPlayers(prev => 
@@ -140,7 +164,7 @@ export default function SahaTestleriFinal() {
         });
       });
     }
-    setSaveMessage("Metrik basariyla eklendi.");
+    setSaveMessage("Metrik başarıyla eklendi.");
     setNewMetric({ name: "", unit: "", category: "Genel" });
     void fetchData();
   };
@@ -160,6 +184,40 @@ export default function SahaTestleriFinal() {
       ...prev,
       [`${playerId}-${metricId}`]: val
     }));
+    setSaveFeedback("dirty");
+  };
+
+  const orderedCellKeys = useMemo(() => {
+    const keys: string[] = [];
+    selectedPlayers.forEach((playerId) => {
+      metrics.forEach((metric) => {
+        keys.push(`${playerId}-${metric.id}`);
+      });
+    });
+    return keys;
+  }, [selectedPlayers, metrics]);
+
+  useEffect(() => {
+    if (orderedCellKeys.length === 0) return;
+    const timeout = window.setTimeout(() => {
+      const first = cellRefs.current[orderedCellKeys[0]];
+      if (first && document.activeElement !== first) {
+        first.focus();
+      }
+    }, 80);
+    return () => window.clearTimeout(timeout);
+  }, [orderedCellKeys]);
+
+  const focusSiblingCell = (currentKey: string, direction: 1 | -1) => {
+    const index = orderedCellKeys.indexOf(currentKey);
+    if (index === -1) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= orderedCellKeys.length) return;
+    const nextInput = cellRefs.current[orderedCellKeys[nextIndex]];
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+    }
   };
 
   const saveSelectedResults = async () => {
@@ -167,6 +225,7 @@ export default function SahaTestleriFinal() {
 
     setSaveLoading(true);
     setSaveMessage(null);
+    setSaveFeedback("saving");
     try {
       const cells: AthleticResultCell[] = [];
       for (const pId of selectedPlayers) {
@@ -177,7 +236,8 @@ export default function SahaTestleriFinal() {
           const numeric =
             str === "" || str === null || str === undefined ? null : Number(str);
           if (numeric !== null && Number.isNaN(numeric)) {
-            setSaveMessage("Gecersiz sayisal deger.");
+            setSaveMessage("Geçersiz sayısal değer.");
+            setSaveFeedback("error");
             setSaveLoading(false);
             return;
           }
@@ -193,25 +253,76 @@ export default function SahaTestleriFinal() {
 
       if ("error" in result && result.error) {
         setSaveMessage(result.error);
+        setSaveFeedback("error");
       } else {
-        setIsEditMode(false);
         setSelectedPlayers([]);
-        setSaveMessage("Sonuclar basariyla kaydedildi.");
+        setSaveMessage("Sonuçlar başarıyla kaydedildi.");
+        setSaveFeedback("saved");
         void fetchData();
       }
     } catch (err) {
       console.error(err);
-      setSaveMessage("Kayit sirasinda beklenmedik bir hata olustu.");
+      setSaveMessage("Kayıt sırasında beklenmedik bir hata oluştu.");
+      setSaveFeedback("error");
     } finally {
       setSaveLoading(false);
     }
   };
 
+  const contextStatus = (() => {
+    if (saveFeedback === "saving") return { label: "Kaydediliyor...", tone: "text-amber-200 border-amber-500/30 bg-amber-500/10", dot: "bg-amber-400" };
+    if (saveFeedback === "saved") return { label: "Kaydedildi", tone: "text-emerald-200 border-emerald-500/30 bg-emerald-500/10", dot: "bg-emerald-400" };
+    if (saveFeedback === "error") return { label: "Kaydedilemedi", tone: "text-rose-200 border-rose-500/30 bg-rose-500/10", dot: "bg-rose-400" };
+    if (saveFeedback === "dirty") return { label: "Kaydedilmemiş değişiklik var", tone: "text-amber-200 border-amber-500/30 bg-amber-500/10", dot: "bg-amber-400" };
+    if (selectedPlayers.length === 0) return { label: "Sporcu seçimi bekleniyor", tone: "text-gray-300 border-white/15 bg-white/5", dot: "bg-gray-500" };
+    return { label: "Değişiklik yok", tone: "text-gray-300 border-white/15 bg-white/5", dot: "bg-gray-500" };
+  })();
+
+  const hasUnsavedChanges = saveFeedback === "dirty";
+  const canSave = selectedPlayers.length > 0 && hasUnsavedChanges && !saveLoading;
+  useUnsavedChangesGuard({ enabled: hasUnsavedChanges });
+  const handleDateChange = (nextDate: string) => {
+    if (hasUnsavedChanges) {
+      const ok = window.confirm("Kayıt edilmemiş değişiklikler var, devam etmek istiyor musunuz?");
+      if (!ok) return;
+    }
+    setGlobalDate(nextDate);
+  };
+
+
+  const renderCellDisplayValue = (raw: string | number | undefined) => {
+    if (raw === null || raw === undefined || raw === "") {
+      return <span className="opacity-30 text-xs">—</span>;
+    }
+    const str = String(raw);
+    const [integerPart, decimalPart] = str.split(".");
+    if (!decimalPart) return <span>{integerPart}</span>;
+    return (
+      <span>
+        <span>{integerPart}</span>
+        <span className="text-xs opacity-80">.{decimalPart}</span>
+      </span>
+    );
+  };
+
+  const hasSelectedData = useMemo(() => {
+    if (selectedPlayers.length === 0 || metrics.length === 0) return false;
+    for (const playerId of selectedPlayers) {
+      for (const metric of metrics) {
+        const value = testValues[`${playerId}-${metric.id}`];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [selectedPlayers, metrics, testValues]);
+
   if (loading && players.length === 0) return (
     <div className="min-h-[50dvh] px-4 flex flex-col items-center justify-center bg-black gap-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
       <Loader2 className="w-10 h-10 text-[#7c3aed] animate-spin" aria-hidden />
       <p className="text-[10px] font-black uppercase italic tracking-wide sm:tracking-widest text-gray-500 break-words max-w-md">
-        Terminal Hazırlanıyor...
+        Saha testleri hazırlanıyor...
       </p>
     </div>
   );
@@ -220,77 +331,124 @@ export default function SahaTestleriFinal() {
     <div className="ui-page min-w-0 overflow-x-hidden pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       
       {/* HEADER */}
-      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-5 sm:gap-8 min-w-0">
-        <div className="space-y-3 sm:space-y-4 min-w-0">
+      <header className="flex flex-col gap-4 min-w-0">
+        <div className="space-y-2 min-w-0">
           <h1 className="ui-h1 break-words">
             SAHA <span className="text-[#7c3aed]">YÖNETİMİ</span>
           </h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-[#121215] border border-white/5 px-5 py-2.5 rounded-2xl shadow-xl">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${selectedPlayers.length > 0 ? 'bg-green-500' : 'bg-gray-700'}`} />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 italic">
-                {selectedPlayers.length} Aktif Seçim
-              </span>
-            </div>
+          <p className="text-[11px] font-bold text-gray-500">
+            Sporcu seçin, tarih belirleyin, test verisi girin ve kaydedin.
+          </p>
+        </div>
+
+        <div className="grid gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Seçili tarih</p>
+            <p className={`mt-1 text-xs font-black text-white transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>{new Date(`${globalDate}T00:00:00`).toLocaleDateString("tr-TR")}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Seçili sporcu</p>
+            <p className={`mt-1 text-xs font-black text-white tabular-nums transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>
+              {selectedPlayers.length} sporcu seçili
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Seçili metrik</p>
+            <p className={`mt-1 text-xs font-black text-white tabular-nums transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>{metrics.length} metrik aktif</p>
+          </div>
+          <div className={`rounded-xl border px-3 py-2 ${contextStatus.tone} transition-colors`}>
+            <p className="text-[9px] font-black uppercase tracking-wider">Kayıt durumu</p>
+            <p className="mt-1 inline-flex items-center gap-2 text-xs font-black">
+              <span className={`h-2 w-2 rounded-full ${contextStatus.dot} ${saveFeedback === "saving" ? "animate-pulse" : ""}`} />
+              {contextStatus.label}
+            </p>
           </div>
         </div>
-        
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 w-full xl:w-auto min-w-0">
-          <Link 
-            href="/saha-testleri/genel-rapor"
-            className="ui-btn-ghost min-h-12 flex flex-1 md:flex-none items-center justify-center gap-2 px-5 sm:px-7 py-3 sm:py-4 rounded-[1.5rem] sm:rounded-[1.75rem] font-black italic group touch-manipulation text-center"
-          >
-            <Trophy size={18} className="text-[#7c3aed] sm:group-hover:scale-110 transition-transform shrink-0" aria-hidden />{" "}
-            <span className="break-words">ANALİZ MERKEZİ</span>
-          </Link>
 
-          <div className="flex-1 md:flex-none flex items-center gap-3 sm:gap-4 bg-[#121215] border border-white/5 px-4 sm:px-7 py-3 sm:py-4 rounded-[1.5rem] sm:rounded-[1.75rem] shadow-xl min-h-12 min-w-0">
-            <Calendar size={18} className="text-[#7c3aed] shrink-0" aria-hidden />
-            <input 
-              type="date" 
-              className="min-w-0 flex-1 bg-transparent text-base sm:text-[11px] font-black uppercase outline-none text-white cursor-pointer touch-manipulation"
-              value={globalDate}
-              onChange={(e) => setGlobalDate(e.target.value)}
-            />
+        <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:flex-row sm:items-end">
+          <div className="flex-1 md:flex-none flex items-center gap-3 bg-black/20 border border-white/10 px-4 py-2 rounded-xl min-h-11 min-w-0">
+            <Calendar size={16} className="text-[#7c3aed] shrink-0" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Tarih</p>
+              <input
+                type="date"
+                className="min-w-0 w-full bg-transparent text-[11px] font-black outline-none text-white cursor-pointer touch-manipulation"
+                value={globalDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+              />
+            </div>
           </div>
-
-          <button 
+          <p className="text-[10px] font-bold text-gray-500 sm:max-w-xs">
+            Bu ekrandaki tüm girişler seçilen tarihe kaydedilir.
+          </p>
+          <Link
+            href="/saha-testleri/genel-rapor"
+            title="Takım analiz raporunu aç"
+            className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]"
+          >
+            <Trophy size={14} className="text-[#7c3aed] shrink-0" aria-hidden /> Takım analiz raporu
+          </Link>
+          <button
             type="button"
             onClick={() => setShowMetricModal(true)}
-            className="ui-btn-ghost min-h-12 flex flex-1 md:flex-none items-center justify-center gap-2 px-5 sm:px-7 py-3 sm:py-4 rounded-[1.5rem] sm:rounded-[1.75rem] font-black italic touch-manipulation"
+            title="Metrik ayarlarını aç"
+            className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]"
           >
-            <Settings2 size={18} className="shrink-0" aria-hidden /> METRİKLER
+            <Settings2 size={14} className="shrink-0" aria-hidden /> Metrikler
           </button>
-          
-          <button 
+          <button
             type="button"
-            onClick={isEditMode ? saveSelectedResults : () => {
-              if(selectedPlayers.length === 0) setSaveMessage("Once sporcu secmelisiniz.");
-              else setIsEditMode(true);
+            onClick={() => {
+              if (selectedPlayers.length === 0) {
+                setSaveMessage("Önce sporcu seçmelisiniz.");
+                return;
+              }
+              void saveSelectedResults();
             }}
-            disabled={saveLoading}
-            className={`min-h-12 flex-1 md:flex-none px-6 sm:px-10 py-3 sm:py-4 rounded-[1.5rem] sm:rounded-[1.75rem] font-black italic text-[10px] uppercase flex items-center justify-center gap-2 sm:gap-3 transition-all shadow-xl touch-manipulation ${
-              isEditMode 
-              ? "bg-green-600 sm:hover:bg-green-500 shadow-green-900/20" 
-              : "bg-[#7c3aed] sm:hover:bg-[#6d28d9] shadow-[#7c3aed]/20"
+            disabled={!canSave}
+            className={`min-h-11 flex-1 sm:flex-none px-5 py-3 rounded-xl font-black text-[10px] uppercase inline-flex items-center justify-center gap-2 transition-all shadow-xl touch-manipulation ${
+              canSave
+                ? "bg-[#7c3aed] sm:hover:bg-[#6d28d9] shadow-[#7c3aed]/20"
+                : "bg-white/10 text-gray-500 shadow-none cursor-not-allowed"
             }`}
           >
-            {saveLoading ? <Loader2 className="animate-spin" size={18} aria-hidden /> : isEditMode ? <CheckCircle2 size={18} aria-hidden /> : <Edit3 size={18} aria-hidden />}
-            {isEditMode ? "DEĞİŞİKLİKLERİ KAYDET" : "VERİ GİRİŞİNE BAŞLA"}
+            {saveLoading ? (
+              <Loader2 className="animate-spin" size={18} aria-hidden />
+            ) : saveFeedback === "saved" ? (
+              <CheckCircle2 size={16} className="text-emerald-300" aria-hidden />
+            ) : (
+              <CheckCircle2 size={16} aria-hidden />
+            )}
+            {saveLoading ? "Kaydediliyor..." : "Değişiklikleri kaydet"}
           </button>
         </div>
       </header>
 
       {/* TABLO KONTEYNERI */}
       <div className="ui-card !p-0 overflow-hidden min-w-0">
+        {metrics.length === 0 && (
+          <div className="border-b border-white/10 bg-white/5 px-4 py-2.5">
+            <p className="text-[11px] font-bold text-gray-300">Önce metrik ekleyin, ardından tabloya veri girişi yapabilirsiniz.</p>
+          </div>
+        )}
+        {players.length > 0 && selectedPlayers.length === 0 && (
+          <div className="border-b border-white/10 bg-[#7c3aed]/8 px-4 py-2.5">
+            <p className="text-[11px] font-bold text-[#ddd6fe]">Sporcu seçerek veri girmeye başlayabilirsiniz.</p>
+          </div>
+        )}
+        {selectedPlayers.length > 0 && metrics.length > 0 && !hasSelectedData && (
+          <div className="border-b border-white/10 bg-emerald-500/8 px-4 py-2.5">
+            <p className="text-[11px] font-bold text-emerald-100">Seçili sporcularda henüz test değeri yok. İlk değeri girerek başlayabilirsiniz.</p>
+          </div>
+        )}
         <p className="sm:hidden px-4 py-2 text-[9px] font-bold text-gray-500 uppercase tracking-wide border-b border-white/5">
-          Tabloyu yatay kaydirarak tum metrikleri gorebilirsiniz.
+          Tabloyu yatay kaydırarak tüm metrikleri görebilirsiniz.
         </p>
         <div className="overflow-x-auto [-webkit-overflow-scrolling:touch] overscroll-x-contain">
           <table className="w-full text-left border-collapse min-w-[1200px]">
             <thead>
               <tr className="bg-white/[0.02] border-b border-white/5">
-                <th className="p-5 w-[72px] text-center sticky left-0 bg-[#121215] z-30">
+                <th className="p-4 w-[72px] text-center sticky left-0 bg-[#121215] z-30">
                   <input 
                     type="checkbox" 
                     className="w-6 h-6 rounded-xl border-white/10 bg-white/5 accent-[#7c3aed] cursor-pointer"
@@ -298,11 +456,11 @@ export default function SahaTestleriFinal() {
                     onChange={selectAll}
                   />
                 </th>
-                <th className="p-5 sticky left-[72px] bg-[#121215] z-20 w-[260px]">
+                <th className="p-4 sticky left-[72px] bg-[#121215] z-20 w-[250px]">
                   <span className="text-[10px] font-black text-gray-500 uppercase italic tracking-[0.3em]">Sporcu Kadrosu</span>
                 </th>
                 {metrics.map(m => (
-                  <th key={m.id} className="p-5 text-center border-l border-white/5 min-w-[140px]">
+                  <th key={m.id} className="p-4 text-center border-l border-white/5 min-w-[132px]">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-white font-black italic text-xs uppercase tracking-tighter">{m.name}</span>
                       <div className="px-3 py-1 bg-[#7c3aed]/10 rounded-full">
@@ -311,17 +469,25 @@ export default function SahaTestleriFinal() {
                     </div>
                   </th>
                 ))}
-                <th className="p-5 text-right sticky right-0 z-20 bg-[#121215] border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
+                <th className="p-4 text-right sticky right-0 z-20 bg-[#121215] border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
                   <span className="text-[10px] font-black text-gray-500 uppercase italic tracking-[0.3em]">İşlem</span>
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
+              {players.length === 0 && (
+                <tr>
+                  <td colSpan={metrics.length + 3} className="px-6 py-10 text-center">
+                    <p className="text-sm font-bold text-gray-400">Kayıt girişi için uygun sporcu bulunamadı.</p>
+                    <p className="mt-1 text-xs font-bold text-gray-600">Önce sporcu ekleyin, ardından bu ekrandan saha testlerini kaydedin.</p>
+                  </td>
+                </tr>
+              )}
               {players.map(player => {
                 const isSelected = selectedPlayers.includes(player.id);
                 return (
-                  <tr key={player.id} className={`h-[80px] transition-all duration-300 group ${isSelected ? 'bg-[#7c3aed]/5' : 'sm:hover:bg-white/[0.01]'}`}>
-                    <td className="p-5 text-center sticky left-0 bg-inherit z-30">
+                  <tr key={player.id} className={`h-[76px] transition-all duration-200 group ${isSelected ? 'bg-[#7c3aed]/12 ring-1 ring-inset ring-[#a78bfa]/45 shadow-[inset_0_0_0_1px_rgba(124,58,237,0.35)]' : 'sm:hover:bg-white/[0.02]'}`}>
+                    <td className="p-4 text-center sticky left-0 bg-inherit z-30">
                       <input 
                         type="checkbox" 
                         checked={isSelected}
@@ -329,7 +495,7 @@ export default function SahaTestleriFinal() {
                         className="w-6 h-6 rounded-xl border-white/10 bg-white/5 accent-[#7c3aed] cursor-pointer"
                       />
                     </td>
-                    <td className="p-5 sticky left-[72px] bg-inherit z-20">
+                    <td className="p-4 sticky left-[72px] bg-inherit z-20">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xs font-black italic transition-all duration-500 border ${isSelected ? 'bg-[#7c3aed] text-white border-transparent scale-110 rotate-3 shadow-xl' : 'bg-[#1c1c21] text-gray-600 border-white/5 sm:group-hover:border-[#7c3aed]/30'}`}>
                           {player.full_name.substring(0,2).toUpperCase()}
@@ -340,27 +506,35 @@ export default function SahaTestleriFinal() {
                       </div>
                     </td>
                     {metrics.map(metric => (
-                      <td key={metric.id} className="p-6 border-l border-white/5">
-                        {isEditMode && isSelected ? (
+                      <td key={metric.id} className={`p-3 border-l border-white/5 transition-colors ${isSelected ? "sm:hover:bg-[#7c3aed]/8" : ""}`}>
+                        {isSelected ? (
                           <div className="relative group/input">
                             <input 
                               type="number"
                               step="0.01"
                               inputMode="decimal"
-                              className="w-full min-w-0 bg-black border border-white/10 rounded-2xl py-4 sm:py-5 text-center text-base sm:text-lg font-black text-[#7c3aed] outline-none focus:border-[#7c3aed] focus:ring-4 focus:ring-[#7c3aed]/10 transition-all placeholder:opacity-20 touch-manipulation"
-                              placeholder="0.00"
+                              ref={(el) => {
+                                cellRefs.current[`${player.id}-${metric.id}`] = el;
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                focusSiblingCell(`${player.id}-${metric.id}`, e.shiftKey ? -1 : 1);
+                              }}
+                              className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-center text-sm font-black text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 sm:hover:-translate-y-[1px] sm:hover:border-[#7c3aed]/45 sm:hover:shadow-[0_6px_16px_-10px_rgba(124,58,237,0.55)] focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.12)]"
+                              placeholder="Değer girin"
                               value={testValues[`${player.id}-${metric.id}`] || ""}
                               onChange={(e) => handleValueChange(player.id, metric.id, e.target.value)}
                             />
                           </div>
                         ) : (
-                          <div className={`text-center font-black italic text-xl tracking-tighter transition-all ${isSelected ? 'text-white' : 'text-gray-800'}`}>
-                            {testValues[`${player.id}-${metric.id}`] ?? <span className="opacity-5 text-sm">NOT_SET</span>}
+                          <div className={`text-center font-black text-lg tracking-tight transition-all ${isSelected ? 'text-white' : 'text-gray-700'}`}>
+                            {renderCellDisplayValue(testValues[`${player.id}-${metric.id}`])}
                           </div>
                         )}
                       </td>
                     ))}
-                    <td className="p-5 text-right sticky right-0 z-20 bg-inherit border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
+                    <td className="p-4 text-right sticky right-0 z-20 bg-inherit border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
                       <Link 
                         href={`/sporcu/${player.id}`}
                         className="inline-flex min-h-11 min-w-11 items-center justify-center p-3 sm:p-4 bg-[#1c1c21] sm:hover:bg-[#7c3aed] text-gray-500 sm:hover:text-white rounded-2xl transition-all shadow-xl group/btn touch-manipulation" 
@@ -383,66 +557,71 @@ export default function SahaTestleriFinal() {
       )}
       {saveMessage && (
         <div className="min-w-0 break-words">
-          <Notification message={saveMessage} variant={saveMessage.toLowerCase().includes("hata") ? "error" : "success"} className="px-6 py-4" />
+          <Notification message={saveMessage} variant={saveFeedback === "error" ? "error" : "success"} className="px-6 py-4" />
         </div>
       )}
 
       {/* METRİK EDİTÖRÜ MODAL */}
       {showMetricModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 pb-[env(safe-area-inset-bottom,0px)]">
-          <div className="bg-[#121215] border border-white/5 rounded-t-[2rem] sm:rounded-[4rem] w-full max-w-2xl max-h-[92dvh] overflow-y-auto p-6 sm:p-10 md:p-16 relative shadow-[0_0_100px_rgba(124,58,237,0.1)] min-w-0">
+          <div className="bg-[#121215] border border-white/10 rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-xl max-h-[90dvh] overflow-y-auto p-5 sm:p-7 relative shadow-[0_0_60px_rgba(124,58,237,0.15)] min-w-0">
             <button 
               type="button"
               onClick={() => setShowMetricModal(false)} 
-              className="absolute top-4 right-4 sm:top-10 sm:right-10 z-10 min-h-11 min-w-11 flex items-center justify-center text-gray-500 sm:hover:text-white bg-white/5 rounded-full transition-all sm:hover:rotate-90 touch-manipulation"
+              className="absolute top-4 right-4 z-10 min-h-11 min-w-11 flex items-center justify-center text-gray-500 sm:hover:text-white bg-white/5 rounded-full transition-all sm:hover:rotate-90 touch-manipulation"
               aria-label="Kapat"
             >
               <X size={24} aria-hidden />
             </button>
             
-            <div className="mb-8 sm:mb-12 pr-12 min-w-0">
-              <h2 className="text-2xl sm:text-4xl font-black italic uppercase tracking-tighter break-words">Metrik <span className="text-[#7c3aed]">Sistemi</span></h2>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.25em] sm:tracking-[0.4em] mt-2 sm:mt-3 italic break-words">Organizasyon Parametreleri</p>
+            <div className="mb-5 pr-12 min-w-0">
+              <h2 className="text-xl font-black uppercase tracking-tight break-words">Metrik ayarları</h2>
+              <p className="text-[11px] text-gray-500 font-bold mt-1 break-words">Veri girişi için kullanılan metrikleri buradan yönetin.</p>
             </div>
 
-            <div className="space-y-3 sm:space-y-4 mb-8 sm:mb-12 max-h-[40vh] sm:max-h-[350px] overflow-y-auto pr-2 sm:pr-4 custom-scrollbar min-w-0 [-webkit-overflow-scrolling:touch]">
-              {metrics.length === 0 && <p className="text-center text-gray-700 py-10 italic font-black uppercase text-xs">Henüz metrik tanımlanmadı</p>}
+            <div className="space-y-2 mb-6 max-h-[34vh] overflow-y-auto pr-1 custom-scrollbar min-w-0 [-webkit-overflow-scrolling:touch]">
+              {metrics.length === 0 && (
+                <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-4 text-center">
+                  <p className="text-[11px] font-bold text-gray-500">Henüz metrik tanımlanmadı.</p>
+                  <p className="mt-1 text-[10px] font-bold text-gray-600">İlk metriği aşağıdaki formdan ekleyin.</p>
+                </div>
+              )}
               {metrics.map(m => (
-                <div key={m.id} className="flex justify-between items-center gap-3 bg-white/[0.03] p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-white/5 sm:hover:border-[#7c3aed]/30 transition-all group min-w-0">
+                <div key={m.id} className="flex justify-between items-center gap-3 bg-white/[0.03] p-3 rounded-xl border border-white/10 sm:hover:border-[#7c3aed]/30 transition-all group min-w-0">
                   <div className="flex flex-col min-w-0 flex-1">
-                    <span className="font-black italic text-base sm:text-lg uppercase tracking-tight break-words">{m.name}</span>
-                    <span className="text-[#7c3aed] font-bold text-[10px] uppercase tracking-widest break-all">Birim: {m.unit}</span>
+                    <span className="font-black text-sm uppercase tracking-tight break-words text-white">{m.name}</span>
+                    <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-all">Birim: {m.unit}</span>
                   </div>
                   <button 
                     type="button"
                     onClick={() => handleDeleteMetric(m.id)} 
-                    className="shrink-0 min-h-11 min-w-11 sm:min-w-[3.25rem] flex items-center justify-center p-3 sm:p-4 bg-red-500/10 text-red-500 rounded-2xl sm:hover:bg-red-500 sm:hover:text-white transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 touch-manipulation"
+                    className="shrink-0 min-h-10 min-w-10 flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 rounded-xl sm:hover:bg-red-500 sm:hover:text-white transition-all touch-manipulation"
                     aria-label="Metriği sil"
                   >
-                    <Trash2 size={20} aria-hidden />
+                    <Trash2 size={16} aria-hidden />
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white/5 p-5 sm:p-10 rounded-[2rem] sm:rounded-[3.5rem] space-y-4 min-w-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
+            <div className="bg-white/5 p-4 rounded-xl space-y-3 min-w-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
                 <input 
-                  placeholder="METRİK ADI (Örn: 30m Sprint)" 
-                  className="col-span-1 sm:col-span-2 min-h-11 bg-black border border-white/5 rounded-2xl p-4 sm:p-6 text-base sm:text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                  placeholder="Metrik adı (örn. 30m Sprint)" 
+                  className="col-span-1 sm:col-span-2 min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
                   value={newMetric.name} onChange={e => setNewMetric({...newMetric, name: e.target.value})}
                 />
                 <input 
-                  placeholder="BİRİM (sn, cm, kg)" 
-                  className="min-h-11 bg-black border border-white/5 rounded-2xl p-4 sm:p-6 text-base sm:text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                  placeholder="Birim (sn, cm, kg)" 
+                  className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
                   value={newMetric.unit} onChange={e => setNewMetric({...newMetric, unit: e.target.value})}
                 />
                 <button 
                   type="button"
                   onClick={handleAddMetric} 
-                  className="min-h-11 bg-[#7c3aed] text-white font-black italic rounded-2xl p-4 sm:p-6 uppercase text-[11px] tracking-widest sm:hover:bg-[#6d28d9] transition-all shadow-xl shadow-[#7c3aed]/20 touch-manipulation"
+                  className="min-h-11 bg-[#7c3aed] text-white font-black rounded-xl px-4 py-3 uppercase text-[10px] tracking-wide sm:hover:bg-[#6d28d9] transition-all shadow-xl shadow-[#7c3aed]/20 touch-manipulation"
                 >
-                  YENİ METRİK EKLE
+                  Metrik ekle
                 </button>
               </div>
             </div>

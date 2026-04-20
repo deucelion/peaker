@@ -1,12 +1,15 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { Users, Calendar, Activity, CreditCard, Clock, AlertCircle, BarChart3, Target, Loader2, UserPlus2 } from "lucide-react";
+import { Users, Calendar, CreditCard, AlertCircle, BarChart3, Target, Loader2, UserPlus2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addCoach } from "@/lib/actions/coachActions";
 import { bootstrapTenantHomeDashboard } from "@/lib/actions/snapshotActions";
 import { updateOrganizationDisplayNameAction } from "@/lib/actions/organizationProfileActions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
+import type { PrivateLessonSessionListItem } from "@/lib/types";
+import { listUpcomingPrivateLessonSessionsForCoach } from "@/lib/actions/privateLessonSessionActions";
+import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
 
@@ -17,6 +20,7 @@ interface StatCardProps {
   value: string | number;
   trend: string;
   color: string;
+  action?: string;
 }
 
 interface TeamPaymentRow {
@@ -104,7 +108,6 @@ export default function Dashboard() {
   const [coachSubmitting, setCoachSubmitting] = useState(false);
   const [coachFeedback, setCoachFeedback] = useState<string | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<number | null>(null);
-  const [attendanceTrend, setAttendanceTrend] = useState("VERI YOK");
   const [revenueTrend, setRevenueTrend] = useState("VERI YOK");
   const [coachPermissions, setCoachPermissions] = useState(DEFAULT_COACH_PERMISSIONS);
   const [todayLessons, setTodayLessons] = useState<CoachLessonRow[]>([]);
@@ -125,6 +128,7 @@ export default function Dashboard() {
     attendanceRate: string;
     activeAthletes: number;
   } | null>(null);
+  const [coachPrivateSessions, setCoachPrivateSessions] = useState<PrivateLessonSessionListItem[]>([]);
   const router = useRouter();
 
   const fetchDashboardData = useCallback(async () => {
@@ -157,6 +161,13 @@ export default function Dashboard() {
         setRecentPrograms((snapshot.coach.recentPrograms || []) as CoachProgramRow[]);
         setCoachOpsMetrics(snapshot.coach.opsMetrics || null);
         setStats((prev) => ({ ...prev, activeTrainings: snapshot.coach?.activeTrainings || 0 }));
+        const perms = snapshot.coach.permissions || DEFAULT_COACH_PERMISSIONS;
+        if (perms.can_manage_training_notes) {
+          const ps = await listUpcomingPrivateLessonSessionsForCoach(6);
+          setCoachPrivateSessions("sessions" in ps ? ps.sessions : []);
+        } else {
+          setCoachPrivateSessions([]);
+        }
         setLoading(false);
         return;
       }
@@ -169,7 +180,6 @@ export default function Dashboard() {
         } else {
           setAttendanceTarget(null);
         }
-        setAttendanceTrend(snapshot.admin.attendanceTrend || "VERI YOK");
         setRevenueTrend(snapshot.admin.revenueTrend || "VERI YOK");
         setRecentActivities((snapshot.admin.recentActivities || []) as RecentTraining[]);
         setCoaches((snapshot.admin.coaches || []) as CoachListItem[]);
@@ -269,6 +279,32 @@ export default function Dashboard() {
         </header>
 
         <section className="ui-card min-w-0">
+          <h3 className="ui-h2-sm mb-3">Bugün Öncelik</h3>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Link
+              href={pendingAttendanceLessons.length > 0 ? `/antrenman-yonetimi?trainingId=${pendingAttendanceLessons[0]?.id}` : "/antrenman-yonetimi"}
+              className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-[10px] font-black uppercase text-amber-300 touch-manipulation"
+            >
+              {pendingAttendanceLessons.length > 0
+                ? `${pendingAttendanceLessons.length} derste yoklama bekliyor`
+                : "Yoklama tarafı temiz"}
+            </Link>
+            <Link
+              href="/dersler"
+              className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+            >
+              {todayLessons.length > 0 ? "Bugünkü dersleri kontrol et" : "Bugün için ders planla"}
+            </Link>
+            <Link
+              href="/bildirimler"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+            >
+              Bildirimleri gözden geçir
+            </Link>
+          </div>
+        </section>
+
+        <section className="ui-card min-w-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
             <h3 className="ui-h2-sm shrink-0">Bugünkü Derslerim</h3>
             {coachPermissions.can_create_lessons && (
@@ -278,7 +314,7 @@ export default function Dashboard() {
             )}
           </div>
           {todayLessons.length === 0 ? (
-            <p className="text-gray-500 text-[10px] font-black uppercase italic">Bugun planli ders yok.</p>
+            <p className="text-gray-500 text-[10px] font-black uppercase italic">Bugün planlı ders yok.</p>
           ) : (
             <div className="grid gap-3">
               {todayLessons.map((lesson) => {
@@ -335,7 +371,7 @@ export default function Dashboard() {
         <section className="ui-card">
           <h3 className="ui-h2-sm mb-4">Yaklaşan Dersler</h3>
           {upcomingLessons.length === 0 ? (
-            <p className="text-gray-500 text-[10px] font-black uppercase italic">Yaklaşan ders bulunmuyor.</p>
+            <p className="text-gray-500 text-[10px] font-black uppercase italic">Yaklaşan ders yok. Dersler ekranından yeni plan oluşturabilirsiniz.</p>
           ) : (
             <div className="grid gap-2">
               {upcomingLessons.map((lesson) => (
@@ -349,6 +385,46 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {coachPermissions.can_manage_training_notes && coachPrivateSessions.length > 0 ? (
+          <section className="ui-card min-w-0">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="ui-h2-sm shrink-0">Yaklaşan özel dersler</h3>
+              <Link
+                href="/ozel-ders-paketleri"
+                className="text-[10px] font-black uppercase text-[#7c3aed] touch-manipulation shrink-0"
+              >
+                Paketlere git
+              </Link>
+            </div>
+            <p className="mb-3 text-[10px] font-bold text-gray-500">
+              Grup dersi değil; özel ders paketi planı. Tamamlama paket detayından yapılır.
+            </p>
+            <ul className="grid gap-2">
+              {coachPrivateSessions.map((s) => (
+                <li key={s.id}>
+                  <Link
+                    href={`/ozel-ders-paketleri/${s.packageId}`}
+                    className="block rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/5 px-4 py-3 text-[11px] font-bold text-gray-300 touch-manipulation sm:hover:border-[#7c3aed]/40"
+                  >
+                    <span className="text-white">{formatLessonDateTimeTr(s.startsAt)}</span>
+                    <span className="mx-2 text-gray-600">·</span>
+                    <span className="text-[#c4b5fd]">{s.athleteName || "Sporcu"}</span>
+                    {s.packageName ? (
+                      <>
+                        <span className="mx-2 text-gray-600">·</span>
+                        <span className="text-gray-500">{s.packageName}</span>
+                      </>
+                    ) : null}
+                    {s.location ? (
+                      <span className="mt-1 block text-[10px] text-gray-600">{s.location}</span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {coachPermissions.can_manage_training_notes && (
           <section className="ui-card min-w-0">
@@ -427,21 +503,41 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <section className="ui-card min-w-0">
+        <h3 className="ui-h2-sm mb-3">Bugün Öncelik</h3>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Link
+            href={adminPendingAttendance.length > 0 ? `/antrenman-yonetimi?trainingId=${adminPendingAttendance[0]?.id}` : "/antrenman-yonetimi"}
+            className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-[10px] font-black uppercase text-amber-300 touch-manipulation"
+          >
+            {adminPendingAttendance.length > 0
+              ? `${adminPendingAttendance.length} derste yoklama bekliyor`
+              : "Yoklama tarafı temiz"}
+          </Link>
+          <Link
+            href="/dersler"
+            className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+          >
+            {stats.activeTrainings > 0 ? "Bugünkü dersleri yönet" : "Bugün için ders planla"}
+          </Link>
+          <Link
+            href="/finans"
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+          >
+            Aidat bekleyenleri kontrol et
+          </Link>
+        </div>
+      </section>
+
       {/* STAT CARDS - Grid Gap ve Padding optimize edildi */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 min-w-0">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 min-w-0">
         <StatCard 
           icon={<Users size={20} />} 
           label="Toplam Sporcu" 
           value={stats.totalPlayers} 
           trend="ORGANIZASYON" 
           color="from-[#7c3aed] to-[#4c1d95]" 
-        />
-        <StatCard
-          icon={<UserPlus2 size={20} />}
-          label="Aktif Koç"
-          value={coaches.length}
-          trend={`${activeCoachCountToday} BUGUN DERSI VAR`}
-          color="from-cyan-500 to-blue-900"
+          action="Sporcu listesini güncel tutun."
         />
         <StatCard 
           icon={<Calendar size={20} />} 
@@ -449,20 +545,7 @@ export default function Dashboard() {
           value={stats.activeTrainings} 
           trend={`${adminPendingAttendance.length} YOKLAMA BEKLIYOR`}
           color="from-blue-600 to-indigo-900" 
-        />
-        <StatCard 
-          icon={<Activity size={20} />} 
-          label="Katılım Oranı" 
-          value={stats.attendanceRate === "-" ? "-" : `%${stats.attendanceRate}`} 
-          trend={attendanceTrend}
-          color="from-orange-500 to-red-800" 
-        />
-        <StatCard 
-          icon={<CreditCard size={20} />} 
-          label="Aylık Ciro" 
-          value={stats.monthlyRevenue === "-" ? "-" : `₺${stats.monthlyRevenue}`} 
-          trend={revenueTrend}
-          color="from-emerald-500 to-green-900" 
+          action="Önce yoklaması eksik dersleri tamamlayın."
         />
         <StatCard
           icon={<AlertCircle size={20} />}
@@ -470,13 +553,15 @@ export default function Dashboard() {
           value={adminPendingAttendance.length}
           trend={adminPendingAttendance.length > 0 ? "AKSİYON GEREKLİ" : "TEMİZ"}
           color="from-amber-500 to-orange-900"
+          action={adminPendingAttendance.length > 0 ? "Yoklama yönetimine geçin." : "Bugün kritik yoklama beklemiyor."}
         />
-        <StatCard
-          icon={<Clock size={20} />}
-          label="Son Yoklama Kayıtları"
-          value={adminRecentAttendanceUpdates.length}
-          trend="LISTEDE EN FAZLA 5"
-          color="from-fuchsia-500 to-purple-900"
+        <StatCard 
+          icon={<CreditCard size={20} />} 
+          label="Aylık Ciro" 
+          value={stats.monthlyRevenue === "-" ? "-" : `₺${stats.monthlyRevenue}`} 
+          trend={revenueTrend}
+          color="from-emerald-500 to-green-900" 
+          action="Aidat bekleyenleri finans sayfasından kapatın."
         />
       </div>
 
@@ -517,7 +602,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="text-center py-10">
-                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest italic">Bugun planli ders yok.</p>
+                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest italic">Bugün planlı ders yok.</p>
                 <Link href="/dersler" className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white touch-manipulation">İlk Dersi Oluştur</Link>
               </div>
             )}
@@ -597,7 +682,7 @@ export default function Dashboard() {
           )}
 
           <section className="ui-card min-w-0">
-            <h3 className="ui-h2 mb-8 break-words">Son Operasyonlar</h3>
+            <h3 className="ui-h2 mb-8 break-words">Son Hareketler</h3>
             <div className="grid gap-4">
               {recentActivities.length > 0 ? recentActivities.slice(0, 3).map((t, i) => (
                 <div key={t.id || i} className="p-4 rounded-[1.25rem] bg-white/[0.02] border border-white/5 min-w-0">
@@ -626,7 +711,7 @@ export default function Dashboard() {
                   key={`${item.training_id}-${item.marked_at ?? "x"}`}
                   className="p-4 rounded-[1.25rem] bg-white/[0.02] border border-white/5 min-w-0"
                 >
-                  <p className="text-white font-black italic uppercase text-sm">YOKLAMA GUNCELLENDI</p>
+                  <p className="text-white font-black italic uppercase text-sm">YOKLAMA GÜNCELLENDİ</p>
                   <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest italic break-words">
                     {item.athlete_name} •{" "}
                     {item.marked_at ? new Date(item.marked_at).toLocaleString("tr-TR") : "—"}
@@ -673,11 +758,11 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 min-w-0">
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                  <p className="text-[9px] text-gray-600 font-black uppercase">TOPLAM KOC</p>
+                  <p className="text-[9px] text-gray-600 font-black uppercase">TOPLAM KOÇ</p>
                   <p className="text-2xl text-white font-black italic">{coaches.length}</p>
                 </div>
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                  <p className="text-[9px] text-gray-600 font-black uppercase">BUGUN AKTIF</p>
+                  <p className="text-[9px] text-gray-600 font-black uppercase">BUGÜN AKTİF</p>
                   <p className="text-2xl text-white font-black italic">{activeCoachCountToday}</p>
                 </div>
               </div>
@@ -753,13 +838,13 @@ export default function Dashboard() {
              <h3 className="ui-h2 mb-3 leading-none">Uyarı / Aksiyon</h3>
              <div className="space-y-2 text-[10px] font-bold italic uppercase tracking-wider">
                {adminPendingAttendance.length > 0 ? (
-                 <p className="text-amber-300">{adminPendingAttendance.length} dersin yoklamasi eksik.</p>
+                 <p className="text-amber-300">{adminPendingAttendance.length} dersin yoklaması eksik.</p>
                ) : (
-                 <p className="text-green-400">Yoklama tarafinda kritik bekleyen yok.</p>
+                 <p className="text-green-400">Yoklama tarafında kritik bekleyen yok.</p>
                )}
-               {coaches.length === 0 && <p className="text-red-400">Sistemde koc yok, once koc ekleyin.</p>}
+               {coaches.length === 0 && <p className="text-red-400">Sistemde koç yok, önce koç ekleyin.</p>}
               {stats.totalPlayers === 0 && <p className="text-red-400">Sistemde sporcu yok, sporcu ekleyin.</p>}
-               {adminTodayLessons.length === 0 && <p className="text-gray-400">Bugun ders plani yok.</p>}
+               {adminTodayLessons.length === 0 && <p className="text-gray-400">Bugün ders planı yok.</p>}
              </div>
              <div className="mt-6 flex flex-wrap gap-2">
                <Link href="/dersler" className="inline-flex min-h-10 items-center px-3 py-2 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase touch-manipulation">DERSLER</Link>
@@ -787,7 +872,7 @@ export default function Dashboard() {
 }
 
 // --- SUB-COMPONENTS - StatCard font text-5xl'den 4xl'e indirildi ---
-function StatCard({ icon, label, value, trend, color }: StatCardProps) {
+function StatCard({ icon, label, value, trend, color, action }: StatCardProps) {
   return (
     <div className="ui-card !p-5 sm:!p-7 relative overflow-hidden group sm:hover:border-[#7c3aed]/30 transition-all min-w-0">
       <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white mb-4 sm:mb-6 shadow-xl`}>
@@ -801,6 +886,9 @@ function StatCard({ icon, label, value, trend, color }: StatCardProps) {
         <div className="h-[1px] w-3 bg-[#7c3aed]/30 shrink-0 mt-1.5"></div>
         <p className="text-[9px] font-black text-[#7c3aed] uppercase italic tracking-[0.2em] break-words">{trend}</p>
       </div>
+      {action ? (
+        <p className="mt-3 text-[10px] font-bold text-gray-400">{action}</p>
+      ) : null}
     </div>
   );
 }

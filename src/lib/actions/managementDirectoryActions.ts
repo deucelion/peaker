@@ -64,7 +64,7 @@ export async function listManagementDirectory() {
     canViewAthletes
       ? adminClient
           .from("profiles")
-          .select("id, full_name, email, role, is_active")
+          .select("id, full_name, email, role, is_active, team, position, number, height, weight")
           .eq("organization_id", resolved.organizationId)
           .order("full_name")
       : Promise.resolve({ data: [], error: null }),
@@ -77,12 +77,70 @@ export async function listManagementDirectory() {
     .filter((row) => getSafeRole(row.role) === "coach")
     .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Koç") }));
 
+  const athleteIds = (athleteRes.data || [])
+    .filter((row) => getSafeRole(row.role) === "sporcu")
+    .map((row) => row.id);
+
+  const [packageRes, sessionRes] = await Promise.all([
+    athleteIds.length > 0
+      ? adminClient
+          .from("private_lesson_packages")
+          .select("id, athlete_id, package_name, remaining_lessons, payment_status, is_active, updated_at")
+          .eq("organization_id", resolved.organizationId)
+          .in("athlete_id", athleteIds)
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    athleteIds.length > 0
+      ? adminClient
+          .from("private_lesson_sessions")
+          .select("athlete_id, starts_at, status")
+          .eq("organization_id", resolved.organizationId)
+          .eq("status", "completed")
+          .in("athlete_id", athleteIds)
+          .order("starts_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (packageRes.error) return { error: `Paket bilgisi alınamadı: ${packageRes.error.message}` };
+  if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
+
+  const packageByAthlete = new Map<
+    string,
+    {
+      activePackageName: string | null;
+      remainingLessons: number | null;
+      packagePaymentStatus: string | null;
+    }
+  >();
+  for (const row of packageRes.data || []) {
+    if (packageByAthlete.has(row.athlete_id)) continue;
+    packageByAthlete.set(row.athlete_id, {
+      activePackageName: row.is_active ? row.package_name : null,
+      remainingLessons: row.is_active ? Number(row.remaining_lessons) : null,
+      packagePaymentStatus: row.payment_status ?? null,
+    });
+  }
+
+  const lastCompletedSessionByAthlete = new Map<string, string>();
+  for (const row of sessionRes.data || []) {
+    if (!row.athlete_id || lastCompletedSessionByAthlete.has(row.athlete_id)) continue;
+    lastCompletedSessionByAthlete.set(row.athlete_id, row.starts_at as string);
+  }
+
   const athletes = (athleteRes.data || [])
     .filter((row) => getSafeRole(row.role) === "sporcu")
     .map((row) => ({
       id: row.id,
       full_name: toDisplayName(row.full_name, row.email, "Sporcu"),
       is_active: row.is_active ?? true,
+      team: row.team ?? null,
+      position: row.position ?? null,
+      number: row.number ?? null,
+      height: row.height ?? null,
+      weight: row.weight ?? null,
+      activePackageName: packageByAthlete.get(row.id)?.activePackageName ?? null,
+      remainingLessons: packageByAthlete.get(row.id)?.remainingLessons ?? null,
+      packagePaymentStatus: packageByAthlete.get(row.id)?.packagePaymentStatus ?? null,
+      lastLessonAt: lastCompletedSessionByAthlete.get(row.id) ?? null,
     }));
 
   return {
