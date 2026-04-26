@@ -9,12 +9,14 @@ import {
   createOrgPayment,
   getAthleteFinanceDetailForManagement,
   markPlannedAidatAsPaidForManagement,
+  softDeleteOrgPayment,
   updateAthleteNextAidatPlanForManagement,
   updateOrgPaymentStatus,
 } from "@/lib/actions/financeActions";
 import type { AthleteFinanceDetail } from "@/lib/types";
+import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 
-type FinanceTab = "aidat" | "ozelDers" | "plan";
+type FinanceTab = "timeline" | "hizmet" | "plan";
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -39,21 +41,22 @@ function formatDate(value: string | null | undefined) {
   return dateFormatter.format(dt);
 }
 
-function summaryToneClasses(tone: AthleteFinanceDetail["summary"]["tone"]) {
-  if (tone === "overdue") return "border-red-500/30 bg-red-500/10 text-red-300";
-  if (tone === "approaching") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+function summaryActionMessage(summary: AthleteFinanceDetail["summary"]) {
+  return getFinanceStatusPresentation(summary).supportText;
 }
 
-function summaryActionMessage(summary: AthleteFinanceDetail["summary"]) {
-  const dateLabel = formatDate(summary.nextDueDate);
-  if (summary.tone === "overdue") {
-    return "Bu ay ödeme yapılmamış görünüyor. Ödeme işlemini tamamlayın.";
+function paymentDisplayTitle(row: AthleteFinanceDetail["aidatPayments"][number]) {
+  if (row.display_name?.trim()) return row.display_name.trim();
+  if (row.payment_scope === "extra_charge") {
+    if (row.payment_kind === "license") return "Lisans Bedeli";
+    if (row.payment_kind === "event") return "Etkinlik Ücreti";
+    if (row.payment_kind === "equipment") return "Ekipman / Forma Ücreti";
+    return "Ek Tahsilat";
   }
-  if (summary.tone === "approaching") {
-    return `Ödeme tarihi yaklaşıyor. Son ödeme: ${dateLabel}`;
+  if (row.payment_scope === "private_lesson" || row.payment_type === "paket") {
+    return "Paket Ödemesi";
   }
-  return `Bu ay ödeme tamamlandı. Sonraki ödeme: ${dateLabel}`;
+  return row.description || "Aidat";
 }
 
 export default function FinanceAthleteDetailPage() {
@@ -68,8 +71,15 @@ export default function FinanceAthleteDetailPage() {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({ dueDate: "", amount: "" });
-  const [paymentForm, setPaymentForm] = useState({ amount: "", dueDate: "", description: "" });
-  const [activeTab, setActiveTab] = useState<FinanceTab>("aidat");
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    dueDate: "",
+    description: "",
+    scope: "extra_charge",
+    kind: "manual_other",
+    displayName: "",
+  });
+  const [activeTab, setActiveTab] = useState<FinanceTab>("timeline");
 
   const load = useCallback(async () => {
     if (!athleteId) return;
@@ -112,34 +122,51 @@ export default function FinanceAthleteDetailPage() {
     fd.append("next_amount", planForm.amount);
     const res = await updateAthleteNextAidatPlanForManagement(fd);
     if ("error" in res) {
-      setMessage(res.error || "Aidat plani guncellenemedi.");
+      setMessage(res.error || "Ödeme planı güncellenemedi.");
     } else {
-      setMessage("Sonraki aidat plani guncellendi.");
+      setMessage("Sonraki ödeme planı güncellendi.");
       await load();
     }
     setPlanSaving(false);
   }
 
-  async function handleCreateAidat(e: React.FormEvent) {
+  async function handleCreatePayment(e: React.FormEvent) {
     e.preventDefault();
     if (!snapshot) return;
     setPaymentSaving(true);
     setMessage(null);
     const fd = new FormData();
     fd.append("profile_id", snapshot.athlete.id);
-    fd.append("payment_type", "aylik");
+    fd.append("payment_scope", paymentForm.scope);
+    fd.append("payment_kind", paymentForm.kind);
+    fd.append("display_name", paymentForm.displayName);
+    if (paymentForm.scope === "membership") fd.append("payment_type", "aylik");
+    if (paymentForm.scope === "private_lesson") fd.append("payment_type", "paket");
     fd.append("amount", paymentForm.amount);
     fd.append("due_date", paymentForm.dueDate);
     fd.append("desc", paymentForm.description);
     const res = await createOrgPayment(fd);
     if ("error" in res) {
-      setMessage(res.error || "Aidat kaydi olusturulamadi.");
+      setMessage(res.error || "Tahsilat kaydi olusturulamadi.");
     } else {
-      setMessage("Aidat kaydi olusturuldu.");
-      setPaymentForm({ amount: "", dueDate: "", description: "" });
+      setMessage("Tahsilat kaydi olusturuldu.");
+      setPaymentForm((prev) => ({ ...prev, amount: "", dueDate: "", description: "", displayName: "" }));
       await load();
     }
     setPaymentSaving(false);
+  }
+
+  async function handleDeletePayment(paymentId: string) {
+    const fd = new FormData();
+    fd.append("payment_id", paymentId);
+    fd.append("delete_reason", "ui_manual_delete");
+    const res = await softDeleteOrgPayment(fd);
+    if ("error" in res) {
+      setMessage(res.error || "Ödeme kaydı kaldırılamadı.");
+      return;
+    }
+    setMessage("Ödeme kaydı kaldırıldı.");
+    await load();
   }
 
   async function handleMarkPlannedPaid() {
@@ -150,9 +177,9 @@ export default function FinanceAthleteDetailPage() {
     fd.append("athlete_id", snapshot.athlete.id);
     const res = await markPlannedAidatAsPaidForManagement(fd);
     if ("error" in res) {
-      setMessage(res.error || "Planlanan aidat odendiye alinamadi.");
+      setMessage(res.error || "Planlanan ödeme tamamlanamadı.");
     } else {
-      setMessage("Planlanan aidat odendi olarak isaretlendi.");
+      setMessage("Planlanan ödeme tamamlandı olarak işlendi.");
       await load();
     }
     setMarkingPlannedPaid(false);
@@ -162,9 +189,9 @@ export default function FinanceAthleteDetailPage() {
     setStatusSavingId(paymentId);
     setMessage(null);
     const res = await updateOrgPaymentStatus(paymentId, status);
-    if ("error" in res) setMessage(res.error || "Odeme durumu guncellenemedi.");
+    if ("error" in res) setMessage(res.error || "Ödeme durumu güncellenemedi.");
     else {
-      setMessage("Odeme durumu guncellendi.");
+      setMessage("Ödeme durumu güncellendi.");
       await load();
     }
     setStatusSavingId(null);
@@ -181,7 +208,7 @@ export default function FinanceAthleteDetailPage() {
   if (!snapshot) {
     return (
       <div className="space-y-4">
-        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Aidat Takibi</Link>
+        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
         <Notification message={message || "Finans detayi alinamadi."} variant="error" />
       </div>
     );
@@ -189,6 +216,7 @@ export default function FinanceAthleteDetailPage() {
 
   const dueDateLabel = formatDate(snapshot.summary.nextDueDate);
   const dueAmountLabel = formatCurrency(snapshot.summary.nextAmount);
+  const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
   const aidatHistoryCount = snapshot.aidatPayments.length;
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
@@ -197,7 +225,7 @@ export default function FinanceAthleteDetailPage() {
   return (
     <div className="space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Aidat Takibi</Link>
+        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
         <h1 className="text-2xl font-black uppercase italic text-white">
           {snapshot.athlete.fullName} · Finans Detayı
         </h1>
@@ -211,16 +239,10 @@ export default function FinanceAthleteDetailPage() {
       ) : null}
 
       <section className="grid gap-3 md:grid-cols-3">
-        <div className={`rounded-2xl border p-5 md:col-span-2 ${summaryToneClasses(snapshot.summary.tone)}`}>
-          <p className="text-[9px] font-black uppercase tracking-widest">Aidat Durumu</p>
-          <p className="mt-2 text-lg font-black uppercase italic">{snapshot.summary.label}</p>
-          <p className="mt-2 text-[11px] font-semibold text-white/90">
-            {snapshot.summary.tone === "overdue"
-              ? "Bu ayın ödemesi henüz tamamlanmadı."
-              : snapshot.summary.tone === "approaching"
-                ? "Son ödeme tarihi yaklaşıyor."
-                : "Bu ayın ödemesi tamamlandı."}
-          </p>
+        <div className={`rounded-2xl border p-5 md:col-span-2 ${summaryPresentation.cardClass}`}>
+          <p className="text-[9px] font-black uppercase tracking-widest">Finans Durumu</p>
+          <p className="mt-2 text-lg font-black uppercase italic">{summaryPresentation.label}</p>
+          <p className="mt-2 text-[11px] font-semibold text-white/90">{summaryPresentation.supportText}</p>
           <div className="mt-3 grid gap-2 rounded-xl border border-white/20 bg-black/20 px-3 py-3 text-[11px] font-semibold leading-relaxed text-white/90 sm:grid-cols-2">
             <p>Sonraki ödeme tarihi: <span className="font-black">{dueDateLabel}</span></p>
             <p>Sonraki ödeme tutarı: <span className="font-black">{dueAmountLabel}</span></p>
@@ -242,7 +264,7 @@ export default function FinanceAthleteDetailPage() {
         <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
           <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Özet</p>
           <p className="mt-2 text-lg font-black text-emerald-400">{formatCurrency(snapshot.totals.aidatPaidTotal)}</p>
-          <p className="text-xs font-semibold text-red-300">Bekleyen aidat: {formatCurrency(snapshot.totals.aidatPendingTotal)}</p>
+          <p className="text-xs font-semibold text-red-300">Bekleyen ödeme: {formatCurrency(snapshot.totals.aidatPendingTotal)}</p>
           <p className="mt-2 text-xs font-semibold text-[#c4b5fd]">Özel ders ödemeleri: {formatCurrency(combinedPrivatePaid)}</p>
           <p className="text-xs font-semibold text-gray-400">{snapshot.privateLessonPackages.length} paket • {ozelDersPaymentCount} ödeme</p>
         </div>
@@ -252,21 +274,21 @@ export default function FinanceAthleteDetailPage() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => setActiveTab("aidat")}
+            onClick={() => setActiveTab("timeline")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "aidat" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
+              activeTab === "timeline" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Aidat Geçmişi
+            Tahsilat Geçmişi
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("ozelDers")}
+            onClick={() => setActiveTab("hizmet")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "ozelDers" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
+              activeTab === "hizmet" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Özel Ders Ödemeleri
+            Paket ve Hizmetler
           </button>
           <button
             type="button"
@@ -275,24 +297,24 @@ export default function FinanceAthleteDetailPage() {
               activeTab === "plan" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Sonraki Ödeme
+            Planlı Tahsilatlar
           </button>
         </div>
       </section>
 
-      {activeTab === "aidat" ? (
+      {activeTab === "timeline" ? (
         <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
-          <h2 className="text-sm font-black uppercase text-white">Aidat Geçmişi</h2>
-          <p className="text-[10px] font-semibold text-gray-500">Geçmiş ödemeleriniz ({aidatHistoryCount})</p>
+          <h2 className="text-sm font-black uppercase text-white">Tahsilat Geçmişi</h2>
+            <p className="text-[10px] font-semibold text-gray-500">Geçmiş ödeme kayıtları ({aidatHistoryCount})</p>
           <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
             {snapshot.aidatPayments.length === 0 ? (
-              <p className="text-xs font-semibold text-gray-500">Henüz aidat kaydı yok. “Sonraki Ödeme” sekmesinden planı belirleyebilir veya planlanan ödemeyi tamamlayabilirsiniz.</p>
+              <p className="text-xs font-semibold text-gray-500">Henüz ödeme kaydı yok. Planlı Tahsilatlar sekmesinden sonraki planı yönetebilirsiniz.</p>
             ) : (
               snapshot.aidatPayments.map((row) => (
                 <div key={row.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black text-white">{row.description || "Aylik aidat"}</p>
+                      <p className="text-xs font-black text-white">{paymentDisplayTitle(row)}</p>
                       <p className="text-[10px] font-bold text-gray-500">Vade: {row.due_date || "-"}</p>
                     </div>
                     <span className="text-sm font-black text-white">{formatCurrency(row.amount)}</span>
@@ -317,6 +339,13 @@ export default function FinanceAthleteDetailPage() {
                         {statusSavingId === row.id ? "..." : "Ödendi Olarak İşaretle"}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void handleDeletePayment(row.id)}
+                      className="min-h-10 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300"
+                    >
+                      Kaydı Kaldır
+                    </button>
                   </div>
                 </div>
               ))
@@ -325,7 +354,7 @@ export default function FinanceAthleteDetailPage() {
         </section>
       ) : null}
 
-      {activeTab === "ozelDers" ? (
+      {activeTab === "hizmet" ? (
         <section className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
             <h2 className="text-sm font-black uppercase text-white">Özel Ders Paketleri</h2>
@@ -346,7 +375,7 @@ export default function FinanceAthleteDetailPage() {
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <h2 className="text-sm font-black uppercase text-white">Özel Ders Ödemeleri</h2>
+            <h2 className="text-sm font-black uppercase text-white">Paket ve Hizmet Tahsilatları</h2>
             <p className="mt-1 text-[10px] font-semibold text-gray-500">Ödeme kayıtları ({ozelDersPaymentCount})</p>
             <div className="mt-3 space-y-2 max-h-[420px] overflow-y-auto pr-1">
               {snapshot.privateLessonPayments.length === 0 ? (
@@ -370,8 +399,8 @@ export default function FinanceAthleteDetailPage() {
       {activeTab === "plan" ? (
         <section className="grid gap-4 lg:grid-cols-2">
           <form onSubmit={handlePlanSubmit} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
-            <h2 className="text-sm font-black uppercase text-white">Sonraki Ödeme</h2>
-            <p className="text-[10px] font-semibold text-gray-500">Bir sonraki planlanan aidat</p>
+            <h2 className="text-sm font-black uppercase text-white">Planlı Tahsilatlar</h2>
+            <p className="text-[10px] font-semibold text-gray-500">Bir sonraki planlanan ödeme</p>
             <input
               type="date"
               value={planForm.dueDate}
@@ -394,12 +423,36 @@ export default function FinanceAthleteDetailPage() {
               onClick={() => void handleMarkPlannedPaid()}
               className="min-h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-[10px] font-black uppercase text-emerald-300"
             >
-              {markingPlannedPaid ? "İşleniyor..." : "Aidatı Ödendi Olarak Tamamla"}
+              {markingPlannedPaid ? "İşleniyor..." : "Ödemeyi Tamamlandı Olarak İşle"}
             </button>
           </form>
-          <form onSubmit={handleCreateAidat} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
-            <h2 className="text-sm font-black uppercase text-white">Geçmiş Ödeme Ekle</h2>
+          <form onSubmit={handleCreatePayment} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
+            <h2 className="text-sm font-black uppercase text-white">Manuel Tahsilat Ekle</h2>
             <p className="text-[10px] font-semibold text-gray-500">Plan dışı ödeme/düzeltme kaydı</p>
+            <input
+              value={paymentForm.displayName}
+              onChange={(e) => setPaymentForm((p) => ({ ...p, displayName: e.target.value }))}
+              placeholder="Ödeme adı (Lisans Bedeli, Yaz Kampı...)"
+              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+            />
+            <select
+              value={paymentForm.kind}
+              onChange={(e) =>
+                setPaymentForm((p) => ({
+                  ...p,
+                  kind: e.target.value,
+                  scope: e.target.value === "monthly_membership" ? "membership" : e.target.value === "private_lesson_package" ? "private_lesson" : "extra_charge",
+                }))
+              }
+              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+            >
+              <option value="manual_other">Manuel Ek Tahsilat</option>
+              <option value="license">Lisans</option>
+              <option value="event">Etkinlik</option>
+              <option value="equipment">Ekipman</option>
+              <option value="monthly_membership">Aylik Uyelik</option>
+              <option value="private_lesson_package">Ozel Ders Paketi</option>
+            </select>
             <input
               type="number"
               required
@@ -422,7 +475,7 @@ export default function FinanceAthleteDetailPage() {
               className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
             />
             <button disabled={paymentSaving} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-[10px] font-black uppercase text-white">
-              {paymentSaving ? "İşleniyor..." : "Aidat Ekle"}
+              {paymentSaving ? "İşleniyor..." : "Tahsilat Ekle"}
             </button>
           </form>
         </section>

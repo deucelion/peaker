@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Loader2,
   ChevronLeft,
@@ -66,6 +66,7 @@ type TabId = "overview" | "plan" | "usage" | "payments";
 
 export default function PrivateLessonPackageDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const packageId = typeof params.packageId === "string" ? params.packageId : params.packageId?.[0] || "";
 
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,9 @@ export default function PrivateLessonPackageDetailPage() {
     location: "",
     note: "",
   });
+  const planDateParam = searchParams.get("lessonDate") || "";
+  const startClockParam = searchParams.get("startClock") || "";
+  const tabParam = searchParams.get("tab");
 
   const loadDetail = useCallback(async () => {
     if (!packageId) return;
@@ -123,6 +127,26 @@ export default function PrivateLessonPackageDetailPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [loadDetail]);
+
+  useEffect(() => {
+    if (tabParam !== "plan") return;
+    const id = setTimeout(() => {
+      setTab("plan");
+    }, 0);
+    return () => clearTimeout(id);
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (!planDateParam && !startClockParam) return;
+    const id = setTimeout(() => {
+      setPlanForm((prev) => ({
+        ...prev,
+        lessonDate: prev.lessonDate || planDateParam || "",
+        startClock: prev.startClock || startClockParam || "",
+      }));
+    }, 0);
+    return () => clearTimeout(id);
+  }, [planDateParam, startClockParam]);
 
   const loadSessions = useCallback(async () => {
     if (!packageId) return;
@@ -280,10 +304,10 @@ export default function PrivateLessonPackageDetailPage() {
   }
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "overview", label: "Genel durum" },
-    { id: "plan", label: "Özel ders planı" },
-    { id: "usage", label: "Kullanım geçmişi" },
-    { id: "payments", label: "Ödeme geçmişi" },
+    { id: "overview", label: "Özet" },
+    { id: "plan", label: "Takvim" },
+    { id: "usage", label: "Ders kayıtları" },
+    { id: "payments", label: "Tahsilatlar" },
   ];
 
   const planBlocked =
@@ -394,7 +418,7 @@ export default function PrivateLessonPackageDetailPage() {
               <span className="mx-2 text-white/20">·</span>
               Koç: {pkg.coachName || "—"}
             </p>
-            <p className="max-w-2xl text-sm font-bold leading-relaxed text-gray-400">{nextActionText}</p>
+            <p className="max-w-2xl text-sm font-bold leading-relaxed text-gray-400">Özel Dersler bağlamı · {nextActionText}</p>
           </div>
           <div
             className={`shrink-0 rounded-2xl border px-4 py-3 text-center text-[10px] font-black uppercase tracking-wider ${paymentTone(pkg.paymentStatus)}`}
@@ -528,7 +552,7 @@ export default function PrivateLessonPackageDetailPage() {
 
       {tab === "overview" && (
         <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
-          <h2 className="text-sm font-black italic uppercase text-white">Hızlı bilgi</h2>
+          <h2 className="text-sm font-black italic uppercase text-white">Özet bilgi</h2>
           <ul className="mt-4 space-y-3 text-sm font-bold text-gray-400">
             <li className="flex flex-wrap gap-2">
               <span className="text-gray-600">Durum:</span>
@@ -546,9 +570,9 @@ export default function PrivateLessonPackageDetailPage() {
             </li>
           </ul>
           <p className="mt-6 text-[11px] font-bold text-gray-600">
-            Ayrıntılı listeler için <span className="text-[#c4b5fd]">Kullanım geçmişi</span> ve{" "}
-            <span className="text-[#c4b5fd]">Ödeme geçmişi</span> sekmelerini kullanın. Planlı derslerde düşüm “Özel ders
-            planı” sekmesinden tamamlanır.
+            Ayrıntılı listeler için <span className="text-[#c4b5fd]">Ders kayıtları</span> ve{" "}
+            <span className="text-[#c4b5fd]">Tahsilatlar</span> sekmelerini kullanın. Planlı derslerde düşüm “Takvim”
+            sekmesinden tamamlanır.
           </p>
         </section>
       )}
@@ -556,7 +580,7 @@ export default function PrivateLessonPackageDetailPage() {
       {tab === "plan" && (
         <div className="space-y-6">
           <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
-            <h2 className="text-sm font-black italic uppercase text-white">Özel ders planlama</h2>
+            <h2 className="text-sm font-black italic uppercase text-white">Takvim ve planlama</h2>
             <p className="mt-2 text-[11px] font-bold text-gray-500">
               Grup derslerinden bağımsızdır. Tamamlanan plan paketten 1 ders düşürür; iptal düşürmez. Bu sekmede “Ders
               yapıldı” dediğinizde kullanım otomatik düşer — aynı dersi tekrar{" "}
@@ -725,7 +749,7 @@ export default function PrivateLessonPackageDetailPage() {
           </section>
 
           <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
-            <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Geçmiş planlar</h3>
+              <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Geçmiş planlar</h3>
             {sessions.filter((s) => s.status !== "planned").length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Tamamlanan veya iptal edilen plan yok.</p>
             ) : (
@@ -763,7 +787,7 @@ export default function PrivateLessonPackageDetailPage() {
         <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
           <div className="mb-4 flex items-center gap-2">
             <History className="text-[#7c3aed]" size={20} aria-hidden />
-            <h2 className="text-sm font-black italic uppercase text-white">Kullanım geçmişi</h2>
+            <h2 className="text-sm font-black italic uppercase text-white">Ders kayıtları</h2>
           </div>
           {snapshot.usageRows.length === 0 ? (
             <p className="text-[11px] font-bold text-gray-500">Henüz plansız veya geçmiş ders kaydı yok.</p>
@@ -787,7 +811,7 @@ export default function PrivateLessonPackageDetailPage() {
         <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
           <div className="mb-4 flex items-center gap-2">
             <ClipboardList className="text-[#7c3aed]" size={20} aria-hidden />
-            <h2 className="text-sm font-black italic uppercase text-white">Ödeme geçmişi</h2>
+            <h2 className="text-sm font-black italic uppercase text-white">Tahsilat geçmişi</h2>
           </div>
           {snapshot.paymentRows.length === 0 ? (
             <p className="text-[11px] font-bold text-gray-500">Henüz ödeme kaydı yok.</p>

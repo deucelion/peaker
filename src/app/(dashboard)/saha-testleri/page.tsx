@@ -25,6 +25,11 @@ import Notification from "@/components/Notification";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 
 export default function SahaTestleriFinal() {
+  const performanceTabs = [
+    { key: "yuk", label: "Yük Analizi", href: "/performans" },
+    { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
+    { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
+  ] as const;
   const [showMetricModal, setShowMetricModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -340,6 +345,22 @@ export default function SahaTestleriFinal() {
             Sporcu seçin, tarih belirleyin, test verisi girin ve kaydedin.
           </p>
         </div>
+        <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
+          {performanceTabs.map((tab) => (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                tab.href === "/saha-testleri"
+                  ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
+                  : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
+              }`}
+              aria-current={tab.href === "/saha-testleri" ? "page" : undefined}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
 
         <div className="grid gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">

@@ -5,7 +5,12 @@ export type FinanceStatusTone = "overdue" | "approaching" | "paid";
 
 export interface FinanceStatusSummary {
   tone: FinanceStatusTone;
-  label: "Odeme Bekliyor" | "Odeme Yaklasiyor" | "Aidat Odendi";
+  label:
+    | "Ödeme Tamamlandı"
+    | "Ödeme Bekleniyor"
+    | "Kısmi Ödeme Var"
+    | "Gecikmiş Ödeme Var"
+    | "Borç Bulunmuyor";
   nextDueDate: string | null;
   nextAmount: number | null;
   overdueCount: number;

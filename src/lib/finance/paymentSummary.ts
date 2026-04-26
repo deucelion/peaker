@@ -16,6 +16,7 @@ export function computeFinanceStatusSummary(input: {
   aidatPayments: PaymentRow[];
   plannedNextDueDate?: string | null;
   plannedNextAmount?: number | null;
+  hasPartialPackagePayment?: boolean;
 }): FinanceStatusSummary {
   const aidat = (input.aidatPayments || []).filter((p) => p.payment_type === "aylik");
   const pending = aidat.filter((p) => p.status !== "odendi");
@@ -37,7 +38,7 @@ export function computeFinanceStatusSummary(input: {
   if (overdueRows.length > 0) {
     return {
       tone: "overdue",
-      label: "Odeme Bekliyor",
+      label: "Gecikmiş Ödeme Var",
       nextDueDate: overdueRows[0]?.due_date || nextDueDate,
       nextAmount: overdueRows[0]?.amount ?? nextAmount,
       overdueCount: overdueRows.length,
@@ -51,7 +52,7 @@ export function computeFinanceStatusSummary(input: {
     if (days >= 0 && days <= 3) {
       return {
         tone: "approaching",
-        label: "Odeme Yaklasiyor",
+        label: "Ödeme Bekleniyor",
         nextDueDate,
         nextAmount,
         overdueCount: 0,
@@ -61,7 +62,7 @@ export function computeFinanceStatusSummary(input: {
     if (days < 0) {
       return {
         tone: "overdue",
-        label: "Odeme Bekliyor",
+        label: "Gecikmiş Ödeme Var",
         nextDueDate,
         nextAmount,
         overdueCount: 1,
@@ -70,9 +71,20 @@ export function computeFinanceStatusSummary(input: {
     }
   }
 
+  if (pending.length > 0 || input.hasPartialPackagePayment) {
+    return {
+      tone: "paid",
+      label: "Kısmi Ödeme Var",
+      nextDueDate,
+      nextAmount,
+      overdueCount: 0,
+      pendingCount: pending.length,
+    };
+  }
+
   return {
     tone: "paid",
-    label: "Aidat Odendi",
+    label: nextDueDate ? "Ödeme Tamamlandı" : "Borç Bulunmuyor",
     nextDueDate,
     nextAmount,
     overdueCount: 0,

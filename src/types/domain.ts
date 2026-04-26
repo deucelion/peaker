@@ -21,12 +21,25 @@ export interface PaymentRow {
   organization_id: string;
   amount: number;
   payment_type: "aylik" | "paket";
+  payment_scope?: "membership" | "private_lesson" | "extra_charge";
+  payment_kind?:
+    | "monthly_membership"
+    | "private_lesson_package"
+    | "license"
+    | "event"
+    | "equipment"
+    | "manual_other";
+  display_name?: string | null;
+  metadata_json?: Record<string, unknown> | null;
   due_date: string | null;
   payment_date?: string | null;
   status: "bekliyor" | "odendi" | string;
   total_sessions: number | null;
   remaining_sessions: number | null;
   description: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  delete_reason?: string | null;
 }
 
 export interface PlayerWithPayments extends ProfileBasic {
@@ -35,6 +48,14 @@ export interface PlayerWithPayments extends ProfileBasic {
   remainingLessons?: number | null;
   packagePaymentStatus?: string | null;
   lastLessonAt?: string | null;
+  financeSummary?: {
+    tone: "overdue" | "approaching" | "paid";
+    label: string;
+    nextDueDate: string | null;
+    nextAmount: number | null;
+    overdueCount: number;
+    pendingCount: number;
+  };
 }
 
 export interface TestDefinitionRow {

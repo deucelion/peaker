@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Calendar, Loader2, Plus, Search, Users } from "lucide-react";
 import Notification from "@/components/Notification";
 import { createLesson } from "@/lib/actions/lessonActions";
@@ -31,6 +32,7 @@ interface CoachLessonPreview {
 }
 
 export default function LessonsPage() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,8 @@ export default function LessonsPage() {
     capacity: "20",
     coachId: "",
   });
+  const planDate = searchParams.get("planDate") || "";
+  const planTime = searchParams.get("planTime") || "";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -90,6 +94,30 @@ export default function LessonsPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!planDate && !planTime) return;
+    const id = setTimeout(() => {
+      setForm((prev) => {
+        const next = { ...prev };
+        if (planDate && !prev.lessonDate) next.lessonDate = planDate;
+        if (planTime && !prev.startClock) next.startClock = planTime;
+        if (planTime && !prev.endClock) {
+          const [hRaw, mRaw] = planTime.split(":");
+          const h = Number(hRaw);
+          const m = Number(mRaw);
+          if (Number.isFinite(h) && Number.isFinite(m)) {
+            const d = new Date();
+            d.setHours(h, m, 0, 0);
+            d.setMinutes(d.getMinutes() + 60);
+            next.endClock = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+          }
+        }
+        return next;
+      });
+    }, 0);
+    return () => clearTimeout(id);
+  }, [planDate, planTime]);
 
   const filteredLessons = useMemo(() => {
     const q = search.trim().toLowerCase();

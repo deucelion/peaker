@@ -254,6 +254,17 @@ export async function hardDeleteAthlete(playerId: string) {
 
     const { adminClient, actorProfile, targetProfile } = gate;
 
+    // Profil silmeden once bagimli odeme satirlari (FK: payments_profile_id_fkey).
+    // Bazı ortamlarda FK CASCADE olmayabilir; açık silme hem bunu hem kalıcı silme niyetini karsilar.
+    const { error: deletePaymentsErr } = await adminClient
+      .from("payments")
+      .delete()
+      .eq("profile_id", playerId)
+      .eq("organization_id", actorProfile.organization_id);
+    if (deletePaymentsErr) {
+      return { error: `Odeme kayitlari silinemedi: ${deletePaymentsErr.message}` };
+    }
+
     const { error: deleteProfileErr } = await adminClient
       .from("profiles")
       .delete()

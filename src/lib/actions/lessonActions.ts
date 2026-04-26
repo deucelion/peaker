@@ -50,6 +50,23 @@ type ParticipantWithSchedule = {
     | null;
 };
 
+function formatLessonWhenTr(startTime: string, endTime: string) {
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  const day = start.toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const from = start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  const to = end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  return `${day} · ${from}-${to}`;
+}
+
+function buildLessonCancelledNotificationMessage(title: string, startTime: string, endTime: string) {
+  return `${title} · ${formatLessonWhenTr(startTime, endTime)} dersiniz iptal edilmiştir.`;
+}
+
 function coachMayCoordinateOrgLesson(permissions: CoachPermissions, lessonCoachId: string | null | undefined, actorId: string) {
   if (!lessonCoachId || lessonCoachId === actorId) return true;
   return Boolean(permissions.can_view_all_organization_lessons);
@@ -504,7 +521,7 @@ export async function cancelLesson(lessonId: string) {
   const adminClient = createSupabaseAdminClient();
   const { data: lesson } = await adminClient
     .from("training_schedule")
-    .select("id, title, coach_id, organization_id")
+    .select("id, title, coach_id, organization_id, start_time, end_time")
     .eq("id", lessonId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -535,10 +552,84 @@ export async function cancelLesson(lessonId: string) {
     ...(participants || []).map((p) => p.profile_id),
   ].filter((id): id is string => Boolean(id));
 
-  await insertNotificationsForUsers(recipientIds, `${lesson.title || "Ders"} iptal edildi.`);
+  await insertNotificationsForUsers(
+    recipientIds,
+    buildLessonCancelledNotificationMessage(
+      lesson.title || "Ders",
+      lesson.start_time,
+      lesson.end_time
+    )
+  );
 
   revalidatePath("/dersler");
   revalidatePath(`/dersler/${lessonId}`);
+  revalidatePath("/haftalik-ders-programi");
+  revalidatePath("/antrenman-yonetimi");
+  revalidatePath("/bildirimler");
+  return { success: true };
+}
+
+export async function hardDeleteLesson(lessonId: string) {
+  const resolved = await resolveActor();
+  if ("error" in resolved) return { error: resolved.error };
+  const { actor } = resolved;
+  const role = getSafeRole(actor.role);
+  if (role !== "admin") return { error: "Kalıcı silme işlemi yalnızca yönetici için açıktır." };
+
+  const orgId = actor.organization_id!;
+  const adminClient = createSupabaseAdminClient();
+  const { data: lesson } = await adminClient
+    .from("training_schedule")
+    .select("id, title, coach_id, organization_id, start_time, end_time")
+    .eq("id", lessonId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!lesson) return { error: "Ders bulunamadi." };
+
+  const { data: participants } = await adminClient
+    .from("training_participants")
+    .select("profile_id")
+    .eq("training_id", lessonId);
+
+  const { error: deleteParticipantsErr } = await adminClient
+    .from("training_participants")
+    .delete()
+    .eq("training_id", lessonId);
+  if (deleteParticipantsErr) return { error: `Katılımcılar silinemedi: ${deleteParticipantsErr.message}` };
+
+  const { error: deleteLessonErr } = await adminClient
+    .from("training_schedule")
+    .delete()
+    .eq("id", lessonId)
+    .eq("organization_id", orgId);
+  if (deleteLessonErr) return { error: `Ders kalıcı silinemedi: ${deleteLessonErr.message}` };
+
+  await logAuditEvent({
+    actorUserId: actor.id,
+    actorRole: actor.role,
+    organizationId: orgId,
+    action: "lesson.cancel",
+    entityType: "lesson",
+    entityId: lessonId,
+    metadata: { op: "hard_delete" },
+  });
+
+  const recipientIds = [
+    lesson.coach_id,
+    ...(participants || []).map((p) => p.profile_id),
+  ].filter((id): id is string => Boolean(id));
+  await insertNotificationsForUsers(
+    recipientIds,
+    buildLessonCancelledNotificationMessage(
+      lesson.title || "Ders",
+      lesson.start_time,
+      lesson.end_time
+    )
+  );
+
+  revalidatePath("/dersler");
+  revalidatePath("/haftalik-ders-programi");
+  revalidatePath("/antrenman-yonetimi");
   revalidatePath("/bildirimler");
   return { success: true };
 }
@@ -559,7 +650,12 @@ export async function markNotificationRead(notificationId: string) {
   return { success: true };
 }
 
-export type LessonManagementDetailAthlete = { id: string; full_name: string; is_active?: boolean | null };
+export type LessonManagementDetailAthlete = {
+  id: string;
+  full_name: string;
+  is_active?: boolean | null;
+  attendance_status?: "registered" | "attended" | "missed" | "cancelled" | null;
+};
 
 export async function getLessonManagementDetail(lessonId: string): Promise<
   | {
@@ -606,7 +702,7 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
 
   const { data: participantRows, error: partErr } = await adminClient
     .from("training_participants")
-    .select("profile_id")
+    .select("profile_id, attendance_status")
     .eq("training_id", lessonId);
 
   if (partErr) return { error: `Katilimci listesi alinamadi: ${partErr.message}` };
@@ -623,10 +719,13 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
 
     const profileMap = new Map((profileRows || []).map((row) => [row.id, row]));
     participants = participantIds.map((profileId) => {
+      const attendanceRow = (participantRows || []).find((row) => row.profile_id === profileId);
       const profile = profileMap.get(profileId);
       return {
         id: profile?.id || profileId,
         full_name: toDisplayName(profile?.full_name ?? null, profile?.email ?? null, "Sporcu"),
+        attendance_status: (attendanceRow?.attendance_status ||
+          "registered") as "registered" | "attended" | "missed" | "cancelled",
       };
     });
   }

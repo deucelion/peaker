@@ -33,6 +33,7 @@ import type { ProfileBasic, PaymentRow } from "@/types/domain";
 import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import type { AthleteInjuryNoteRecord } from "@/lib/types";
 import type { FinanceStatusSummary } from "@/lib/types";
+import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 
 export default function SporcuPanel() {
   const [profile, setProfile] = useState<ProfileBasic | null>(null);
@@ -134,9 +135,7 @@ export default function SporcuPanel() {
     </div>
   );
 
-  const isPaid = financeSummary ? financeSummary.tone === "paid" : payment?.status === 'odendi';
-  const isApproaching = financeSummary?.tone === "approaching";
-  const financeLabel = financeSummary?.label || (isPaid ? "AİDAT ÖDENDİ" : "ÖDEME BEKLİYOR");
+  const financePresentation = getFinanceStatusPresentation(financeSummary);
   if (!permissions.can_view_development_profile) {
     return (
       <div className="min-w-0 px-2 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
@@ -185,15 +184,9 @@ export default function SporcuPanel() {
           </Link>
           <Link
             href="/sporcu/finans"
-            className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${
-              isPaid
-                ? "border-green-500/20 bg-green-500/10 text-green-300"
-                : isApproaching
-                  ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
-                  : "border-red-500/20 bg-red-500/10 text-red-300"
-            }`}
+            className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${financePresentation.badgeClass}`}
           >
-            {isPaid ? "Aidat tamam, detayı kontrol et" : "Aidat durumunu kontrol et"}
+            {financePresentation.label}
           </Link>
           <Link
             href={permissions.can_view_programs ? "/programlarim" : "/sporcu"}
@@ -318,43 +311,55 @@ export default function SporcuPanel() {
         <Link
           href="/sporcu/finans"
           className={`p-8 rounded-[2.75rem] border flex flex-col justify-between shadow-xl transition-colors ${
-            isPaid
-              ? 'bg-green-500/5 border-green-500/20 sm:hover:border-green-500/40'
-              : isApproaching
-                ? 'bg-amber-500/5 border-amber-500/20 sm:hover:border-amber-500/40'
-                : 'bg-red-500/5 border-red-500/20 sm:hover:border-red-500/40'
+            financePresentation.tone === "green"
+              ? "bg-emerald-500/5 border-emerald-500/20 sm:hover:border-emerald-500/40"
+              : financePresentation.tone === "yellow"
+                ? "bg-amber-500/5 border-amber-500/20 sm:hover:border-amber-500/40"
+                : financePresentation.tone === "orange"
+                  ? "bg-orange-500/5 border-orange-500/20 sm:hover:border-orange-500/40"
+                  : "bg-rose-500/5 border-rose-500/20 sm:hover:border-rose-500/40"
           }`}
         >
           <div className="flex justify-between items-start">
             <div className="space-y-4">
-              <div className={`flex items-center gap-2 ${isPaid ? 'text-green-400' : isApproaching ? 'text-amber-400' : 'text-red-500'}`}><CreditCard size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Finansal Statü</span></div>
-              <h3 className={`text-3xl font-black italic uppercase leading-none ${isPaid ? 'text-green-400' : isApproaching ? 'text-amber-400' : 'text-red-500'}`}>
-                {isPaid ? (
-                  <>
-                    AİDAT <br /> ÖDENDİ
-                  </>
-                ) : isApproaching ? (
-                  <>
-                    ÖDEME <br /> YAKLAŞIYOR
-                  </>
-                ) : (
-                  <>
-                    ÖDEME <br /> BEKLİYOR
-                  </>
-                )}
+              <div className={`flex items-center gap-2 ${financePresentation.inlineTextClass}`}><CreditCard size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Finansal Statü</span></div>
+              <h3 className={`text-3xl font-black italic uppercase leading-none ${financePresentation.inlineTextClass}`}>
+                {financePresentation.label}
               </h3>
             </div>
-            <div className={`p-4 rounded-3xl ${isPaid ? 'bg-green-500/20 text-green-400' : isApproaching ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-500'}`}>{isPaid ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}</div>
+            <div
+              className={`p-4 rounded-3xl ${
+                financePresentation.tone === "green"
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : financePresentation.tone === "yellow"
+                    ? "bg-amber-500/20 text-amber-400"
+                    : financePresentation.tone === "orange"
+                      ? "bg-orange-500/20 text-orange-400"
+                      : "bg-rose-500/20 text-rose-400"
+              }`}
+            >
+              {financePresentation.tone === "green" ? <CheckCircle2 size={32} /> : <AlertCircle size={32} />}
+            </div>
           </div>
-          {!isPaid && (
-            <div className={`mt-8 pt-6 flex justify-between items-center ${isApproaching ? "border-t border-amber-500/10" : "border-t border-red-500/10"}`}>
+          {financePresentation.tone !== "green" && (
+            <div
+              className={`mt-8 pt-6 flex justify-between items-center ${
+                financePresentation.tone === "yellow"
+                  ? "border-t border-amber-500/10"
+                  : financePresentation.tone === "orange"
+                    ? "border-t border-orange-500/10"
+                    : "border-t border-rose-500/10"
+              }`}
+            >
               <span className="text-[10px] font-black text-gray-500 uppercase italic">Sonraki: {financeSummary?.nextDueDate || payment?.due_date || "-"}</span>
               <span className="text-2xl font-black italic text-white">₺{financeSummary?.nextAmount ?? payment?.amount ?? 0}</span>
             </div>
           )}
-          <p className="mt-3 text-[9px] font-bold uppercase tracking-widest text-gray-500">{financeLabel}</p>
+          <p className="mt-3 text-[9px] font-bold uppercase tracking-widest text-gray-500">{financePresentation.label}</p>
           <p className="mt-2 text-[10px] font-bold text-gray-400">
-            {isPaid ? "Bu ay ödeme tamamlandı. Sonraki tarihi kontrol edin." : "Ödeme durumunu finans detayından takip edin."}
+            {financePresentation.tone === "green"
+              ? "Bu ay ödeme tamamlandı. Sonraki tarihi kontrol edin."
+              : "Ödeme durumunu finans detayından takip edin."}
           </p>
         </Link>
         )}

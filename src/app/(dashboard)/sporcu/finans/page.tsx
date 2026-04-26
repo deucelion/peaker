@@ -6,8 +6,9 @@ import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import { getMyFinanceDetailForAthlete } from "@/lib/actions/financeActions";
 import type { AthleteFinanceDetail } from "@/lib/types";
+import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 
-type FinanceTab = "aidat" | "ozelDers" | "plan";
+type FinanceTab = "timeline" | "hizmet" | "plan";
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -32,28 +33,15 @@ function formatDate(value: string | null | undefined) {
   return dateFormatter.format(dt);
 }
 
-function statusCardClass(tone: AthleteFinanceDetail["summary"]["tone"]) {
-  if (tone === "overdue") return "border-red-500/30 bg-red-500/10 text-red-300";
-  if (tone === "approaching") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-}
-
 function summaryActionMessage(summary: AthleteFinanceDetail["summary"]) {
-  const dateLabel = formatDate(summary.nextDueDate);
-  if (summary.tone === "overdue") {
-    return "Bu ay ödeme yapılmamış. Lütfen ödeme yapınız.";
-  }
-  if (summary.tone === "approaching") {
-    return `Ödeme tarihi yaklaşıyor. Son ödeme: ${dateLabel}`;
-  }
-  return `Bu ay ödeme tamamlandı. Sonraki ödeme: ${dateLabel}`;
+  return getFinanceStatusPresentation(summary).supportText;
 }
 
 export default function AthleteFinanceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState<AthleteFinanceDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<FinanceTab>("aidat");
+  const [activeTab, setActiveTab] = useState<FinanceTab>("timeline");
 
   useEffect(() => {
     async function run() {
@@ -89,6 +77,7 @@ export default function AthleteFinanceDetailPage() {
 
   const dueDateLabel = formatDate(snapshot.summary.nextDueDate);
   const dueAmountLabel = formatCurrency(snapshot.summary.nextAmount);
+  const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
   const aidatHistoryCount = snapshot.aidatPayments.length;
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
@@ -115,16 +104,10 @@ export default function AthleteFinanceDetailPage() {
         </div>
       </section>
 
-      <section className={`rounded-2xl border p-5 ${statusCardClass(snapshot.summary.tone)}`}>
+      <section className={`rounded-2xl border p-5 ${summaryPresentation.cardClass}`}>
         <p className="text-[9px] font-black uppercase tracking-widest">Ödeme Durumu</p>
-        <p className="mt-2 text-2xl font-black uppercase italic">{snapshot.summary.label}</p>
-        <p className="mt-2 text-[11px] font-semibold text-white/90">
-          {snapshot.summary.tone === "overdue"
-            ? "Bu ayın ödemesi henüz tamamlanmadı."
-            : snapshot.summary.tone === "approaching"
-              ? "Son ödeme tarihi yaklaşıyor."
-              : "Bu ayın ödemesi tamamlandı."}
-        </p>
+        <p className="mt-2 text-2xl font-black uppercase italic">{summaryPresentation.label}</p>
+        <p className="mt-2 text-[11px] font-semibold text-white/90">{summaryPresentation.supportText}</p>
         <p className="mt-2 text-[10px] font-semibold text-white/80">
           Sonraki ödeme: {dueDateLabel} - {dueAmountLabel}
         </p>
@@ -134,7 +117,7 @@ export default function AthleteFinanceDetailPage() {
         {showPrimaryAction ? (
           <button
             type="button"
-            onClick={() => setActiveTab("aidat")}
+            onClick={() => setActiveTab("timeline")}
             className="mt-4 min-h-11 w-full rounded-xl bg-white px-4 text-[11px] font-black uppercase tracking-wide text-black md:w-auto md:min-w-[220px]"
           >
             {primaryActionLabel}
@@ -152,21 +135,21 @@ export default function AthleteFinanceDetailPage() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => setActiveTab("aidat")}
+            onClick={() => setActiveTab("timeline")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "aidat" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
+              activeTab === "timeline" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Aidat Geçmişi
+            Tahsilat Geçmişi
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("ozelDers")}
+            onClick={() => setActiveTab("hizmet")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "ozelDers" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
+              activeTab === "hizmet" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Özel Ders Ödemeleri
+            Paket ve Hizmetler
           </button>
           <button
             type="button"
@@ -175,14 +158,14 @@ export default function AthleteFinanceDetailPage() {
               activeTab === "plan" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Sonraki Ödeme
+            Planlı Tahsilatlar
           </button>
         </div>
       </section>
 
-      {activeTab === "aidat" ? (
+      {activeTab === "timeline" ? (
         <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-          <h2 className="text-sm font-black uppercase text-white">Aidat Geçmişi</h2>
+          <h2 className="text-sm font-black uppercase text-white">Tahsilat Geçmişi</h2>
           <p className="mt-1 text-[10px] font-semibold text-gray-500">Geçmiş ödemeleriniz ({aidatHistoryCount})</p>
           <div className="mt-3 space-y-2 max-h-[420px] overflow-y-auto pr-1">
             {snapshot.aidatPayments.length === 0 ? (
@@ -204,10 +187,10 @@ export default function AthleteFinanceDetailPage() {
         </section>
       ) : null}
 
-      {activeTab === "ozelDers" ? (
+      {activeTab === "hizmet" ? (
         <section className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <h2 className="text-sm font-black uppercase text-white">Özel Ders Ödemeleri</h2>
+            <h2 className="text-sm font-black uppercase text-white">Paket ve Hizmet Tahsilatları</h2>
             <p className="mt-1 text-[10px] font-semibold text-gray-500">Toplam {ozelDersPaymentCount} ödeme kaydı listeleniyor.</p>
             <div className="mt-3 space-y-2 max-h-[420px] overflow-y-auto pr-1">
               {snapshot.privateLessonPayments.length === 0 ? (
@@ -247,7 +230,7 @@ export default function AthleteFinanceDetailPage() {
 
       {activeTab === "plan" ? (
         <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-          <h2 className="text-sm font-black uppercase text-white">Sonraki Ödeme</h2>
+            <h2 className="text-sm font-black uppercase text-white">Planlı Tahsilatlar</h2>
           <p className="mt-1 text-[10px] font-semibold text-gray-500">
             Bir sonraki aidat planı yönetim tarafından belirlenir.
           </p>

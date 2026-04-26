@@ -66,6 +66,7 @@ export interface PrivateLessonPackageDetailSnapshot {
   package: PrivateLessonPackage;
   usageRows: PrivateLessonUsage[];
   paymentRows: PrivateLessonPayment[];
+  plannedSessionPreview: Array<{ id: string; startsAt: string; status: PrivateLessonSessionStatus }>;
   /**
    * Açık (`planned`) özel ders oturumu sayısı.
    * Ürün kuralı: planlı dersler yalnızca “Ders yapıldı” ile düşer; bu sayı > 0 iken plansız/geçmiş kayıt UI ve

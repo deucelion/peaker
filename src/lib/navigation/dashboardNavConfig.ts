@@ -10,9 +10,6 @@ import type { AthletePermissionKey, AthletePermissions } from "@/lib/types/athle
 
 export type NavSection = "super_admin" | "management" | "athlete" | "footer";
 
-/** Yönetim menüsü iki blokta gösterilir (sidebar başlıkları) */
-export type ManagementNavGroup = "analysis" | "operations";
-
 /** layout.tsx içinde lucide bileşen haritasına bağlanır */
 export type DashboardNavIcon =
   | "LayoutDashboard"
@@ -42,9 +39,9 @@ export type DashboardNavItem = {
   /** Sporcu için tek izin */
   athleteNeeds?: AthletePermissionKey;
   activeMatch: "exact" | "prefix";
+  activePrefixes?: readonly string[];
   /** sporcu RPE satırı vurgusu */
   variant?: "default" | "highlight";
-  managementGroup?: ManagementNavGroup;
 };
 
 export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
@@ -54,87 +51,53 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
   {
     href: PATHS.home,
     icon: "LayoutDashboard",
-    label: "Dashboard",
+    label: "Ana Panel",
     section: "management",
     roles: ["admin", "coach"],
     activeMatch: "exact",
-    managementGroup: "analysis",
-  },
-  {
-    href: PATHS.performans,
-    icon: "Bolt",
-    label: "Performans",
-    section: "management",
-    roles: ["admin", "coach"],
-    coachNeedsAll: ["can_view_reports"],
-    activeMatch: "prefix",
-    managementGroup: "analysis",
-  },
-  {
-    href: PATHS.dersler,
-    icon: "Calendar",
-    label: "Dersler",
-    section: "management",
-    roles: ["admin", "coach"],
-    activeMatch: "prefix",
-    managementGroup: "analysis",
-  },
-  {
-    href: PATHS.haftalikDersProgrami,
-    icon: "Calendar",
-    label: "Haftalık Ders Programı",
-    section: "management",
-    roles: ["admin", "coach"],
-    activeMatch: "exact",
-    managementGroup: "analysis",
-  },
-  {
-    href: PATHS.sahaTestleri,
-    icon: "BarChart3",
-    label: "Saha Testleri",
-    section: "management",
-    roles: ["admin", "coach"],
-    coachNeedsAll: ["can_view_reports"],
-    activeMatch: "prefix",
-    managementGroup: "analysis",
-  },
-  {
-    href: PATHS.idmanRaporu,
-    icon: "ClipboardCheck",
-    label: "İdman Raporu",
-    section: "management",
-    roles: ["admin", "coach"],
-    coachNeedsAll: ["can_view_reports"],
-    activeMatch: "exact",
-    managementGroup: "analysis",
   },
   {
     href: PATHS.oyuncular,
     icon: "Users",
-    label: tr.nav.players,
-    section: "management",
-    roles: ["admin", "coach"],
-    activeMatch: "exact",
-    managementGroup: "operations",
-  },
-  {
-    href: PATHS.takimlar,
-    icon: "Users",
-    label: tr.nav.teams,
+    label: "Sporcu Yönetimi",
     section: "management",
     roles: ["admin", "coach"],
     activeMatch: "prefix",
-    managementGroup: "operations",
+    activePrefixes: [PATHS.oyuncular, PATHS.sporcularYeni, PATHS.takimlar, PATHS.koclar, PATHS.sporcu],
   },
   {
-    href: PATHS.finans,
-    icon: "CreditCard",
-    label: "Aidat Takibi",
+    href: PATHS.antrenmanYonetimi,
+    icon: "Calendar",
+    label: "Ders Yönetimi",
+    section: "management",
+    roles: ["admin", "coach"],
+    activeMatch: "prefix",
+    activePrefixes: [
+      PATHS.antrenmanYonetimi,
+      PATHS.dersler,
+      PATHS.haftalikDersProgrami,
+      PATHS.ozelDersPaketleri,
+      PATHS.notlarHaftalikProgram,
+    ],
+  },
+  {
+    href: PATHS.performans,
+    icon: "Bolt",
+    label: "Performans ve Raporlar",
     section: "management",
     roles: ["admin", "coach"],
     coachNeedsAll: ["can_view_reports"],
     activeMatch: "prefix",
-    managementGroup: "operations",
+    activePrefixes: [PATHS.performans, PATHS.sahaTestleri, PATHS.idmanRaporu],
+  },
+  {
+    href: PATHS.finans,
+    icon: "CreditCard",
+    label: "Sporcu Ödemeleri",
+    section: "management",
+    roles: ["admin", "coach"],
+    coachNeedsAll: ["can_view_reports"],
+    activeMatch: "prefix",
   },
   {
     href: PATHS.koclar,
@@ -144,36 +107,6 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     roles: ["admin"],
     adminOnly: true,
     activeMatch: "prefix",
-    managementGroup: "operations",
-  },
-  {
-    href: PATHS.notlarHaftalikProgram,
-    icon: "FileText",
-    label: tr.nav.notesWeekly,
-    section: "management",
-    roles: ["admin", "coach"],
-    coachNeedsAll: ["can_manage_training_notes"],
-    activeMatch: "exact",
-    managementGroup: "operations",
-  },
-  {
-    href: PATHS.ozelDersPaketleri,
-    icon: "FileText",
-    label: tr.nav.privatePackages,
-    section: "management",
-    roles: ["admin", "coach"],
-    coachNeedsAll: ["can_manage_training_notes"],
-    activeMatch: "exact",
-    managementGroup: "operations",
-  },
-  {
-    href: PATHS.antrenmanYonetimi,
-    icon: "CreditCard",
-    label: "Antrenman & Yoklama",
-    section: "management",
-    roles: ["admin", "coach"],
-    activeMatch: "exact",
-    managementGroup: "operations",
   },
 
   {
@@ -254,6 +187,9 @@ export function isDashboardNavItemVisible(
 }
 
 export function isDashboardNavItemActive(pathname: string, item: DashboardNavItem): boolean {
+  if (item.activePrefixes?.length) {
+    return item.activePrefixes.some((base) => matchesPathPrefix(pathname, base));
+  }
   const p = normalizePathname(pathname);
   const h = normalizePathname(item.href);
   if (item.activeMatch === "exact") return p === h;
@@ -262,20 +198,4 @@ export function isDashboardNavItemActive(pathname: string, item: DashboardNavIte
 
 export function dashboardNavItemsForSection(section: NavSection): readonly DashboardNavItem[] {
   return DASHBOARD_NAV_ITEMS.filter((i) => i.section === section);
-}
-
-export function visibleManagementNavItems(
-  group: ManagementNavGroup,
-  ctx: {
-    role: UserRole | null;
-    coachPermissions: CoachPermissions;
-    athletePermissions: AthletePermissions;
-  }
-): DashboardNavItem[] {
-  return DASHBOARD_NAV_ITEMS.filter(
-    (item) =>
-      item.section === "management" &&
-      item.managementGroup === group &&
-      isDashboardNavItemVisible(item, ctx)
-  );
 }

@@ -8,7 +8,6 @@ import {
   DASHBOARD_NAV_ITEMS,
   isDashboardNavItemActive,
   isDashboardNavItemVisible,
-  visibleManagementNavItems,
   type DashboardNavIcon,
   type NavSection,
 } from "@/lib/navigation/dashboardNavConfig";
@@ -17,7 +16,7 @@ import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import { 
   LayoutDashboard, Users, Settings, User, Calendar,
   Activity, LogOut,   Trophy, Bell, Bolt, ClipboardCheck, 
-  TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText
+  TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText, Plus
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { getUnreadNotificationCount } from "@/lib/actions/notificationActions";
@@ -187,6 +186,17 @@ export default function DashboardLayout({
 
   const visibleNav = (section: NavSection) =>
     DASHBOARD_NAV_ITEMS.filter((item) => item.section === section && isDashboardNavItemVisible(item, navCtx));
+  const quickActions =
+    isCoachOrAdmin
+      ? [
+          { label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" },
+          { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" },
+          { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
+          { label: "Sporcu Ekle", href: "/sporcular/yeni" },
+          { label: "Tahsilat Kaydet", href: "/finans" },
+          { label: "Saha Testi Girişi", href: "/saha-testleri" },
+        ]
+      : [];
 
   if (loading) {
     return (
@@ -248,20 +258,8 @@ export default function DashboardLayout({
 
           {isCoachOrAdmin && (
             <div className="mb-6">
-              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">YÖNETİM & ANALİZ</p>
-              {visibleManagementNavItems("analysis", navCtx).map((item) => (
-                <NavItem
-                  key={`${item.section}-${item.href}`}
-                  href={item.href}
-                  icon={NAV_ICONS[item.icon]}
-                  label={item.label}
-                  active={isDashboardNavItemActive(pathname, item)}
-                  variant={item.variant}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 mt-6 ml-2 italic opacity-40">OPERASYON</p>
-              {visibleManagementNavItems("operations", navCtx).map((item) => (
+              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">İŞ AKIŞLARI</p>
+              {visibleNav("management").map((item) => (
                 <NavItem
                   key={`${item.section}-${item.href}`}
                   href={item.href}
@@ -323,7 +321,31 @@ export default function DashboardLayout({
             {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
           
-          <div className="flex items-center gap-3 sm:gap-5 ml-auto text-white text-right min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto text-white text-right min-w-0">
+            {quickActions.length > 0 ? (
+              <div className="relative hidden sm:block">
+                <details className="group">
+                  <summary className="list-none cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white/90">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Plus size={14} />
+                      Hızlı İşlem
+                    </span>
+                  </summary>
+                  <div className="absolute right-0 z-30 mt-2 min-w-56 rounded-xl border border-white/10 bg-[#121215] p-1 shadow-2xl">
+                    {quickActions.map((action) => (
+                      <button
+                        key={action.href}
+                        type="button"
+                        onClick={() => router.push(action.href)}
+                        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[11px] font-bold text-gray-300 hover:bg-white/5 hover:text-white"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            ) : null}
             <div className="flex flex-col items-end">
               <span className="text-[10px] font-black uppercase italic leading-none">{userName}</span>
               <div className="flex items-center gap-1 mt-1">

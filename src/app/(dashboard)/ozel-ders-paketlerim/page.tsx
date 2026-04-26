@@ -81,10 +81,10 @@ export default function PrivateLessonPackagesAthletePage() {
     <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
         <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-          ÖZEL DERS <span className="text-[#7c3aed]">PAKETLERİM</span>
+          ÖZEL DERSLER <span className="text-[#7c3aed]">· PAKETLERİM</span>
         </h1>
         <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-          Kalan ders, ödeme ve sonraki adım özeti
+          Kalan ders, tahsilat ve sonraki adım özeti
         </p>
       </header>
 
@@ -103,7 +103,7 @@ export default function PrivateLessonPackagesAthletePage() {
 
       {!error && sessions.length > 0 && (
         <section className="rounded-2xl border border-[#7c3aed]/25 bg-[#121215] p-4 sm:p-5">
-          <h2 className="text-sm font-black italic uppercase text-white">Özel ders planları</h2>
+          <h2 className="text-sm font-black italic uppercase text-white">Takvim ve planlar</h2>
           <p className="mt-1 text-[10px] font-bold text-gray-500">
             Yaklaşan ve geçmiş planlar (grup dersi değildir). Detay için pakete girin.
           </p>
@@ -138,7 +138,7 @@ export default function PrivateLessonPackagesAthletePage() {
       {!error && items.length > 0 && (
         <div className="space-y-4 min-w-0">
           <section className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5">
-            <h2 className="text-sm font-black italic uppercase text-white">Paket Özeti</h2>
+            <h2 className="text-sm font-black italic uppercase text-white">Özet</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5 text-[10px] font-black uppercase">
               <span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">Aktif paket: {activeItems.length}</span>
               <span className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-3 py-2 text-[#c4b5fd]">Kalan ders: {totalRemainingLessons}</span>

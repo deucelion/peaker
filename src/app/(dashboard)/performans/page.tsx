@@ -142,6 +142,11 @@ export default function PerformanceAnalytics() {
       </div>
     );
   }
+  const performanceTabs = [
+    { key: "yuk", label: "Yük Analizi", href: "/performans" },
+    { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
+    { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
+  ] as const;
 
   return (
     <div className="ui-page-loose min-w-0 overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
@@ -173,6 +178,22 @@ export default function PerformanceAnalytics() {
           </div>
         </div>
       </header>
+      <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
+        {performanceTabs.map((tab) => (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+              tab.href === "/performans"
+                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
+                : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
+            }`}
+            aria-current={tab.href === "/performans" ? "page" : undefined}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
 
       {loading && (
         <div className="flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500">

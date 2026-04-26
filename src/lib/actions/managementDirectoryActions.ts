@@ -7,6 +7,8 @@ import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
+import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
+import type { PaymentRow } from "@/types/domain";
 
 type ManagementRole = "admin" | "coach";
 type DailyTrainingLoadReport = {
@@ -64,7 +66,7 @@ export async function listManagementDirectory() {
     canViewAthletes
       ? adminClient
           .from("profiles")
-          .select("id, full_name, email, role, is_active, team, position, number, height, weight")
+          .select("id, full_name, email, role, is_active, team, position, number, height, weight, next_aidat_due_date, next_aidat_amount")
           .eq("organization_id", resolved.organizationId)
           .order("full_name")
       : Promise.resolve({ data: [], error: null }),
@@ -81,7 +83,7 @@ export async function listManagementDirectory() {
     .filter((row) => getSafeRole(row.role) === "sporcu")
     .map((row) => row.id);
 
-  const [packageRes, sessionRes] = await Promise.all([
+  const [packageRes, sessionRes, paymentRes] = await Promise.all([
     athleteIds.length > 0
       ? adminClient
           .from("private_lesson_packages")
@@ -99,9 +101,17 @@ export async function listManagementDirectory() {
           .in("athlete_id", athleteIds)
           .order("starts_at", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
+    athleteIds.length > 0
+      ? adminClient
+          .from("payments")
+          .select("id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description")
+          .eq("organization_id", resolved.organizationId)
+          .in("profile_id", athleteIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (packageRes.error) return { error: `Paket bilgisi alınamadı: ${packageRes.error.message}` };
   if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
+  if (paymentRes.error) return { error: `Finans bilgisi alınamadı: ${paymentRes.error.message}` };
 
   const packageByAthlete = new Map<
     string,
@@ -126,6 +136,26 @@ export async function listManagementDirectory() {
     lastCompletedSessionByAthlete.set(row.athlete_id, row.starts_at as string);
   }
 
+  const paymentsByAthlete = new Map<string, PaymentRow[]>();
+  for (const row of paymentRes.data || []) {
+    if (!row.profile_id) continue;
+    const list = paymentsByAthlete.get(row.profile_id) || [];
+    list.push({
+      id: row.id,
+      profile_id: row.profile_id,
+      organization_id: row.organization_id,
+      amount: Number(row.amount) || 0,
+      payment_type: row.payment_type === "paket" ? "paket" : "aylik",
+      due_date: row.due_date,
+      payment_date: row.payment_date,
+      status: row.status || "bekliyor",
+      total_sessions: row.total_sessions != null ? Number(row.total_sessions) : null,
+      remaining_sessions: row.remaining_sessions != null ? Number(row.remaining_sessions) : null,
+      description: row.description ?? null,
+    });
+    paymentsByAthlete.set(row.profile_id, list);
+  }
+
   const athletes = (athleteRes.data || [])
     .filter((row) => getSafeRole(row.role) === "sporcu")
     .map((row) => ({
@@ -141,6 +171,12 @@ export async function listManagementDirectory() {
       remainingLessons: packageByAthlete.get(row.id)?.remainingLessons ?? null,
       packagePaymentStatus: packageByAthlete.get(row.id)?.packagePaymentStatus ?? null,
       lastLessonAt: lastCompletedSessionByAthlete.get(row.id) ?? null,
+      financeSummary: computeFinanceStatusSummary({
+        aidatPayments: (paymentsByAthlete.get(row.id) || []).filter((p) => p.payment_type === "aylik"),
+        plannedNextDueDate: row.next_aidat_due_date ?? null,
+        plannedNextAmount: row.next_aidat_amount != null ? Number(row.next_aidat_amount) : null,
+        hasPartialPackagePayment: packageByAthlete.get(row.id)?.packagePaymentStatus === "partial",
+      }),
     }));
 
   return {

@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, PlusCircle, UserRound, Package, CircleDollarSign, ChevronDown, Check } from "lucide-react";
+import Link from "next/link";
+import { Loader2, PlusCircle, UserRound, Package, CircleDollarSign, ChevronDown, Check, X } from "lucide-react";
 import Notification from "@/components/Notification";
 import { createPrivateLessonPackage, listPrivateLessonFormOptions, listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import type { PrivateLessonPackage } from "@/lib/types";
@@ -30,6 +31,9 @@ export default function PrivateLessonPackagesPage() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [viewerRole, setViewerRole] = useState<"admin" | "coach">("admin");
+  const [lastCreatedPackageId, setLastCreatedPackageId] = useState<string | null>(null);
 
   const activePackages = useMemo(() => packages.filter((p) => p.isActive), [packages]);
   const finishedPackages = useMemo(() => packages.filter((p) => !p.isActive), [packages]);
@@ -86,13 +90,26 @@ export default function PrivateLessonPackagesPage() {
     setPackages(listRes.packages);
     setAthletes(optionsRes.athletes);
     setCoaches(optionsRes.coaches);
+    setViewerRole(optionsRes.viewerRole);
     setForm((prev) => ({
       ...prev,
-      athleteId: prev.athleteId || optionsRes.athletes[0]?.id || "",
-      coachId: prev.coachId || "",
+      athleteId: prev.athleteId || "",
+      coachId:
+        optionsRes.viewerRole === "coach"
+          ? optionsRes.viewerId
+          : prev.coachId || "",
     }));
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!createOpen || saving) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCreateOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createOpen, saving]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -114,6 +131,7 @@ export default function PrivateLessonPackagesPage() {
     setSaving(true);
     setMessage(null);
     setFormError(null);
+    setLastCreatedPackageId(null);
     const fd = new FormData();
     fd.append("athleteId", form.athleteId);
     fd.append("coachId", form.coachId);
@@ -125,7 +143,9 @@ export default function PrivateLessonPackagesPage() {
     const res = await createPrivateLessonPackage(fd);
     if ("success" in res && res.success) {
       setMessage("Paket oluşturuldu.");
-      setForm((prev) => ({ ...prev, packageName: "", totalPrice: "0", amountPaid: "0" }));
+      setLastCreatedPackageId("packageId" in res ? res.packageId || null : null);
+      setForm((prev) => ({ ...prev, athleteId: "", packageName: "", totalPrice: "0", amountPaid: "0" }));
+      setCreateOpen(false);
       await loadAll();
     } else {
       setMessage(res.error || "Paket oluşturulamadı.");
@@ -147,12 +167,24 @@ export default function PrivateLessonPackagesPage() {
   return (
     <div className="ui-page min-w-0 overflow-x-hidden pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
-        <h1 className="ui-h1 break-words">
-          ÖZEL DERS <span className="text-[#7c3aed]">PAKETLERİ</span>
-        </h1>
-        <p className="ui-lead mt-2 break-words text-[9px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em]">
-          Grup derslerinden tamamen bağımsız paket yönetimi
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="ui-h1 break-words">
+              ÖZEL DERSLER <span className="text-[#7c3aed]">· PAKET YÖNETİMİ</span>
+            </h1>
+            <p className="ui-lead mt-2 break-words text-[9px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em]">
+              Mevcut paketleri yönetin, geçmişi izleyin ve yeni paketi gerektiğinde ekleyin
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[10px] font-black uppercase tracking-wider text-[#c4b5fd] touch-manipulation sm:hover:bg-[#7c3aed]/25"
+          >
+            <PlusCircle size={16} aria-hidden />
+            Yeni Paket Oluştur
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -173,6 +205,16 @@ export default function PrivateLessonPackagesPage() {
                 : "info"
             }
           />
+          {lastCreatedPackageId ? (
+            <div className="mt-2">
+              <Link
+                href={`/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi&packageId=${lastCreatedPackageId}`}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+              >
+                Paketi Aç
+              </Link>
+            </div>
+          ) : null}
         </div>
       )}
       {formError && (
@@ -181,23 +223,58 @@ export default function PrivateLessonPackagesPage() {
         </div>
       )}
 
-      <section
-        id="paket-formu"
-        className="relative mx-auto min-w-0 max-w-3xl overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-gradient-to-b from-[#16161c] via-[#131318] to-[#101014] px-4 py-8 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.85)] sm:rounded-[2rem] sm:px-8 sm:py-10"
-      >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c3aed]/40 to-transparent" aria-hidden />
+      <PackageList
+        title="Aktif paketler"
+        emptyText="Henüz aktif paket yok. Özel ders akışını başlatmak için yeni paket oluşturun."
+        items={activePackages}
+        onCreate={() => setCreateOpen(true)}
+      />
+      <PackageList
+        title="Geçmiş paketler"
+        emptyText="Geçmişe düşmüş paket bulunmuyor. Tamamlanan paketler burada listelenir."
+        items={finishedPackages}
+        onCreate={() => setCreateOpen(true)}
+        subdued
+      />
 
-        <header className="mb-8 text-center sm:mb-10 sm:text-left">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.35em] text-[#c4b5fd]">Yeni paket</p>
-          <h2 className="text-2xl font-black italic uppercase tracking-tight text-white sm:text-3xl">Paket oluştur</h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm font-bold leading-relaxed text-gray-400 sm:mx-0">
-            Sporcu için yeni özel ders paketi oluşturun. Önce sporcuyu seçin, ardından paket ve ödeme bilgilerini tamamlayın.
-          </p>
-        </header>
+      {createOpen ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+          role="presentation"
+          onClick={() => !saving && setCreateOpen(false)}
+        >
+          <section
+            id="paket-formu"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-package-title"
+            className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[1.5rem] border border-white/[0.08] bg-gradient-to-b from-[#16161c] via-[#131318] to-[#101014] px-4 py-6 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.85)] sm:rounded-[2rem] sm:px-8 sm:py-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c3aed]/40 to-transparent" aria-hidden />
+            <button
+              type="button"
+              onClick={() => !saving && setCreateOpen(false)}
+              disabled={saving}
+              className="absolute right-4 top-4 inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300 touch-manipulation disabled:cursor-not-allowed disabled:opacity-40 sm:hover:text-white"
+              aria-label="Kapat"
+            >
+              <X size={18} aria-hidden />
+            </button>
 
-        <FormStepRail step1Done={step1Done} step2Done={step2Done} step3Done={step3Done} />
+            <header className="mb-8 text-center sm:mb-10 sm:text-left">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.35em] text-[#c4b5fd]">Özel Dersler · Yeni Paket</p>
+              <h2 id="create-package-title" className="text-2xl font-black italic uppercase tracking-tight text-white sm:text-3xl">
+                Paket oluştur
+              </h2>
+              <p className="mx-auto mt-3 max-w-xl text-sm font-bold leading-relaxed text-gray-400 sm:mx-0">
+                Sporcu için yeni özel ders paketi oluşturun. Önce sporcuyu seçin, ardından paket ve ödeme bilgilerini tamamlayın.
+              </p>
+            </header>
 
-        <form onSubmit={onCreatePackage} className="mt-8 space-y-8 sm:mt-10 sm:space-y-10">
+            <FormStepRail step1Done={step1Done} step2Done={step2Done} step3Done={step3Done} />
+
+            <form onSubmit={onCreatePackage} className="mt-8 space-y-8 sm:mt-10 sm:space-y-10">
           <fieldset className="space-y-5 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6">
             <legend className="sr-only">Sporcu ve koç</legend>
             <div className="flex flex-col gap-4 border-b border-white/5 pb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -206,7 +283,7 @@ export default function PrivateLessonPackagesPage() {
                   <UserRound size={22} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">1 · Sporcu ve koç</h3>
+                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Sporcu ve koç</h3>
                   <p className="mt-1 text-[11px] font-bold text-gray-500">Paket kimin için; isteğe bağlı sorumlu koç.</p>
                 </div>
               </div>
@@ -246,19 +323,29 @@ export default function PrivateLessonPackagesPage() {
               </Field>
             </div>
 
-            <Field label="Koç (isteğe bağlı)" hint="Boş bırakılabilir; raporlama ve takip için atanmış koçu seçin.">
-              <SelectPremium
-                value={form.coachId}
-                onChange={(e) => setForm((prev) => ({ ...prev, coachId: e.target.value }))}
-              >
-                <option value="">Koç seçilmedi</option>
-                {coaches.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.full_name}
-                  </option>
-                ))}
-              </SelectPremium>
-            </Field>
+            {viewerRole === "admin" ? (
+              <Field label="Koç (isteğe bağlı)" hint="Boş bırakılabilir; raporlama ve takip için atanmış koçu seçin.">
+                <SelectPremium
+                  value={form.coachId}
+                  onChange={(e) => setForm((prev) => ({ ...prev, coachId: e.target.value }))}
+                >
+                  <option value="">Koç seçilmedi</option>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name}
+                    </option>
+                  ))}
+                </SelectPremium>
+              </Field>
+            ) : (
+              <Field label="Koç" hint="Bu paket otomatik olarak size atanır.">
+                <input
+                  value="Siz"
+                  readOnly
+                  className={`${FORM_INPUT} cursor-not-allowed bg-white/5 text-gray-300`}
+                />
+              </Field>
+            )}
           </fieldset>
 
           <fieldset className="space-y-5 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6">
@@ -268,7 +355,7 @@ export default function PrivateLessonPackagesPage() {
                 <Package size={22} aria-hidden />
               </span>
               <div className="min-w-0">
-                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">2 · Paket bilgisi</h3>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Paket bilgisi</h3>
                 <p className="mt-1 text-[11px] font-bold text-gray-500">Paket adı, tür ve toplam ders sayısı.</p>
               </div>
             </div>
@@ -323,7 +410,7 @@ export default function PrivateLessonPackagesPage() {
                 <CircleDollarSign size={22} aria-hidden />
               </span>
               <div className="min-w-0">
-                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">3 · Ödeme bilgisi</h3>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Ödeme bilgisi</h3>
                 <p className="mt-1 text-[11px] font-bold text-gray-500">Toplam ücret ve şu ana kadar tahsil edilen tutar.</p>
               </div>
             </div>
@@ -409,30 +496,46 @@ export default function PrivateLessonPackagesPage() {
               Gönder ile paket kaydı oluşturulur; mevcut paket listesi otomatik yenilenir.
             </p>
           </div>
-        </form>
-      </section>
-
-      <PackageList title="Aktif paketler" items={activePackages} />
-      <PackageList title="Tamamlanan / pasif paketler" items={finishedPackages} />
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function PackageList({ title, items }: { title: string; items: PrivateLessonPackage[] }) {
+function PackageList({
+  title,
+  items,
+  onCreate,
+  emptyText,
+  subdued,
+}: {
+  title: string;
+  items: PrivateLessonPackage[];
+  onCreate: () => void;
+  emptyText: string;
+  subdued?: boolean;
+}) {
   return (
-    <section className="min-w-0 rounded-[1.5rem] border border-white/5 bg-[#121215] p-4 sm:rounded-[2rem] sm:p-6">
+    <section
+      className={`min-w-0 rounded-[1.5rem] border p-4 sm:rounded-[2rem] sm:p-6 ${
+        subdued ? "border-white/5 bg-[#121215]/70" : "border-white/10 bg-[#121215]"
+      }`}
+    >
       <h2 className="mb-4 break-words text-sm font-black italic uppercase tracking-tight text-white sm:mb-5 sm:text-base">
         {title}
       </h2>
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center sm:py-10">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Bu listede henüz paket yok.</p>
-          <a
-            href="#paket-formu"
+          <p className="text-[11px] font-bold tracking-wide text-gray-500">{emptyText}</p>
+          <button
+            type="button"
+            onClick={onCreate}
             className="mt-4 inline-flex min-h-11 items-center justify-center text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
           >
             Yeni paket oluştur →
-          </a>
+          </button>
         </div>
       ) : (
         <div className="grid gap-4 sm:gap-5">
@@ -455,8 +558,8 @@ function FormStepRail({
   step3Done: boolean;
 }) {
   const items = [
-    { k: 1, t: "Sporcu seç", d: step1Done },
-    { k: 2, t: "Paket bilgisi", d: step2Done },
+    { k: 1, t: "Sporcu", d: step1Done },
+    { k: 2, t: "Paket", d: step2Done },
     { k: 3, t: "Ödeme", d: step3Done },
   ] as const;
 

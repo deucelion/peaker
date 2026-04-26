@@ -307,12 +307,52 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
   if (coachRes.error) return { error: `Koç listesi alinamadi: ${coachRes.error.message}` };
   if (athleteRes.error) return { error: `Sporcu listesi alinamadi: ${athleteRes.error.message}` };
 
+  const lessonRows = lessonRes.data || [];
+  const lessonIds = lessonRows.map((row) => row.id).filter(Boolean);
+  const participantSummaryByLesson = new Map<
+    string,
+    { participantCount: number; registeredCount: number; attendedCount: number; missedCount: number }
+  >();
+  if (lessonIds.length > 0) {
+    const participantRes = await adminClient
+      .from("training_participants")
+      .select("training_id, attendance_status")
+      .in("training_id", lessonIds);
+    if (!participantRes.error) {
+      for (const row of participantRes.data || []) {
+        const key = row.training_id as string;
+        const curr = participantSummaryByLesson.get(key) || {
+          participantCount: 0,
+          registeredCount: 0,
+          attendedCount: 0,
+          missedCount: 0,
+        };
+        curr.participantCount += 1;
+        const st = (row.attendance_status || "registered") as "registered" | "attended" | "missed" | "cancelled";
+        if (st === "attended") curr.attendedCount += 1;
+        else if (st === "missed") curr.missedCount += 1;
+        else if (st === "registered") curr.registeredCount += 1;
+        participantSummaryByLesson.set(key, curr);
+      }
+    }
+  }
+
   return {
     role: actor.role,
     permissions,
     actorUserId: actor.id,
     organizationId: actor.organizationId,
-    lessons: (lessonRes.data || []).map((row) => mapLesson(row)),
+    lessons: lessonRows.map((row) => {
+      const lesson = mapLesson(row);
+      const summary = participantSummaryByLesson.get(lesson.id);
+      return {
+        ...lesson,
+        participantCount: summary?.participantCount ?? 0,
+        registeredCount: summary?.registeredCount ?? 0,
+        attendedCount: summary?.attendedCount ?? 0,
+        missedCount: summary?.missedCount ?? 0,
+      };
+    }),
     total: lessonRes.count || 0,
     page: pager.page,
     pageSize: pager.pageSize,

@@ -9,6 +9,7 @@ import { listTeamsForActor } from "@/lib/actions/teamActions";
 import type { PlayerWithPayments } from "@/types/domain";
 import Notification from "@/components/Notification";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
+import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 
 export default function OyuncuYonetimi() {
   const [players, setPlayers] = useState<PlayerWithPayments[]>([]);
@@ -115,19 +116,6 @@ export default function OyuncuYonetimi() {
       return (a.full_name || "").localeCompare(b.full_name || "", "tr");
     });
   }, [players, searchTerm, selectedTeam, lifecycleFilter]);
-
-  const paymentStatusLabel = (status: string | null | undefined) => {
-    if (status === "paid") return "Ödendi";
-    if (status === "partial") return "Kısmi Ödeme";
-    if (status === "unpaid" || status === "pending") return "Ödeme Bekliyor";
-    return "Ödeme Bekliyor";
-  };
-
-  const paymentStatusClass = (status: string | null | undefined) => {
-    if (status === "paid") return "border-emerald-500/35 bg-emerald-500/10 text-emerald-200";
-    if (status === "partial") return "border-amber-500/35 bg-amber-500/10 text-amber-200";
-    return "border-rose-500/35 bg-rose-500/10 text-rose-200";
-  };
 
   return (
     <div className="ui-page-loose animate-in fade-in duration-700 min-w-0 overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
@@ -300,10 +288,10 @@ export default function OyuncuYonetimi() {
                 <p className="text-right text-white">{player.activePackageName || "Yok"}</p>
                 <p className="text-gray-500">Kalan ders</p>
                 <p className="text-right text-white tabular-nums">{player.remainingLessons ?? "—"}</p>
-                <p className="text-gray-500">Ödeme durumu</p>
+                <p className="text-gray-500">Finans durumu</p>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${paymentStatusClass(player.packagePaymentStatus)}`}>
-                    {paymentStatusLabel(player.packagePaymentStatus)}
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${getFinanceStatusPresentation(player.financeSummary).badgeClass}`}>
+                    {getFinanceStatusPresentation(player.financeSummary).label}
                   </span>
                 </div>
                 <p className="text-gray-500">Son ders</p>

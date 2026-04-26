@@ -11,6 +11,10 @@ export interface Lesson {
   endTime: string;
   capacity: number;
   status: LessonStatus;
+  participantCount?: number;
+  registeredCount?: number;
+  attendedCount?: number;
+  missedCount?: number;
   createdBy: string | null;
   createdAt: string | null;
 }
