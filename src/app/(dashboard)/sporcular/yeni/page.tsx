@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import { createAthleteWithPackageAndPayment } from "@/lib/actions/athleteOnboardingActions";
+import { createTeamAction, listTeamsForActor } from "@/lib/actions/teamActions";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 
 type OnboardingMode = "none" | "private_lesson" | "monthly_subscription";
@@ -24,14 +25,16 @@ export default function NewAthleteOnboardingPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [successState, setSuccessState] = useState<{ athleteId: string | null } | null>(null);
   const [mode, setMode] = useState<OnboardingMode>("none");
+  const [teamOptions, setTeamOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [teamBusy, setTeamBusy] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
     phone: "",
-    team: "",
+    teamId: "",
     position: "",
-    category: "",
     height: "",
     weight: "",
     totalLessons: "",
@@ -66,6 +69,19 @@ export default function NewAthleteOnboardingPage() {
   }, [form, mode, step, successState]);
 
   useUnsavedChangesGuard({ enabled: hasDraftChanges && !saving });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await listTeamsForActor();
+      if (cancelled || "error" in res) return;
+      const next = (res.teams || []).map((team) => ({ id: team.id as string, name: team.name as string }));
+      setTeamOptions(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function nextStep() {
     setStep((p) => Math.min(STEPS.length - 1, p + 1));
@@ -118,6 +134,33 @@ export default function NewAthleteOnboardingPage() {
     setSaving(false);
   }
 
+  async function handleCreateTeam() {
+    const name = newTeamName.trim();
+    if (!name) {
+      setMessage("Takım adı zorunludur.");
+      return;
+    }
+    setTeamBusy(true);
+    const fd = new FormData();
+    fd.append("name", name);
+    const res = await createTeamAction(fd);
+    if ("error" in res) {
+      setMessage(res.error || "Takım oluşturulamadı.");
+      setTeamBusy(false);
+      return;
+    }
+    const listRes = await listTeamsForActor();
+    if (!("error" in listRes)) {
+      const next = (listRes.teams || []).map((team) => ({ id: team.id as string, name: team.name as string }));
+      setTeamOptions(next);
+      const created = next.find((team) => team.name.toLocaleLowerCase("tr-TR") === name.toLocaleLowerCase("tr-TR"));
+      setForm((p) => ({ ...p, teamId: created?.id || p.teamId }));
+    }
+    setNewTeamName("");
+    setMessage("Takım oluşturuldu.");
+    setTeamBusy(false);
+  }
+
   function resetForNewRecord() {
     setSuccessState(null);
     setMessage(null);
@@ -127,9 +170,8 @@ export default function NewAthleteOnboardingPage() {
       email: "",
       password: "",
       phone: "",
-      team: "",
+      teamId: "",
       position: "",
-      category: "",
       height: "",
       weight: "",
       totalLessons: "",
@@ -230,11 +272,29 @@ export default function NewAthleteOnboardingPage() {
 
         {step === 1 ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="ui-field"><span className="ui-label">Takım</span><input className="ui-input" value={form.team} onChange={(e) => setForm((p) => ({ ...p, team: e.target.value }))} /></label>
+            <label className="ui-field">
+              <span className="ui-label">Takım</span>
+              <select className="ui-select" value={form.teamId} onChange={(e) => setForm((p) => ({ ...p, teamId: e.target.value }))}>
+                <option value="">Takım seçin</option>
+                {teamOptions.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="ui-field"><span className="ui-label">Pozisyon</span><input className="ui-input" value={form.position} onChange={(e) => setForm((p) => ({ ...p, position: e.target.value }))} /></label>
             <label className="ui-field"><span className="ui-label">Boy (cm)</span><input className="ui-input" type="number" value={form.height} onChange={(e) => setForm((p) => ({ ...p, height: e.target.value }))} /></label>
             <label className="ui-field"><span className="ui-label">Kilo (kg)</span><input className="ui-input" type="number" value={form.weight} onChange={(e) => setForm((p) => ({ ...p, weight: e.target.value }))} /></label>
-            <label className="ui-field sm:col-span-2"><span className="ui-label">Kategori</span><input className="ui-input" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} /></label>
+            <div className="ui-field sm:col-span-2">
+              <span className="ui-label">Yeni takım oluştur</span>
+              <div className="flex gap-2">
+                <input className="ui-input" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="Takım adı" />
+                <button type="button" onClick={() => void handleCreateTeam()} disabled={teamBusy} className="ui-btn-ghost min-h-11 shrink-0 px-4">
+                  {teamBusy ? "Oluşturuluyor..." : "Takım ekle"}
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -294,7 +354,7 @@ export default function NewAthleteOnboardingPage() {
             </div>
             <div className="rounded-xl border border-white/10 bg-black/25 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-[#c4b5fd]">Profil</h3>
-              <p className="mt-2 text-xs font-bold text-gray-300">Takım: {form.team || "—"}</p>
+              <p className="mt-2 text-xs font-bold text-gray-300">Takım: {teamOptions.find((team) => team.id === form.teamId)?.name || "—"}</p>
               <p className="text-xs font-bold text-gray-300">Pozisyon: {form.position || "—"}</p>
               <p className="text-xs font-bold text-gray-300">Boy/Kilo: {form.height || "—"} / {form.weight || "—"}</p>
             </div>

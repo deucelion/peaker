@@ -87,9 +87,8 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
   const email = normalizeEmailInput(formData.get("email")?.toString());
   const password = formData.get("password")?.toString().trim() || "";
   const phone = formData.get("phone")?.toString().trim() || null;
-  const team = formData.get("team")?.toString().trim() || null;
+  const teamId = formData.get("teamId")?.toString().trim() || "";
   const position = formData.get("position")?.toString().trim() || null;
-  const category = formData.get("category")?.toString().trim() || null;
   const height = formData.get("height")?.toString().trim() || "";
   const weight = formData.get("weight")?.toString().trim() || "";
   const onboardingMode = (formData.get("onboardingMode")?.toString().trim() || "none") as OnboardingMode;
@@ -164,9 +163,24 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
       }
     }
 
+    let team: string | null = null;
+    if (teamId) {
+      const { data: teamRow, error: teamErr } = await adminClient
+        .from("teams")
+        .select("id, name, organization_id")
+        .eq("id", teamId)
+        .eq("organization_id", actorProfile.organization_id)
+        .maybeSingle();
+      if (teamErr || !teamRow) {
+        await adminClient.auth.admin.deleteUser(authData.user.id);
+        return { error: "Seçilen takım bulunamadı." };
+      }
+      team = (teamRow.name || "").trim() || null;
+    }
+
     const parsedHeight = height ? Number(height) : null;
     const parsedWeight = weight ? Number(weight) : null;
-    const positionValue = position || category || null;
+    const positionValue = position || null;
     const { data: bundleResult, error: bundleErr } = await adminClient.rpc("create_athlete_onboarding_bundle", {
       p_user_id: authData.user.id,
       p_organization_id: actorProfile.organization_id,

@@ -4,6 +4,7 @@ import {
   ADMIN_ACCOUNT_INFO_ROUTE,
   COACH_ACCOUNT_INFO_ROUTE,
   isAthleteManagementProfilePath,
+  isPrivateLessonPackageDetailPath,
   isSporcuBranchAllowedForAthlete,
   matchesAnyPrefix,
   matchesPathPrefix,
@@ -97,6 +98,7 @@ export function canAccessRoute(roleInput: string | null | undefined, pathname: s
   if (matchesAnyPrefix(pathname, ADMIN_ONLY_PREFIXES)) return false;
 
   if (role === "sporcu") {
+    if (isPrivateLessonPackageDetailPath(pathname)) return true;
     if (matchesPathPrefix(pathname, PATHS.sporcu)) {
       return isSporcuBranchAllowedForAthlete(pathname);
     }

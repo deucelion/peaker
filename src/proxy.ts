@@ -1,6 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isPublicRoute } from "@/lib/auth/roleMatrix";
+import {
+  canAccessRoute,
+  getDefaultRouteForRole,
+  getSafeRole,
+  isPublicRoute,
+  ORG_LIFECYCLE_INFO_ROUTE,
+} from "@/lib/auth/roleMatrix";
+import { isRouteBlockedForCoach, normalizeCoachPermissions } from "@/lib/auth/coachPermissions";
+import { isRouteBlockedForAthlete, normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
 
 /**
  * Yalnızca oturum (cookie + Supabase session) kontrolü.
@@ -63,6 +71,71 @@ export async function proxy(request: NextRequest) {
 
   if (isMeRoleApiRoute) {
     return response;
+  }
+
+  // Route-level RBAC enforcement (page requests only).
+  // API auth remains action-level to avoid breaking existing endpoints.
+  if (!isApiRoute) {
+    let roleFromProfile: string | null = null;
+    let organizationId: string | null = null;
+    try {
+      const profileRes = await supabase
+        .from("profiles")
+        .select("role, organization_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      roleFromProfile = typeof profileRes.data?.role === "string" ? profileRes.data.role : null;
+      organizationId = typeof profileRes.data?.organization_id === "string" ? profileRes.data.organization_id : null;
+    } catch {
+      roleFromProfile = null;
+      organizationId = null;
+    }
+
+    const role = getSafeRole(roleFromProfile || user.user_metadata?.role || user.app_metadata?.role);
+    const roleInput = role || null;
+
+    if (!canAccessRoute(roleInput, pathname)) {
+      if (isTransportRequest) return jsonError(403, "forbidden");
+      const fallbackPath = role ? getDefaultRouteForRole(role) : ORG_LIFECYCLE_INFO_ROUTE;
+      if (pathname === fallbackPath) return NextResponse.redirect(new URL(ORG_LIFECYCLE_INFO_ROUTE, request.url));
+      return NextResponse.redirect(new URL(fallbackPath, request.url));
+    }
+
+    if (role === "coach") {
+      try {
+        const permsRes = await supabase
+          .from("coach_permissions")
+          .select("can_create_lessons, can_edit_lessons, can_view_all_organization_lessons, can_view_all_athletes, can_add_athletes_to_lessons, can_take_attendance, can_view_reports, can_manage_training_notes, can_manage_athlete_profiles, can_manage_teams")
+          .eq("coach_id", user.id)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        const permissions = normalizeCoachPermissions((permsRes.data as Record<string, boolean> | null) || undefined);
+        if (isRouteBlockedForCoach(pathname, permissions)) {
+          if (isTransportRequest) return jsonError(403, "forbidden");
+          return NextResponse.redirect(new URL(getDefaultRouteForRole(role), request.url));
+        }
+      } catch {
+        // Fall back to server action guards on read failure.
+      }
+    }
+
+    if (role === "sporcu") {
+      try {
+        const permsRes = await supabase
+          .from("athlete_permissions")
+          .select("can_view_morning_report, can_view_programs, can_view_calendar, can_view_notifications, can_view_rpe_entry, can_view_development_profile, can_view_financial_status, can_view_performance_metrics, can_view_wellness_metrics, can_view_skill_radar")
+          .eq("athlete_id", user.id)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        const permissions = normalizeAthletePermissions((permsRes.data as Record<string, boolean> | null) || undefined);
+        if (isRouteBlockedForAthlete(pathname, permissions)) {
+          if (isTransportRequest) return jsonError(403, "forbidden");
+          return NextResponse.redirect(new URL(getDefaultRouteForRole(role), request.url));
+        }
+      } catch {
+        // Fall back to server action guards on read failure.
+      }
+    }
   }
 
   if (!isApiRoute && isTransportRequest) {

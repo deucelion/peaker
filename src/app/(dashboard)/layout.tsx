@@ -19,8 +19,10 @@ import {
   TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText, Plus
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { getUnreadNotificationCount } from "@/lib/actions/notificationActions";
 import { PATHS } from "@/lib/navigation/routeRegistry";
+import type { CoachPermissions, AthletePermissions } from "@/lib/types";
 
 const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
@@ -50,9 +52,10 @@ export default function DashboardLayout({
   const [userName, setUserName] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [coachPermissions, setCoachPermissions] = useState(DEFAULT_COACH_PERMISSIONS);
-  const [athletePermissions, setAthletePermissions] = useState(DEFAULT_ATHLETE_PERMISSIONS);
+  const [coachPermissions, setCoachPermissions] = useState<CoachPermissions | null>(null);
+  const [athletePermissions, setAthletePermissions] = useState<AthletePermissions | null>(null);
   const [organizationName, setOrganizationName] = useState("PEAKER");
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +72,7 @@ export default function DashboardLayout({
 
         if (!payload.ok) {
           if (!cancelled) {
+            setPermissionsLoading(false);
             setLoading(false);
             if (payload.httpStatus === 401) router.replace(PATHS.login);
             else if (payload.httpStatus === 403) {
@@ -99,13 +103,24 @@ export default function DashboardLayout({
         if (!cancelled) {
           setRole(payload.role);
           setUserName(payload.fullName || "Peaker User");
-          setCoachPermissions(DEFAULT_COACH_PERMISSIONS);
-          setAthletePermissions(DEFAULT_ATHLETE_PERMISSIONS);
+          setPermissionsLoading(true);
+          setCoachPermissions(null);
+          setAthletePermissions(null);
+          const accessPayload = await fetchMeAccessClient();
+          if (!cancelled && accessPayload.ok) {
+            if (payload.role === "coach") {
+              setCoachPermissions(accessPayload.coachPermissions || DEFAULT_COACH_PERMISSIONS);
+            } else if (payload.role === "sporcu") {
+              setAthletePermissions(accessPayload.athletePermissions || DEFAULT_ATHLETE_PERMISSIONS);
+            }
+          }
+          if (!cancelled) setPermissionsLoading(false);
           setOrganizationName(payload.organizationName ?? "");
           setLoading(false);
         }
       } catch {
         if (!cancelled) {
+          setPermissionsLoading(false);
           setLoading(false);
           router.replace(PATHS.login);
         }
@@ -187,14 +202,36 @@ export default function DashboardLayout({
   const visibleNav = (section: NavSection) =>
     DASHBOARD_NAV_ITEMS.filter((item) => item.section === section && isDashboardNavItemVisible(item, navCtx));
   const quickActions =
-    isCoachOrAdmin
+    isCoachOrAdmin && !permissionsLoading
       ? [
-          { label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" },
-          { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" },
-          { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
-          { label: "Sporcu Ekle", href: "/sporcular/yeni" },
-          { label: "Tahsilat Kaydet", href: "/finans" },
-          { label: "Saha Testi Girişi", href: "/saha-testleri" },
+          ...(safeRole === "admin"
+            ? [
+                { label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" },
+                { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" },
+                { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
+                { label: "Sporcu Ekle", href: "/sporcular/yeni" },
+                { label: "Tahsilat Kaydet", href: "/finans" },
+                { label: "Saha Testi Girişi", href: "/saha-testleri" },
+              ]
+            : []),
+          ...(safeRole === "coach" && coachPermissions?.can_create_lessons
+            ? [{ label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" }]
+            : []),
+          ...(safeRole === "coach" && coachPermissions?.can_manage_training_notes
+            ? [{ label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" }]
+            : []),
+          ...(safeRole === "coach" && coachPermissions?.can_take_attendance
+            ? [{ label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" }]
+            : []),
+          ...(safeRole === "coach" && coachPermissions?.can_manage_athlete_profiles
+            ? [{ label: "Sporcu Ekle", href: "/sporcular/yeni" }]
+            : []),
+          ...(safeRole === "coach" && coachPermissions?.can_view_reports
+            ? [
+                { label: "Tahsilat Kaydet", href: "/finans" },
+                { label: "Saha Testi Girişi", href: "/saha-testleri" },
+              ]
+            : []),
         ]
       : [];
 

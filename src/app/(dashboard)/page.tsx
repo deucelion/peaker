@@ -7,11 +7,13 @@ import { addCoach } from "@/lib/actions/coachActions";
 import { bootstrapTenantHomeDashboard } from "@/lib/actions/snapshotActions";
 import { updateOrganizationDisplayNameAction } from "@/lib/actions/organizationProfileActions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
+import type { CoachPermissions } from "@/lib/types";
 import type { PrivateLessonSessionListItem } from "@/lib/types";
 import { listUpcomingPrivateLessonSessionsForCoach } from "@/lib/actions/privateLessonSessionActions";
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
+import EmptyStateCard from "@/components/EmptyStateCard";
 
 // --- TYPESCRIPT INTERFACES ---
 interface StatCardProps {
@@ -109,7 +111,7 @@ export default function Dashboard() {
   const [coachFeedback, setCoachFeedback] = useState<string | null>(null);
   const [attendanceTarget, setAttendanceTarget] = useState<number | null>(null);
   const [revenueTrend, setRevenueTrend] = useState("VERI YOK");
-  const [coachPermissions, setCoachPermissions] = useState(DEFAULT_COACH_PERMISSIONS);
+  const [coachPermissions, setCoachPermissions] = useState<CoachPermissions | null>(null);
   const [todayLessons, setTodayLessons] = useState<CoachLessonRow[]>([]);
   const [pendingAttendanceLessons, setPendingAttendanceLessons] = useState<CoachLessonRow[]>([]);
   const [upcomingLessons, setUpcomingLessons] = useState<CoachLessonRow[]>([]);
@@ -173,6 +175,7 @@ export default function Dashboard() {
       }
 
       if (snapshot.role === "admin" && snapshot.admin) {
+        setCoachPermissions(null);
         setStats(snapshot.admin.stats || { totalPlayers: 0, activeTrainings: 0, attendanceRate: "-", monthlyRevenue: "-" });
         const attendanceNumeric = Number(snapshot.admin.stats?.attendanceRate ?? "-");
         if (!Number.isNaN(attendanceNumeric) && attendanceNumeric > 0) {
@@ -253,6 +256,10 @@ export default function Dashboard() {
 
   if (role === "super_admin") return null;
 
+  const canCreateLessons = Boolean(coachPermissions?.can_create_lessons);
+  const canTakeAttendance = Boolean(coachPermissions?.can_take_attendance);
+  const canManageTrainingNotes = Boolean(coachPermissions?.can_manage_training_notes);
+
   if (role === "coach") {
     return (
       <div className="ui-page min-w-0 overflow-x-hidden animate-in fade-in duration-700">
@@ -307,7 +314,7 @@ export default function Dashboard() {
         <section className="ui-card min-w-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
             <h3 className="ui-h2-sm shrink-0">Bugünkü Derslerim</h3>
-            {coachPermissions.can_create_lessons && (
+            {canCreateLessons && (
               <Link href="/dersler" className="inline-flex justify-center px-3 py-2.5 sm:py-2 rounded-xl bg-[#7c3aed] sm:hover:bg-[#6d28d9] text-white text-[10px] font-black uppercase touch-manipulation shrink-0">
                 Ders Oluştur
               </Link>
@@ -338,7 +345,7 @@ export default function Dashboard() {
                       <Link href={`/dersler/${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-gray-300 touch-manipulation">
                         DETAY
                       </Link>
-                      {coachPermissions.can_take_attendance && (
+                      {canTakeAttendance && (
                         <Link href={`/antrenman-yonetimi?trainingId=${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-3 py-1 text-[#c4b5fd] touch-manipulation">
                           YOKLAMA
                         </Link>
@@ -351,7 +358,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        {coachPermissions.can_take_attendance && (
+        {canTakeAttendance && (
           <section className="ui-card">
             <h3 className="ui-h2-sm mb-4">Yoklama Bekleyen Dersler</h3>
             {pendingAttendanceLessons.length === 0 ? (
@@ -386,7 +393,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        {coachPermissions.can_manage_training_notes && coachPrivateSessions.length > 0 ? (
+        {canManageTrainingNotes && coachPrivateSessions.length > 0 ? (
           <section className="ui-card min-w-0">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="ui-h2-sm shrink-0">Yaklaşan özel dersler</h3>
@@ -426,7 +433,7 @@ export default function Dashboard() {
           </section>
         ) : null}
 
-        {coachPermissions.can_manage_training_notes && (
+        {canManageTrainingNotes && (
           <section className="ui-card min-w-0">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
               <h3 className="ui-h2-sm shrink-0">Sporcu / Program Akisi</h3>
@@ -435,7 +442,13 @@ export default function Dashboard() {
               </Link>
             </div>
             {recentPrograms.length === 0 ? (
-              <p className="text-gray-500 text-[10px] font-black uppercase italic">Son program kaydi bulunmuyor.</p>
+              <EmptyStateCard
+                title="Kayıt bulunamadı"
+                description="Son program akışında görüntülenecek kayıt yok."
+                reason="Henüz program/not oluşturulmamış olabilir."
+                primaryAction={{ label: "Yeni program yaz", href: "/notlar-haftalik-program" }}
+                compact
+              />
             ) : (
               <div className="grid gap-2">
                 {recentPrograms.map((program) => {
@@ -462,7 +475,13 @@ export default function Dashboard() {
             </Link>
           </div>
           {notificationPreview.length === 0 ? (
-            <p className="text-gray-500 text-[10px] font-black uppercase italic">Bildirim bulunmuyor.</p>
+            <EmptyStateCard
+              title="Kayıt bulunamadı"
+              description="Bildirim akışında gösterilecek kayıt yok."
+              reason="Bu dönemde yeni sistem bildirimi oluşmamış olabilir."
+              primaryAction={{ label: "Bildirim merkezine git", href: "/bildirimler" }}
+              compact
+            />
           ) : (
             <div className="grid gap-2">
               {notificationPreview.map((n) => (
@@ -643,9 +662,13 @@ export default function Dashboard() {
                   );
                 })
               ) : (
-                <p className="text-gray-500 italic text-center py-2 uppercase font-black text-[10px] tracking-widest">
-                  Koç verisi bulunamadı.
-                </p>
+                <EmptyStateCard
+                  title="Kayıt bulunamadı"
+                  description="Koç listesinde görüntülenecek kayıt bulunamadı."
+                  reason="Organizasyonda henüz aktif koç hesabı olmayabilir."
+                  primaryAction={{ label: "Koçlar sayfasına git", href: "/koclar" }}
+                  compact
+                />
               )}
             </div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#7c3aed]/5 rounded-full blur-[100px]" />

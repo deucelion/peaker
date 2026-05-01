@@ -28,6 +28,7 @@ import { listMyAthleteInjuryNotes } from "@/lib/actions/injuryNoteActions";
 import { getMyFinanceDetailForAthlete } from "@/lib/actions/financeActions";
 import PerformanceRadar from "@/components/PerformanceRadar";
 import Notification from "@/components/Notification";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import Link from "next/link";
 import type { ProfileBasic, PaymentRow } from "@/types/domain";
 import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
@@ -253,7 +254,14 @@ export default function SporcuPanel() {
             <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">Sadece görüntüleme</span>
           </div>
           {injuryNotes.length === 0 ? (
-            <p className="text-[10px] text-gray-500 font-bold uppercase">Henüz sakatlık kaydı bulunmuyor.</p>
+            <EmptyStateCard
+              title="Kayıt bulunamadı"
+              description="Sakatlık geçmişinde görüntülenecek bir kayıt yok."
+              reason="Henüz sakatlık notu girilmemiş olabilir."
+              primaryAction={{ label: "Programlarımı aç", href: "/programlarim" }}
+              secondaryAction={{ label: "Takvime git", href: "/takvim" }}
+              compact
+            />
           ) : (
             <div className="space-y-3">
               {injuryNotes.map((item) => (

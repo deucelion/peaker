@@ -7,7 +7,7 @@ export function lessonStatusLabelTr(status: LessonStatus): string {
     case "completed":
       return "Tamamlandı";
     case "cancelled":
-      return "İptal";
+      return "İptal Edildi";
     default:
       return status;
   }

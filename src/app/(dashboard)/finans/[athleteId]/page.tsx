@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/financeActions";
 import type { AthleteFinanceDetail } from "@/lib/types";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 
 type FinanceTab = "timeline" | "hizmet" | "plan";
 
@@ -56,7 +57,7 @@ function paymentDisplayTitle(row: AthleteFinanceDetail["aidatPayments"][number])
   if (row.payment_scope === "private_lesson" || row.payment_type === "paket") {
     return "Paket Ödemesi";
   }
-  return row.description || "Aidat";
+  return row.description || "Ödeme";
 }
 
 export default function FinanceAthleteDetailPage() {
@@ -80,6 +81,7 @@ export default function FinanceAthleteDetailPage() {
     displayName: "",
   });
   const [activeTab, setActiveTab] = useState<FinanceTab>("timeline");
+  const [canOpenAccountingPanel, setCanOpenAccountingPanel] = useState(false);
 
   const load = useCallback(async () => {
     if (!athleteId) return;
@@ -105,6 +107,21 @@ export default function FinanceAthleteDetailPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      void (async () => {
+        const me = await fetchMeRoleClient();
+        if (cancelled || !me.ok) return;
+        setCanOpenAccountingPanel(me.role === "admin" || me.role === "super_admin");
+      })();
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, []);
 
   const combinedPrivatePaid = useMemo(
     () => (snapshot?.privateLessonPayments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
@@ -225,11 +242,24 @@ export default function FinanceAthleteDetailPage() {
   return (
     <div className="space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
+          {canOpenAccountingPanel ? (
+            <Link
+              href="/muhasebe-finans"
+              className="inline-flex min-h-10 items-center rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/15"
+            >
+              Genel muhasebe paneline git
+            </Link>
+          ) : null}
+        </div>
         <h1 className="text-2xl font-black uppercase italic text-white">
           {snapshot.athlete.fullName} · Finans Detayı
         </h1>
       </div>
+      <p className="text-xs font-semibold text-gray-400">
+        Sporcu bazlı borç, ödeme ve tahsilat durumlarını yönetin.
+      </p>
 
       {message ? (
         <Notification

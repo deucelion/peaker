@@ -132,13 +132,21 @@ export async function listPrivateLessonPackagesForManagement(): Promise<
   const { actor } = resolved;
   const guard = await assertManagementActor(actor);
   if (!guard.ok) return { error: guard.error };
+  const role = getSafeRole(actor.role);
 
   const adminClient = createSupabaseAdminClient();
-  const { data, error } = await adminClient
+  let packagesQuery = adminClient
     .from("private_lesson_packages")
     .select(PACKAGE_SELECT)
     .eq("organization_id", actor.organization_id!)
     .order("created_at", { ascending: false });
+  if (role === "coach") {
+    const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
+    if (!permissions.can_view_all_organization_lessons) {
+      packagesQuery = packagesQuery.eq("coach_id", actor.id);
+    }
+  }
+  const { data, error } = await packagesQuery;
 
   if (error) return { error: `Paketler alinamadi: ${error.message}` };
   return { packages: (data || []).map((row) => mapPackage(row as never)) };
@@ -184,6 +192,8 @@ export async function listPrivateLessonFormOptions(): Promise<
   const role = getSafeRole(actor.role);
   const guard = await assertManagementActor(actor);
   if (!guard.ok) return { error: guard.error };
+  const canViewAllOrganizationLessons =
+    role !== "coach" || (await getCoachPermissions(actor.id, actor.organization_id!)).can_view_all_organization_lessons;
 
   const adminClient = createSupabaseAdminClient();
   const [athletesRes, coachesRes] = await Promise.all([
@@ -208,6 +218,7 @@ export async function listPrivateLessonFormOptions(): Promise<
     .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Sporcu") }));
   const coaches = (coachesRes.data || [])
     .filter((row) => getSafeRole(row.role) === "coach")
+    .filter((row) => canViewAllOrganizationLessons || row.id === actor.id)
     .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Koc") }));
 
   return { athletes, coaches, viewerRole: role as "admin" | "coach", viewerId: actor.id };
@@ -456,8 +467,8 @@ export async function listPrivateLessonUsageForPackage(
 
 /**
  * Plansız / geçmiş ders kaydı: takvime bağlanmamış veya geçmişte yapılmış dersler için paketten 1 ders düşürür.
- * Planlı özel ders oturumları yalnızca `complete_private_lesson_session` (“Ders yapıldı”) ile düşer; bu action,
- * aynı pakette açık (`planned`) oturum varken çalışmaz — çift düşüm ve yanlış akış riskini engeller.
+ * Planlı özel ders oturumları normalde `complete_private_lesson_session` (“Ders yapıldı”) ile düşer.
+ * Açık plan varken manuel kayıt yalnızca kullanıcı açıkça onay verirse (forceWithOpenPlanned=true) kabul edilir.
  */
 export async function addPrivateLessonUsage(formData: FormData) {
   return withServerActionGuard("privateLesson.addPrivateLessonUsage", async () => {
@@ -473,6 +484,7 @@ export async function addPrivateLessonUsage(formData: FormData) {
   const packageId = formData.get("packageId")?.toString().trim() || "";
   const usedAt = formData.get("usedAt")?.toString().trim() || new Date().toISOString();
   const note = formData.get("note")?.toString().trim() || null;
+  const forceWithOpenPlanned = formData.get("forceWithOpenPlanned")?.toString().trim() === "true";
 
   if (!packageId) return { error: "Paket secimi zorunludur." };
 
@@ -489,10 +501,10 @@ export async function addPrivateLessonUsage(formData: FormData) {
     if (plannedErr) {
       return { error: `Plan kontrolü başarısız: ${plannedErr.message}` };
     }
-    if ((plannedOpen ?? 0) > 0) {
+    if ((plannedOpen ?? 0) > 0 && !forceWithOpenPlanned) {
       return {
         error:
-          "Bu pakette açık (planlı) özel ders oturumu var. Ders düşümü yalnızca “Özel ders planı” sekmesinden ilgili oturumu “Ders yapıldı” ile tamamlanarak yapılır. Plansız veya geçmiş ders kaydı eklemek için önce tüm açık planları tamamlayın veya iptal edin.",
+          "Bu pakette açık planlı ders var. Manuel kullanım eklerseniz paket hakkı ayrıca düşer. Devam etmek için onaylayarak tekrar deneyin.",
       };
     }
   }

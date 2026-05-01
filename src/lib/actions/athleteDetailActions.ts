@@ -95,7 +95,7 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
   const [{ data: results }, { data: loads }, { data: wellnessRows }] = await Promise.all([
     adminClient
       .from("athletic_results")
-      .select("value, test_date, test_id, test_definitions (id, name, unit)")
+      .select("value, value_text, test_date, test_id, test_definitions (id, name, unit, value_type)")
       .eq("profile_id", athleteId)
       .order("test_date", { ascending: false }),
     adminClient

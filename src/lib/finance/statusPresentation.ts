@@ -33,16 +33,16 @@ const PRESENTATION_BY_LABEL: Record<FinanceStatusSummary["label"], FinanceStatus
     inlineTextClass: "text-amber-300",
     supportText: "Ödeme planı beklemede.",
   },
-  "Kısmi Ödeme Var": {
-    label: "Kısmi Ödeme Var",
+  "Kısmi Ödeme": {
+    label: "Kısmi Ödeme",
     tone: "orange",
     badgeClass: "border-orange-500/35 bg-orange-500/10 text-orange-200",
     cardClass: "border-orange-500/30 bg-orange-500/10 text-orange-300",
     inlineTextClass: "text-orange-300",
     supportText: "Ödemenin bir kısmı alındı, bakiye devam ediyor.",
   },
-  "Gecikmiş Ödeme Var": {
-    label: "Gecikmiş Ödeme Var",
+  "Gecikmiş Ödeme": {
+    label: "Gecikmiş Ödeme",
     tone: "red",
     badgeClass: "border-rose-500/35 bg-rose-500/10 text-rose-200",
     cardClass: "border-rose-500/30 bg-rose-500/10 text-rose-300",
@@ -66,7 +66,7 @@ export function getFinanceStatusPresentation(summary?: FinanceSummaryLike): Fina
   if (summary.tone === "approaching") {
     return {
       ...PRESENTATION_BY_LABEL["Ödeme Bekleniyor"],
-      label: "Ödeme Yaklaşıyor",
+      label: "Ödeme Bekleniyor",
       supportText: "Son ödeme tarihi yaklaşıyor.",
     };
   }
@@ -75,7 +75,7 @@ export function getFinanceStatusPresentation(summary?: FinanceSummaryLike): Fina
     return PRESENTATION_BY_LABEL[summary.label as FinanceStatusSummary["label"]];
   }
 
-  if (summary.tone === "overdue") return PRESENTATION_BY_LABEL["Gecikmiş Ödeme Var"];
+  if (summary.tone === "overdue") return PRESENTATION_BY_LABEL["Gecikmiş Ödeme"];
   if (summary.tone === "paid") return PRESENTATION_BY_LABEL["Ödeme Tamamlandı"];
   return PRESENTATION_BY_LABEL["Ödeme Bekleniyor"];
 }

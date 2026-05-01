@@ -141,9 +141,9 @@ export default function TakvimPage() {
                 <div className="flex items-center justify-end sm:justify-start gap-4 shrink-0">
                   <div className="hidden lg:block h-12 w-[1px] bg-white/5"></div>
                   <Link
-                    href="/antrenman-yonetimi"
+                    href="/ozel-ders-paketlerim"
                     className="inline-flex min-h-12 min-w-12 touch-manipulation items-center justify-center rounded-[1.25rem] bg-[#7c3aed]/10 p-4 text-[#7c3aed] transition-all sm:rounded-[1.5rem] sm:p-5 sm:group-hover:bg-[#7c3aed] sm:group-hover:text-white"
-                    aria-label="Antrenman detayina git"
+                    aria-label="Paketlerime git"
                   >
                     <ChevronRight size={20} strokeWidth={3} aria-hidden />
                   </Link>

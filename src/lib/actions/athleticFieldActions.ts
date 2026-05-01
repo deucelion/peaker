@@ -34,6 +34,8 @@ type TestDefinitionOrgShape = {
   hasOrgId: boolean;
 };
 
+export type MetricValueType = "number" | "text";
+
 async function resolveTestDefinitionsOrgShape(
   adminClient: ReturnType<typeof createSupabaseAdminClient>
 ): Promise<TestDefinitionOrgShape> {
@@ -87,9 +89,11 @@ export async function createFieldTestDefinition(formData: FormData) {
   const name = formData.get("name")?.toString().trim().slice(0, 200) || "";
   const unit = formData.get("unit")?.toString().trim().slice(0, 40) || "";
   const category = formData.get("category")?.toString().trim().slice(0, 80) || "Genel";
+  const valueTypeRaw = formData.get("valueType")?.toString().trim().toLowerCase() || "number";
+  const valueType: MetricValueType = valueTypeRaw === "text" ? "text" : "number";
 
   if (name.length < 2) return { error: "Metrik adi en az 2 karakter olmalidir." };
-  if (unit.length < 1) return { error: "Birim zorunludur." };
+  if (valueType === "number" && unit.length < 1) return { error: "Sayisal metrikte birim zorunludur." };
 
   let orgShape: TestDefinitionOrgShape = { hasOrganizationId: true, hasOrgId: false };
   try {
@@ -99,13 +103,34 @@ export async function createFieldTestDefinition(formData: FormData) {
     return { error: `Metrik tablo yapisi okunamadi: ${message}` as const };
   }
 
-  const payload: Record<string, unknown> = { name, unit, category };
+  let query = resolved.adminClient
+    .from("test_definitions")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
+    query = query.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
+  } else if (orgShape.hasOrganizationId) {
+    query = query.eq("organization_id", resolved.organizationId);
+  } else if (orgShape.hasOrgId) {
+    query = query.eq("org_id", resolved.organizationId);
+  }
+  const { data: maxSortRows } = await query;
+  const nextSort = Number(maxSortRows?.[0]?.sort_order ?? 0) + 1;
+
+  const payload: Record<string, unknown> = {
+    name,
+    unit: unit || (valueType === "text" ? "not" : ""),
+    category,
+    value_type: valueType,
+    sort_order: nextSort,
+  };
   if (orgShape.hasOrganizationId) payload.organization_id = resolved.organizationId;
   if (orgShape.hasOrgId) payload.org_id = resolved.organizationId;
   const { data: inserted, error } = await resolved.adminClient
     .from("test_definitions")
     .insert(payload)
-    .select("id, name, unit, category, created_at")
+    .select("id, name, unit, category, value_type, sort_order, created_at")
     .single();
 
   if (error) return { error: `Metrik eklenemedi: ${error.message}` };
@@ -128,7 +153,8 @@ export async function listFieldTestDefinitionsForActor() {
 
   let query = resolved.adminClient
     .from("test_definitions")
-    .select("id, name, unit, category, created_at")
+    .select("id, name, unit, category, value_type, sort_order, created_at")
+    .order("sort_order", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 
   if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
@@ -143,6 +169,86 @@ export async function listFieldTestDefinitionsForActor() {
 
   if (error) return { error: `Metrikler alinamadi: ${error.message}` as const };
   return { metrics: (data || []) as Array<Record<string, unknown>> };
+}
+
+export async function updateFieldTestDefinition(input: {
+  testDefinitionId: string;
+  name: string;
+  unit: string;
+  category: string;
+  valueType: MetricValueType;
+}) {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error };
+  if (!assertUuid(input.testDefinitionId)) return { error: "Gecersiz metrik." as const };
+
+  let orgShape: TestDefinitionOrgShape = { hasOrganizationId: true, hasOrgId: false };
+  try {
+    orgShape = await resolveTestDefinitionsOrgShape(resolved.adminClient);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { error: `Metrik tablo yapisi okunamadi: ${message}` as const };
+  }
+
+  let defQuery = resolved.adminClient.from("test_definitions").select("id").eq("id", input.testDefinitionId);
+  if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
+    defQuery = defQuery.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
+  } else if (orgShape.hasOrganizationId) {
+    defQuery = defQuery.eq("organization_id", resolved.organizationId);
+  } else if (orgShape.hasOrgId) {
+    defQuery = defQuery.eq("org_id", resolved.organizationId);
+  }
+  const { data: def } = await defQuery.maybeSingle();
+  if (!def) return { error: "Metrik bulunamadi veya bu organizasyona ait degil." as const };
+
+  const safeName = input.name.trim().slice(0, 200);
+  const safeUnit = input.unit.trim().slice(0, 40);
+  const safeCategory = input.category.trim().slice(0, 80) || "Genel";
+  if (safeName.length < 2) return { error: "Metrik adi en az 2 karakter olmalidir." as const };
+  if (input.valueType === "number" && safeUnit.length < 1) return { error: "Sayisal metrikte birim zorunludur." as const };
+
+  const { error } = await resolved.adminClient
+    .from("test_definitions")
+    .update({
+      name: safeName,
+      unit: safeUnit || (input.valueType === "text" ? "not" : ""),
+      category: safeCategory,
+      value_type: input.valueType,
+    })
+    .eq("id", input.testDefinitionId);
+
+  if (error) return { error: `Metrik guncellenemedi: ${error.message}` as const };
+  revalidatePath("/saha-testleri");
+  return { success: true as const };
+}
+
+export async function saveFieldTestDefinitionOrder(input: { orderedMetricIds: string[] }) {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error };
+  if (!Array.isArray(input.orderedMetricIds) || input.orderedMetricIds.length === 0) {
+    return { error: "Gecersiz metrik sirasi." as const };
+  }
+  if (!input.orderedMetricIds.every((id) => assertUuid(id))) {
+    return { error: "Gecersiz metrik sirasi." as const };
+  }
+
+  const listed = await listFieldTestDefinitionsForActor();
+  if ("error" in listed) return { error: listed.error };
+  const validIds = new Set((listed.metrics || []).map((r) => String(r.id)));
+  if (validIds.size !== input.orderedMetricIds.length) return { error: "Metrik listesi uyusmuyor." as const };
+  if (input.orderedMetricIds.some((id) => !validIds.has(id))) return { error: "Metrik listesi uyusmuyor." as const };
+
+  for (let i = 0; i < input.orderedMetricIds.length; i += 1) {
+    const metricId = input.orderedMetricIds[i]!;
+    const { error: upErr } = await resolved.adminClient
+      .from("test_definitions")
+      .update({ sort_order: i + 1 })
+      .eq("id", metricId);
+    if (upErr) return { error: `Metrik sirasi kaydedilemedi: ${upErr.message}` as const };
+  }
+
+  revalidatePath("/saha-testleri");
+  return { success: true as const };
 }
 
 export async function deleteFieldTestDefinition(testDefinitionId: string) {
@@ -183,13 +289,15 @@ export async function deleteFieldTestDefinition(testDefinitionId: string) {
 export type AthleticResultCell = {
   profileId: string;
   testId: string;
-  value: number | null;
+  valueNumber: number | null;
+  valueText: string | null;
 };
 
 export async function saveAthleticFieldResults(input: {
   testDate: string;
   selectedProfileIds: string[];
   cells: AthleticResultCell[];
+  notes?: Array<{ profileId: string; note: string | null }>;
 }) {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
@@ -225,7 +333,7 @@ export async function saveAthleticFieldResults(input: {
     const message = error instanceof Error ? error.message : String(error);
     return { error: `Metrik tablo yapisi okunamadi: ${message}` as const };
   }
-  let defsQuery = resolved.adminClient.from("test_definitions").select("id").in("id", testIds);
+  let defsQuery = resolved.adminClient.from("test_definitions").select("id, value_type").in("id", testIds);
   if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
     defsQuery = defsQuery.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
   } else if (orgShape.hasOrganizationId) {
@@ -236,6 +344,9 @@ export async function saveAthleticFieldResults(input: {
   const { data: defs } = await defsQuery;
 
   const validTestIds = new Set((defs || []).map((d) => d.id));
+  const valueTypeByTestId = new Map<string, MetricValueType>(
+    (defs || []).map((d) => [String(d.id), (String(d.value_type || "number") === "text" ? "text" : "number") as MetricValueType])
+  );
   for (const tid of testIds) {
     if (!validTestIds.has(tid)) return { error: "Gecersiz veya baska organizasyona ait metrik." };
   }
@@ -243,7 +354,37 @@ export async function saveAthleticFieldResults(input: {
   const orgId = resolved.organizationId;
 
   for (const cell of cells) {
-    if (cell.value === null || Number.isNaN(cell.value)) {
+    const valueType = valueTypeByTestId.get(cell.testId) || "number";
+    const normalizedText = cell.valueText?.trim() || null;
+    if (valueType === "number") {
+      if (cell.valueNumber === null || Number.isNaN(cell.valueNumber)) {
+        const { error: delErr } = await resolved.adminClient
+          .from("athletic_results")
+          .delete()
+          .eq("profile_id", cell.profileId)
+          .eq("test_id", cell.testId)
+          .eq("test_date", testDate);
+        if (delErr) return { error: toUserFriendlyFieldTestWriteError(delErr, "Saha testi kaydı silinemedi.") };
+        continue;
+      }
+      const v = Number(cell.valueNumber);
+      if (!Number.isFinite(v)) return { error: "Gecersiz olcum degeri." };
+      const { error: upErr } = await resolved.adminClient.from("athletic_results").upsert(
+        {
+          profile_id: cell.profileId,
+          test_id: cell.testId,
+          value: v,
+          value_text: null,
+          test_date: testDate,
+          organization_id: orgId,
+        },
+        { onConflict: "profile_id,test_id,test_date" }
+      );
+      if (upErr) return { error: toUserFriendlyFieldTestWriteError(upErr, "Saha testi kaydı kaydedilemedi.") };
+      continue;
+    }
+
+    if (!normalizedText) {
       const { error: delErr } = await resolved.adminClient
         .from("athletic_results")
         .delete()
@@ -252,13 +393,12 @@ export async function saveAthleticFieldResults(input: {
         .eq("test_date", testDate);
       if (delErr) return { error: toUserFriendlyFieldTestWriteError(delErr, "Saha testi kaydı silinemedi.") };
     } else {
-      const v = Number(cell.value);
-      if (!Number.isFinite(v)) return { error: "Gecersiz olcum degeri." };
       const { error: upErr } = await resolved.adminClient.from("athletic_results").upsert(
         {
           profile_id: cell.profileId,
           test_id: cell.testId,
-          value: v,
+          value: null,
+          value_text: normalizedText,
           test_date: testDate,
           organization_id: orgId,
         },
@@ -266,6 +406,31 @@ export async function saveAthleticFieldResults(input: {
       );
       if (upErr) return { error: toUserFriendlyFieldTestWriteError(upErr, "Saha testi kaydı kaydedilemedi.") };
     }
+  }
+
+  const notes = (input.notes || []).filter((n) => assertUuid(n.profileId) && selectedSet.has(n.profileId));
+  for (const noteRow of notes) {
+    const note = noteRow.note?.trim() || null;
+    if (!note) {
+      const { error: delErr } = await resolved.adminClient
+        .from("athletic_result_notes")
+        .delete()
+        .eq("organization_id", orgId)
+        .eq("profile_id", noteRow.profileId)
+        .eq("test_date", testDate);
+      if (delErr) return { error: `Genel not silinemedi: ${delErr.message}` as const };
+      continue;
+    }
+    const { error: upErr } = await resolved.adminClient.from("athletic_result_notes").upsert(
+      {
+        organization_id: orgId,
+        profile_id: noteRow.profileId,
+        test_date: testDate,
+        note,
+      },
+      { onConflict: "profile_id,test_date" }
+    );
+    if (upErr) return { error: `Genel not kaydedilemedi: ${upErr.message}` as const };
   }
 
   revalidatePath("/saha-testleri");
@@ -318,6 +483,32 @@ export async function listAthleticResultsForActorByDate(input: {
   return { results: (data || []) as AthleticResultRow[] };
 }
 
+export type AthleticResultNoteRow = {
+  profile_id: string;
+  test_date: string;
+  note: string | null;
+};
+
+export async function listAthleticResultNotesByDate(input: { profileIds: string[]; testDate: string }) {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error };
+
+  const testDate = input.testDate?.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) return { error: "Gecersiz test tarihi." as const };
+  const ids = input.profileIds.filter(assertUuid);
+  if (ids.length === 0) return { notes: [] as AthleticResultNoteRow[] };
+
+  const { data, error } = await resolved.adminClient
+    .from("athletic_result_notes")
+    .select("profile_id, test_date, note")
+    .eq("organization_id", resolved.organizationId)
+    .eq("test_date", testDate)
+    .in("profile_id", ids);
+
+  if (error) return { error: `Genel notlar alinamadi: ${error.message}` as const };
+  return { notes: (data || []) as AthleticResultNoteRow[] };
+}
+
 export type FieldTestTeamChartRow = {
   name: string;
   deger: number;
@@ -348,8 +539,9 @@ export async function loadFieldTestTeamReportForActor() {
     .select(
       `
       value,
+      value_text,
       profiles!inner (full_name, organization_id),
-      test_definitions (name, unit)
+      test_definitions (name, unit, value_type)
     `
     )
     .eq("profiles.organization_id", orgId);
@@ -359,17 +551,20 @@ export async function loadFieldTestTeamReportForActor() {
   }
 
   type Joined = {
-    value: number | string;
+    value: number | string | null;
+    value_text?: string | null;
     profiles?: { full_name?: string | null; organization_id?: string | null } | null;
-    test_definitions?: { name?: string | null; unit?: string | null } | null;
+    test_definitions?: { name?: string | null; unit?: string | null; value_type?: string | null } | null;
   };
 
-  const chartRows: FieldTestTeamChartRow[] = ((data || []) as Joined[]).map((item) => ({
-    name: item.profiles?.full_name?.split(" ")[0] || "Sporcu",
-    deger: Number(item.value) || 0,
-    test: item.test_definitions?.name || "Bilinmeyen Test",
-    unit: item.test_definitions?.unit || "",
-  }));
+  const chartRows: FieldTestTeamChartRow[] = ((data || []) as Joined[])
+    .filter((item) => (item.test_definitions?.value_type || "number") !== "text")
+    .map((item) => ({
+      name: item.profiles?.full_name?.split(" ")[0] || "Sporcu",
+      deger: Number(item.value) || 0,
+      test: item.test_definitions?.name || "Bilinmeyen Test",
+      unit: item.test_definitions?.unit || "",
+    }));
 
   return {
     totalPlayers: count ?? 0,

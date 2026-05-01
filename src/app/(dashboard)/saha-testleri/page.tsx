@@ -16,12 +16,17 @@ import {
   createFieldTestDefinition,
   deleteFieldTestDefinition,
   listAthleticResultsForActorByDate,
+  listAthleticResultNotesByDate,
   listFieldTestDefinitionsForActor,
+  saveFieldTestDefinitionOrder,
   saveAthleticFieldResults,
+  updateFieldTestDefinition,
   type AthleticResultCell,
+  type MetricValueType,
 } from "@/lib/actions/athleticFieldActions";
 import type { AthleticResultRow, ProfileBasic, TestDefinitionRow } from "@/types/domain";
 import Notification from "@/components/Notification";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 
 export default function SahaTestleriFinal() {
@@ -40,10 +45,18 @@ export default function SahaTestleriFinal() {
   
   const [metrics, setMetrics] = useState<TestDefinitionRow[]>([]); 
   const [players, setPlayers] = useState<ProfileBasic[]>([]); 
-  const [testValues, setTestValues] = useState<Record<string, string | number>>({}); 
+  const [testValues, setTestValues] = useState<Record<string, string | number>>({});
+  const [generalNotes, setGeneralNotes] = useState<Record<string, string>>({});
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [globalDate, setGlobalDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newMetric, setNewMetric] = useState({ name: "", unit: "", category: "Genel" });
+  const [newMetric, setNewMetric] = useState<{ name: string; unit: string; category: string; valueType: MetricValueType }>({
+    name: "",
+    unit: "",
+    category: "Genel",
+    valueType: "number",
+  });
+  const [orderingBusyMetricId, setOrderingBusyMetricId] = useState<string | null>(null);
+  const [orderHighlightMetricId, setOrderHighlightMetricId] = useState<string | null>(null);
   const fetchRunRef = useRef(0);
   const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const saveFeedbackRef = useRef(saveFeedback);
@@ -81,16 +94,29 @@ export default function SahaTestleriFinal() {
       // 2. Mevcut sonuçlar — server action (org + koç yetkisi)
       const playerIds = roster.map((p) => p.id);
       let existingResults: AthleticResultRow[] = [];
+      let existingNotes: Record<string, string> = {};
       if (playerIds.length > 0) {
-        const res = await listAthleticResultsForActorByDate({
-          profileIds: playerIds,
-          testDate: globalDate,
-        });
+        const [res, notesRes] = await Promise.all([
+          listAthleticResultsForActorByDate({
+            profileIds: playerIds,
+            testDate: globalDate,
+          }),
+          listAthleticResultNotesByDate({
+            profileIds: playerIds,
+            testDate: globalDate,
+          }),
+        ]);
         if (runId !== fetchRunRef.current) return;
         if ("error" in res) {
           setSaveMessage(res.error ?? "Sonuçlar alınamadı.");
         } else {
           existingResults = res.results;
+        }
+        if (!("error" in notesRes)) {
+          existingNotes = (notesRes.notes || []).reduce<Record<string, string>>((acc, row) => {
+            acc[row.profile_id] = row.note || "";
+            return acc;
+          }, {});
         }
       }
       if (runId !== fetchRunRef.current) return;
@@ -99,10 +125,15 @@ export default function SahaTestleriFinal() {
 
       const resultsMap: Record<string, string | number> = {};
       existingResults.forEach((r) => {
-        resultsMap[`${r.profile_id}-${r.test_id}`] = r.value;
+        if (typeof r.value === "number" && Number.isFinite(r.value)) {
+          resultsMap[`${r.profile_id}-${r.test_id}`] = r.value;
+        } else if ((r.value_text || "").trim()) {
+          resultsMap[`${r.profile_id}-${r.test_id}`] = r.value_text!.trim();
+        }
       });
       if (saveFeedbackRef.current !== "dirty") {
         setTestValues(resultsMap);
+        setGeneralNotes(existingNotes);
         setSaveFeedback("idle");
       }
     } catch (error) {
@@ -153,6 +184,7 @@ export default function SahaTestleriFinal() {
     fd.append("name", newMetric.name);
     fd.append("unit", newMetric.unit);
     fd.append("category", newMetric.category || "Genel");
+    fd.append("valueType", newMetric.valueType);
     const result = await createFieldTestDefinition(fd);
     if ("error" in result && result.error) {
       setSaveMessage(result.error);
@@ -170,7 +202,7 @@ export default function SahaTestleriFinal() {
       });
     }
     setSaveMessage("Metrik başarıyla eklendi.");
-    setNewMetric({ name: "", unit: "", category: "Genel" });
+    setNewMetric({ name: "", unit: "", category: "Genel", valueType: "number" });
     void fetchData();
   };
 
@@ -190,6 +222,66 @@ export default function SahaTestleriFinal() {
       [`${playerId}-${metricId}`]: val
     }));
     setSaveFeedback("dirty");
+  };
+
+  const handleGeneralNoteChange = (playerId: string, val: string) => {
+    setGeneralNotes((prev) => ({ ...prev, [playerId]: val }));
+    setSaveFeedback("dirty");
+  };
+
+  const moveMetric = async (metricId: string, direction: -1 | 1) => {
+    if (orderingBusyMetricId) return;
+    setOrderingBusyMetricId(metricId);
+    setOrderHighlightMetricId(metricId);
+    setMetrics((prev) => {
+      const idx = prev.findIndex((m) => m.id === metricId);
+      if (idx === -1) return prev;
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const clone = [...prev];
+      const temp = clone[idx];
+      clone[idx] = clone[nextIdx];
+      clone[nextIdx] = temp;
+      return clone;
+    });
+
+    const current = metrics.map((m) => m.id);
+    const idx = current.findIndex((id) => id === metricId);
+    const nextIdx = idx + direction;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= current.length) return;
+    const nextOrder = [...current];
+    const tmp = nextOrder[idx];
+    nextOrder[idx] = nextOrder[nextIdx];
+    nextOrder[nextIdx] = tmp;
+    const res = await saveFieldTestDefinitionOrder({ orderedMetricIds: nextOrder });
+    if ("error" in res) {
+      setSaveMessage(res.error || "Metrik sırası kaydedilemedi.");
+      setOrderingBusyMetricId(null);
+      void fetchData();
+      return;
+    }
+    window.setTimeout(() => {
+      setOrderHighlightMetricId(null);
+    }, 700);
+    setOrderingBusyMetricId(null);
+    void fetchData();
+  };
+
+  const handleMetricUpdate = async (metric: TestDefinitionRow, patch: Partial<TestDefinitionRow>) => {
+    const payload = {
+      testDefinitionId: metric.id,
+      name: (patch.name ?? metric.name ?? "").toString(),
+      unit: (patch.unit ?? metric.unit ?? "").toString(),
+      category: (patch.category ?? metric.category ?? "Genel").toString(),
+      valueType: ((patch.value_type ?? metric.value_type ?? "number") === "text" ? "text" : "number") as MetricValueType,
+    };
+    const res = await updateFieldTestDefinition(payload);
+    if ("error" in res) {
+      setSaveMessage(res.error || "Metrik güncellenemedi.");
+      return;
+    }
+    setSaveMessage("Metrik güncellendi.");
+    void fetchData();
   };
 
   const orderedCellKeys = useMemo(() => {
@@ -238,15 +330,24 @@ export default function SahaTestleriFinal() {
           const key = `${pId}-${m.id}`;
           const raw = testValues[key];
           const str = typeof raw === "string" ? raw.trim() : raw;
-          const numeric =
-            str === "" || str === null || str === undefined ? null : Number(str);
-          if (numeric !== null && Number.isNaN(numeric)) {
-            setSaveMessage("Geçersiz sayısal değer.");
-            setSaveFeedback("error");
-            setSaveLoading(false);
-            return;
+          const valueType = (m.value_type || "number") === "text" ? "text" : "number";
+          if (valueType === "number") {
+            const numeric = str === "" || str === null || str === undefined ? null : Number(str);
+            if (numeric !== null && Number.isNaN(numeric)) {
+              setSaveMessage("Geçersiz sayısal değer.");
+              setSaveFeedback("error");
+              setSaveLoading(false);
+              return;
+            }
+            cells.push({ profileId: pId, testId: m.id, valueNumber: numeric, valueText: null });
+          } else {
+            cells.push({
+              profileId: pId,
+              testId: m.id,
+              valueNumber: null,
+              valueText: str === "" || str === null || str === undefined ? null : String(str),
+            });
           }
-          cells.push({ profileId: pId, testId: m.id, value: numeric });
         }
       }
 
@@ -254,6 +355,10 @@ export default function SahaTestleriFinal() {
         testDate: globalDate,
         selectedProfileIds: selectedPlayers,
         cells,
+        notes: selectedPlayers.map((profileId) => ({
+          profileId,
+          note: generalNotes[profileId]?.trim() || null,
+        })),
       });
 
       if ("error" in result && result.error) {
@@ -300,6 +405,9 @@ export default function SahaTestleriFinal() {
       return <span className="opacity-30 text-xs">—</span>;
     }
     const str = String(raw);
+    if (!Number.isFinite(Number(str))) {
+      return <span className="text-[11px] font-semibold normal-case">{str}</span>;
+    }
     const [integerPart, decimalPart] = str.split(".");
     if (!decimalPart) return <span>{integerPart}</span>;
     return (
@@ -485,11 +593,16 @@ export default function SahaTestleriFinal() {
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-white font-black italic text-xs uppercase tracking-tighter">{m.name}</span>
                       <div className="px-3 py-1 bg-[#7c3aed]/10 rounded-full">
-                        <span className="text-[#7c3aed] font-bold text-[9px] uppercase tracking-widest">{m.unit}</span>
+                        <span className="text-[#7c3aed] font-bold text-[9px] uppercase tracking-widest">
+                          {(m.value_type || "number") === "text" ? "YAZILI NOT" : m.unit}
+                        </span>
                       </div>
                     </div>
                   </th>
                 ))}
+                <th className="p-4 text-center border-l border-white/5 min-w-[220px]">
+                  <span className="text-[10px] font-black text-gray-500 uppercase italic tracking-[0.2em]">Genel Not</span>
+                </th>
                 <th className="p-4 text-right sticky right-0 z-20 bg-[#121215] border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
                   <span className="text-[10px] font-black text-gray-500 uppercase italic tracking-[0.3em]">İşlem</span>
                 </th>
@@ -498,9 +611,15 @@ export default function SahaTestleriFinal() {
             <tbody className="divide-y divide-white/5">
               {players.length === 0 && (
                 <tr>
-                  <td colSpan={metrics.length + 3} className="px-6 py-10 text-center">
-                    <p className="text-sm font-bold text-gray-400">Kayıt girişi için uygun sporcu bulunamadı.</p>
-                    <p className="mt-1 text-xs font-bold text-gray-600">Önce sporcu ekleyin, ardından bu ekrandan saha testlerini kaydedin.</p>
+                  <td colSpan={metrics.length + 4} className="px-6 py-10 text-center">
+                    <EmptyStateCard
+                      title="Kayıt bulunamadı"
+                      description="Saha testi girişi için uygun sporcu bulunamadı."
+                      reason="Aktif sporcu listesi boş olabilir veya organizasyona henüz sporcu eklenmemiş olabilir."
+                      primaryAction={{ label: "Sporcu ekle", href: "/sporcular/yeni" }}
+                      secondaryAction={{ label: "Sporculara git", href: "/oyuncular" }}
+                      compact
+                    />
                   </td>
                 </tr>
               )}
@@ -530,23 +649,36 @@ export default function SahaTestleriFinal() {
                       <td key={metric.id} className={`p-3 border-l border-white/5 transition-colors ${isSelected ? "sm:hover:bg-[#7c3aed]/8" : ""}`}>
                         {isSelected ? (
                           <div className="relative group/input">
-                            <input 
-                              type="number"
-                              step="0.01"
-                              inputMode="decimal"
-                              ref={(el) => {
-                                cellRefs.current[`${player.id}-${metric.id}`] = el;
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key !== "Enter") return;
-                                e.preventDefault();
-                                focusSiblingCell(`${player.id}-${metric.id}`, e.shiftKey ? -1 : 1);
-                              }}
-                              className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-center text-sm font-black text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 sm:hover:-translate-y-[1px] sm:hover:border-[#7c3aed]/45 sm:hover:shadow-[0_6px_16px_-10px_rgba(124,58,237,0.55)] focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.12)]"
-                              placeholder="Değer girin"
-                              value={testValues[`${player.id}-${metric.id}`] || ""}
-                              onChange={(e) => handleValueChange(player.id, metric.id, e.target.value)}
-                            />
+                            {(metric.value_type || "number") === "text" ? (
+                              <textarea
+                                ref={(el) => {
+                                  cellRefs.current[`${player.id}-${metric.id}`] = el as unknown as HTMLInputElement;
+                                }}
+                                className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-left text-xs font-bold text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 sm:hover:-translate-y-[1px] sm:hover:border-[#7c3aed]/45 sm:hover:shadow-[0_6px_16px_-10px_rgba(124,58,237,0.55)] focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.12)]"
+                                placeholder="Gözlem notu"
+                                rows={2}
+                                value={testValues[`${player.id}-${metric.id}`] || ""}
+                                onChange={(e) => handleValueChange(player.id, metric.id, e.target.value)}
+                              />
+                            ) : (
+                              <input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                ref={(el) => {
+                                  cellRefs.current[`${player.id}-${metric.id}`] = el;
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key !== "Enter") return;
+                                  e.preventDefault();
+                                  focusSiblingCell(`${player.id}-${metric.id}`, e.shiftKey ? -1 : 1);
+                                }}
+                                className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-center text-sm font-black text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 sm:hover:-translate-y-[1px] sm:hover:border-[#7c3aed]/45 sm:hover:shadow-[0_6px_16px_-10px_rgba(124,58,237,0.55)] focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.12)]"
+                                placeholder="Değer girin"
+                                value={testValues[`${player.id}-${metric.id}`] || ""}
+                                onChange={(e) => handleValueChange(player.id, metric.id, e.target.value)}
+                              />
+                            )}
                           </div>
                         ) : (
                           <div className={`text-center font-black text-lg tracking-tight transition-all ${isSelected ? 'text-white' : 'text-gray-700'}`}>
@@ -555,6 +687,19 @@ export default function SahaTestleriFinal() {
                         )}
                       </td>
                     ))}
+                    <td className="p-3 border-l border-white/5">
+                      {isSelected ? (
+                        <textarea
+                          className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-left text-xs font-bold text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25"
+                          placeholder="Genel test notu"
+                          rows={2}
+                          value={generalNotes[player.id] || ""}
+                          onChange={(e) => handleGeneralNoteChange(player.id, e.target.value)}
+                        />
+                      ) : (
+                        <p className="text-[11px] font-semibold text-gray-500">{generalNotes[player.id]?.trim() || "—"}</p>
+                      )}
+                    </td>
                     <td className="p-4 text-right sticky right-0 z-20 bg-inherit border-l border-white/5 shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.5)]">
                       <Link 
                         href={`/sporcu/${player.id}`}
@@ -607,12 +752,63 @@ export default function SahaTestleriFinal() {
                   <p className="mt-1 text-[10px] font-bold text-gray-600">İlk metriği aşağıdaki formdan ekleyin.</p>
                 </div>
               )}
-              {metrics.map(m => (
-                <div key={m.id} className="flex justify-between items-center gap-3 bg-white/[0.03] p-3 rounded-xl border border-white/10 sm:hover:border-[#7c3aed]/30 transition-all group min-w-0">
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="font-black text-sm uppercase tracking-tight break-words text-white">{m.name}</span>
-                    <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-all">Birim: {m.unit}</span>
+              {metrics.map((m, index) => {
+                const isFirst = index === 0;
+                const isLast = index === metrics.length - 1;
+                const isBusy = orderingBusyMetricId === m.id;
+                const isHighlighted = orderHighlightMetricId === m.id;
+                return (
+                <div
+                  key={m.id}
+                  className={`grid min-h-[82px] grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-xl border p-3 min-w-0 transition-all duration-200 ease-out group ${
+                    isHighlighted
+                      ? "border-[#a78bfa]/70 bg-[#7c3aed]/15 ring-2 ring-[#7c3aed]/50 shadow-[0_0_0_1px_rgba(124,58,237,0.5),0_8px_24px_-14px_rgba(124,58,237,0.9)]"
+                      : "border-white/10 bg-white/[0.03] sm:hover:border-[#7c3aed]/35 sm:hover:bg-white/[0.05] sm:hover:shadow-[0_8px_24px_-16px_rgba(124,58,237,0.55)]"
+                  }`}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
+                    {index + 1}
                   </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-black text-sm uppercase tracking-tight break-words text-white">{m.name}</span>
+                    <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-all">
+                      Tip: {(m.value_type || "number") === "text" ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 self-stretch">
+                    <button
+                      type="button"
+                      onClick={() => void moveMetric(m.id, -1)}
+                      disabled={isFirst || Boolean(orderingBusyMetricId)}
+                      className={`min-h-10 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition ${
+                        isFirst || orderingBusyMetricId
+                          ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
+                          : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
+                      }`}
+                    >
+                      Yukarı
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void moveMetric(m.id, 1)}
+                      disabled={isLast || Boolean(orderingBusyMetricId)}
+                      className={`min-h-10 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition ${
+                        isLast || orderingBusyMetricId
+                          ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
+                          : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
+                      }`}
+                    >
+                      {isBusy ? "..." : "Aşağı"}
+                    </button>
+                  </div>
+                  <select
+                    value={(m.value_type || "number") === "text" ? "text" : "number"}
+                    onChange={(e) => void handleMetricUpdate(m, { value_type: e.target.value as MetricValueType })}
+                    className="ui-select min-h-10 w-36"
+                  >
+                    <option value="number">Sayısal Değer</option>
+                    <option value="text">Yazılı Not</option>
+                  </select>
                   <button 
                     type="button"
                     onClick={() => handleDeleteMetric(m.id)} 
@@ -622,7 +818,7 @@ export default function SahaTestleriFinal() {
                     <Trash2 size={16} aria-hidden />
                   </button>
                 </div>
-              ))}
+              )})}
             </div>
 
             <div className="bg-white/5 p-4 rounded-xl space-y-3 min-w-0">
@@ -633,10 +829,18 @@ export default function SahaTestleriFinal() {
                   value={newMetric.name} onChange={e => setNewMetric({...newMetric, name: e.target.value})}
                 />
                 <input 
-                  placeholder="Birim (sn, cm, kg)" 
+                  placeholder={newMetric.valueType === "text" ? "Birim (opsiyonel)" : "Birim (sn, cm, kg)"} 
                   className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
                   value={newMetric.unit} onChange={e => setNewMetric({...newMetric, unit: e.target.value})}
                 />
+                <select
+                  className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                  value={newMetric.valueType}
+                  onChange={(e) => setNewMetric({ ...newMetric, valueType: e.target.value as MetricValueType })}
+                >
+                  <option value="number">Sayısal Değer</option>
+                  <option value="text">Yazılı Not / Gözlem</option>
+                </select>
                 <button 
                   type="button"
                   onClick={handleAddMetric} 

@@ -38,7 +38,7 @@ function CoachProfilePageInner() {
       try {
         const orgRes = await resolveOrganizationIdForCoachAdminDetail(orgFromQuery || null);
         if ("error" in orgRes) {
-          setError(orgRes.error ?? "Profil alinamadi.");
+          setError(orgRes.error ?? "Profil alınamadı.");
           return;
         }
         const orgId = orgRes.organizationId;
@@ -74,6 +74,15 @@ function CoachProfilePageInner() {
 
   const pastLessons = useMemo(() => lessons.filter((l) => l.status === "past"), [lessons]);
   const upcomingLessons = useMemo(() => lessons.filter((l) => l.status === "upcoming"), [lessons]);
+  const todayLessons = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    return lessons.filter((lesson) => {
+      const at = new Date(lesson.startTime).getTime();
+      return at >= start && at <= end;
+    });
+  }, [lessons]);
 
   async function handleProfileSave(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +107,7 @@ function CoachProfilePageInner() {
       );
       setProfileMessage("Koç bilgileri güncellendi.");
     } else {
-      setProfileMessage(result?.error || "Profil guncellenemedi.");
+      setProfileMessage(result?.error || "Profil güncellenemedi.");
     }
     setProfileSaving(false);
   }
@@ -109,9 +118,9 @@ function CoachProfilePageInner() {
     const result = await updateCoachPermissions(coach.id, { [key]: value });
     if (result?.success) {
       setPermissions((prev) => ({ ...prev, [key]: value }));
-      setPermissionMessage("Yetkiler guncellendi.");
+      setPermissionMessage("Yetkiler güncellendi.");
     } else {
-      setPermissionMessage(result?.error || "Yetki guncellenemedi.");
+      setPermissionMessage(result?.error || "Yetki güncellenemedi.");
     }
   }
 
@@ -119,7 +128,7 @@ function CoachProfilePageInner() {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
-        <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koç Profili Yükleniyor...</p>
+        <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koç profili yükleniyor...</p>
       </div>
     );
   }
@@ -158,14 +167,14 @@ function CoachProfilePageInner() {
             <div className="min-w-0">
               <h1 className="text-2xl sm:text-3xl font-black italic uppercase text-white tracking-tighter break-words">{coach.fullName}</h1>
               <p className="text-[10px] text-gray-500 font-bold italic break-all">{coach.email}</p>
-              <p className="text-[9px] text-gray-600 font-bold mt-1 break-words">E-posta giris adresi buradan degismez; sadece goruntuleme.</p>
+              <p className="text-[9px] text-gray-600 font-bold mt-1 break-words">E-posta giriş adresi buradan değişmez; sadece görüntüleme.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase min-w-0">
             <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300 break-all max-w-full">{coach.phone}</span>
             <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300 break-words max-w-full">{coach.expertise}</span>
             <span className={`px-3 py-1 rounded-xl border ${coach.isActive ? "text-green-400 border-green-500/20 bg-green-500/10" : "text-red-400 border-red-500/20 bg-red-500/10"}`}>
-              {coach.isActive ? "AKTIF" : "PASIF"}
+              {coach.isActive ? "Aktif" : "Pasif"}
             </span>
             <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-400">
               {coach.createdAt ? new Date(coach.createdAt).toLocaleDateString("tr-TR") : "-"}
@@ -201,11 +210,11 @@ function CoachProfilePageInner() {
             />
           </div>
           <div className="space-y-1 min-w-0">
-            <label className="text-[9px] text-gray-500 font-black uppercase">Uzmanlik</label>
+            <label className="text-[9px] text-gray-500 font-black uppercase">Uzmanlık</label>
             <input
               value={profileForm.specialization}
               onChange={(e) => setProfileForm((p) => ({ ...p, specialization: e.target.value }))}
-              placeholder="Orn. Atletik performans"
+              placeholder="Örn. Atletik performans"
               className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[#7c3aed]/60"
             />
           </div>
@@ -215,7 +224,7 @@ function CoachProfilePageInner() {
               disabled={profileSaving}
               className="min-h-11 w-full touch-manipulation rounded-xl bg-[#7c3aed] px-5 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50 sm:w-auto sm:hover:bg-[#6d28d9]"
             >
-              {profileSaving ? "Kaydediliyor..." : "Profili kaydet"}
+              {profileSaving ? "Kaydediliyor..." : "Profili Kaydet"}
             </button>
           </div>
         </form>
@@ -223,11 +232,16 @@ function CoachProfilePageInner() {
 
       <CoachAccountLifecyclePanel coachId={coach.id} coachName={coach.fullName} isActive={coach.isActive} />
 
-      <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
+      <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-4">
+        <SummaryCard label="Bugünkü Ders" value={todayLessons.length} />
         <SummaryCard label="Toplam Ders" value={lessons.length} />
         <SummaryCard label="Geçmiş Ders" value={pastLessons.length} />
         <SummaryCard label="Yaklaşan Ders" value={upcomingLessons.length} />
       </section>
+
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        Sayaçlar grup + özel ders toplamıdır. İptal edilen dersler hariç tutulur.
+      </p>
 
       <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Yetkiler</h3>
@@ -269,9 +283,13 @@ function CoachProfilePageInner() {
       </section>
 
       <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
-        <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Katildigi Dersler</h3>
+        <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Geçmiş Dersler</h3>
         {pastLessons.length === 0 ? (
-          <EmptyState text="Geçmiş ders kaydı bulunmuyor." />
+          <EmptyState
+            description="Geçmiş ders kaydı bulunmuyor."
+            reason="Koç için tamamlanan ders planı henüz oluşmamış olabilir."
+            primary={{ label: "Antrenman planına git", href: "/antrenman-yonetimi" }}
+          />
         ) : (
           <div className="grid gap-3">
             {pastLessons.map((lesson) => (
@@ -282,9 +300,14 @@ function CoachProfilePageInner() {
       </section>
 
       <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
-        <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Katilacagi Dersler</h3>
+        <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Yaklaşan Dersler</h3>
         {upcomingLessons.length === 0 ? (
-          <EmptyState text="Yaklaşan ders kaydı bulunmuyor." />
+          <EmptyState
+            description="Yaklaşan ders kaydı bulunmuyor."
+            reason="İleri tarihli planlama yapılmamış veya filtrelenen kayıt kalmamış olabilir."
+            primary={{ label: "Planlama ekranına git", href: "/haftalik-ders-programi" }}
+            secondary={{ label: "Ders yönetimi", href: "/antrenman-yonetimi" }}
+          />
         ) : (
           <div className="grid gap-3">
             {upcomingLessons.map((lesson) => (
@@ -299,7 +322,7 @@ function CoachProfilePageInner() {
           href="/antrenman-yonetimi"
           className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white sm:w-auto sm:hover:bg-[#6d28d9]"
         >
-          Antrenman Planina Git
+          Antrenman Planına Git
         </Link>
       </section>
     </div>
@@ -330,10 +353,42 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+function EmptyState({
+  description,
+  reason,
+  primary,
+  secondary,
+}: {
+  description: string;
+  reason?: string;
+  primary?: { label: string; href: string };
+  secondary?: { label: string; href: string };
+}) {
   return (
-    <div className="py-10 text-center border border-dashed border-white/10 rounded-2xl">
-      <p className="text-gray-500 font-black italic uppercase text-[10px] tracking-widest">{text}</p>
+    <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center">
+      <p className="text-[11px] font-black uppercase tracking-wide text-gray-300">Kayıt bulunamadı</p>
+      <p className="mt-1 text-[11px] font-semibold text-gray-500">{description}</p>
+      {reason ? <p className="mt-2 text-[10px] font-semibold text-gray-600">{reason}</p> : null}
+      {primary || secondary ? (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          {primary ? (
+            <Link
+              href={primary.href}
+              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-wide text-white"
+            >
+              {primary.label}
+            </Link>
+          ) : null}
+          {secondary ? (
+            <Link
+              href={secondary.href}
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/15 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300"
+            >
+              {secondary.label}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -350,7 +405,7 @@ function LessonRow({ lesson }: { lesson: CoachLesson }) {
         </div>
       </div>
       <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${lesson.status === "past" ? "bg-white/5 text-gray-400" : "bg-[#7c3aed]/10 text-[#c4b5fd]"}`}>
-        {lesson.status === "past" ? "GECMIS" : "YAKLASAN"}
+        {lesson.status === "past" ? "Geçmiş" : "Yaklaşan"}
       </span>
     </div>
   );

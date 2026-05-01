@@ -64,13 +64,16 @@ export interface TestDefinitionRow {
   name: string;
   unit: string;
   category?: string | null;
+  value_type?: "number" | "text" | null;
+  sort_order?: number | null;
   created_at?: string | null;
 }
 
 export interface AthleticResultRow {
   profile_id: string;
   test_id: string;
-  value: number;
+  value: number | null;
+  value_text?: string | null;
   test_date: string;
 }
 

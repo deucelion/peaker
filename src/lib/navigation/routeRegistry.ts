@@ -39,6 +39,7 @@ export const PATHS = {
   notlarHaftalikProgram: "/notlar-haftalik-program",
   ozelDersPaketleri: "/ozel-ders-paketleri",
   finans: "/finans",
+  muhasebeFinans: "/muhasebe-finans",
   sporcuFinans: "/sporcu/finans",
   koclar: "/koclar",
   bildirimler: "/bildirimler",
@@ -64,7 +65,7 @@ export const SPORCU_ACCOUNT_INFO_ROUTE = PATHS.athleteAccount;
 export const SUPER_ADMIN_EXCLUSIVE_PREFIXES = [PATHS.superAdmin, PATHS.sistemSaglik] as const;
 
 /** Yalnızca organizasyon admini */
-export const ADMIN_ONLY_PREFIXES = [PATHS.koclar] as const;
+export const ADMIN_ONLY_PREFIXES = [PATHS.koclar, PATHS.muhasebeFinans] as const;
 
 /** Yönetim & analiz: admin + coach (coach için proxy'de ek izin kontrolleri var) */
 export const MANAGEMENT_ROUTE_PREFIXES = [
@@ -115,6 +116,12 @@ export function isAthleteManagementProfilePath(pathname: string): boolean {
   return new RegExp(`^${PATHS.sporcu}/${UUID_V4}$`, "i").test(p);
 }
 
+/** Sporcu paket detay yolu: /ozel-ders-paketleri/<uuid> */
+export function isPrivateLessonPackageDetailPath(pathname: string): boolean {
+  const p = normalizePathname(pathname);
+  return new RegExp(`^${PATHS.ozelDersPaketleri}/${UUID_V4}$`, "i").test(p);
+}
+
 export function matchesPathPrefix(pathname: string, base: string): boolean {
   const p = normalizePathname(pathname);
   const b = normalizePathname(base);
@@ -158,6 +165,7 @@ export const ATHLETE_ROUTE_PERMISSION_RULES: readonly AthleteRoutePermissionRule
   { path: PATHS.sporcuSabahRaporu, match: "prefix", permission: "can_view_morning_report" },
   { path: PATHS.programlarim, match: "exact", permission: "can_view_programs" },
   { path: PATHS.ozelDersPaketlerim, match: "exact", permission: "can_view_programs" },
+  { path: PATHS.ozelDersPaketleri, match: "prefix", permission: "can_view_programs" },
   { path: PATHS.sporcuFinans, match: "exact", permission: "can_view_financial_status" },
   { path: PATHS.takvim, match: "exact", permission: "can_view_calendar" },
   { path: PATHS.bildirimler, match: "exact", permission: "can_view_notifications" },

@@ -7,6 +7,7 @@ import { Calendar, Loader2, Plus, Search, Users } from "lucide-react";
 import Notification from "@/components/Notification";
 import { createLesson } from "@/lib/actions/lessonActions";
 import { listCoachDayLessonsSnapshot, listLessonsSnapshot } from "@/lib/actions/snapshotActions";
+import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import type { Lesson } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
@@ -44,6 +45,10 @@ export default function LessonsPage() {
   const [coaches, setCoaches] = useState<CoachOption[]>([]);
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [coachDayLessons, setCoachDayLessons] = useState<CoachLessonPreview[]>([]);
+  const [locationOptions, setLocationOptions] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [newLocationName, setNewLocationName] = useState("");
+  const [newLocationColor, setNewLocationColor] = useState("#6b7280");
+  const [locationBusy, setLocationBusy] = useState(false);
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
   const [athleteSearch, setAthleteSearch] = useState("");
   const [form, setForm] = useState({
@@ -63,6 +68,7 @@ export default function LessonsPage() {
     setLoading(true);
     setError(null);
     const snapshot = await listLessonsSnapshot(1, 200);
+    const locationRes = await listLocationsForActor();
     if ("error" in snapshot) {
       setError(snapshot.error ?? "Veri alınamadı.");
       setLoading(false);
@@ -79,6 +85,13 @@ export default function LessonsPage() {
     setAthletes(
       athleteRows.filter((a) => profileRowIsActive(a.is_active)).map(({ id, full_name }) => ({ id, full_name }))
     );
+    if (!("error" in locationRes)) {
+      const nextLocations = (locationRes.locations || []).map((row) => ({ id: row.id, name: row.name, color: row.color }));
+      setLocationOptions(nextLocations);
+      if (nextLocations.length > 0) {
+        setForm((prev) => ({ ...prev, location: prev.location || nextLocations[0].name }));
+      }
+    }
 
     if (resolvedRole === "coach") {
       setForm((prev) => ({ ...prev, coachId: snapshot.actorUserId }));
@@ -194,6 +207,34 @@ export default function LessonsPage() {
       setMessage(result?.error || "Ders oluşturulamadı.");
     }
     setSaving(false);
+  }
+
+  async function handleCreateLocation() {
+    const name = newLocationName.trim();
+    if (!name) {
+      setMessage("Lokasyon adı zorunludur.");
+      return;
+    }
+    setLocationBusy(true);
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("color", newLocationColor);
+    const res = await createLocationAction(fd);
+    if ("error" in res) {
+      setMessage(res.error || "Lokasyon oluşturulamadı.");
+      setLocationBusy(false);
+      return;
+    }
+    const locationRes = await listLocationsForActor();
+    if (!("error" in locationRes)) {
+      const nextLocations = (locationRes.locations || []).map((row) => ({ id: row.id, name: row.name, color: row.color }));
+      setLocationOptions(nextLocations);
+      const created = nextLocations.find((loc) => loc.name.toLocaleLowerCase("tr-TR") === name.toLocaleLowerCase("tr-TR"));
+      if (created) setForm((prev) => ({ ...prev, location: created.name }));
+    }
+    setNewLocationName("");
+    setMessage("Lokasyon oluşturuldu.");
+    setLocationBusy(false);
   }
 
   if (loading) {
@@ -322,14 +363,46 @@ export default function LessonsPage() {
               </div>
               <div className="ui-field sm:col-span-2 lg:col-span-2">
                 <label className="ui-label">Lokasyon</label>
-                <input
-                  required
-                  value={form.location}
-                  onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                  placeholder="Ana saha, salon…"
-                  className="ui-input"
-                />
+                {locationOptions.length > 0 ? (
+                  <select
+                    required
+                    value={form.location}
+                    onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+                    className="ui-select"
+                  >
+                    {locationOptions.map((locationRow) => (
+                      <option key={locationRow.id} value={locationRow.name}>
+                        {locationRow.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100">
+                    Kayıtlı lokasyon yok. Aşağıdan yeni lokasyon ekleyin.
+                  </p>
+                )}
               </div>
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">Lokasyon ekle</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_120px_auto]">
+              <input
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+                placeholder="Örn. Ana Salon"
+                className="ui-input"
+              />
+              <input
+                type="color"
+                value={newLocationColor}
+                onChange={(e) => setNewLocationColor(e.target.value)}
+                className="ui-input h-11 p-1"
+              />
+              <button type="button" onClick={() => void handleCreateLocation()} disabled={locationBusy} className="ui-btn-ghost min-h-11 px-4">
+                {locationBusy ? "Ekleniyor..." : "Lokasyon ekle"}
+              </button>
             </div>
           </section>
 

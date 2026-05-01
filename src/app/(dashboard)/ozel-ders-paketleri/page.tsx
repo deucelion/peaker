@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, PlusCircle, UserRound, Package, CircleDollarSign, ChevronDown, Check, X } from "lucide-react";
 import Notification from "@/components/Notification";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import { createPrivateLessonPackage, listPrivateLessonFormOptions, listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import type { PrivateLessonPackage } from "@/lib/types";
 import { PackageCard } from "./_components/PackageCard";
@@ -528,14 +529,14 @@ function PackageList({
       </h2>
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center sm:py-10">
-          <p className="text-[11px] font-bold tracking-wide text-gray-500">{emptyText}</p>
-          <button
-            type="button"
-            onClick={onCreate}
-            className="mt-4 inline-flex min-h-11 items-center justify-center text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
-          >
-            Yeni paket oluştur →
-          </button>
+          <EmptyStateCard
+            title="Kayıt bulunamadı"
+            description={emptyText}
+            reason="Seçili görünümde listelenecek paket kaydı henüz oluşmamış olabilir."
+            primaryAction={{ label: "Yeni paket oluştur", onClick: onCreate }}
+            secondaryAction={{ label: "Ders yönetimine git", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
+            compact
+          />
         </div>
       ) : (
         <div className="grid gap-4 sm:gap-5">

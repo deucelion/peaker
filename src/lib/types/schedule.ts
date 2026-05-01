@@ -20,6 +20,7 @@ export interface WeeklyLessonScheduleItem {
   startsAt: string;
   endsAt: string;
   location: string | null;
+  locationColor: string | null;
   note: string | null;
   detailHref: string;
   status: string;

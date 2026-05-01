@@ -25,7 +25,7 @@ export default function CoachAccountLifecyclePanel({ coachId, coachName, isActiv
         setError(res.error);
         return;
       }
-      setMessage(`${label} tamamlandi.`);
+      setMessage(`${label} tamamlandı.`);
       router.refresh();
     });
   }
@@ -61,19 +61,19 @@ export default function CoachAccountLifecyclePanel({ coachId, coachName, isActiv
             }}
             className="min-h-11 w-full sm:w-auto rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-[10px] font-black uppercase text-amber-200 sm:hover:bg-amber-500/15 disabled:opacity-40 touch-manipulation"
           >
-            Hesabi pasife al
+            Hesabı pasife al
           </button>
         ) : (
           <button
             type="button"
             disabled={pending}
             onClick={() => {
-              if (!window.confirm(`${coachName} hesabini tekrar aktif yapmak istiyor musunuz?`)) return;
+              if (!window.confirm(`${coachName} hesabını tekrar aktif yapmak istiyor musunuz?`)) return;
               run("Aktifleştirme", () => reactivateCoachAction(coachId));
             }}
             className="min-h-11 w-full sm:w-auto rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-[10px] font-black uppercase text-emerald-200 sm:hover:bg-emerald-500/15 disabled:opacity-40 touch-manipulation"
           >
-            Hesabi aktif et
+            Hesabı aktif et
           </button>
         )}
       </div>

@@ -87,6 +87,8 @@ type WeeklyScheduleFilters = {
   location?: string;
 };
 
+type LocationColorRow = { name: string | null; color: string | null };
+
 type GroupScheduleRow = {
   id: string;
   title: string | null;
@@ -148,6 +150,20 @@ export async function listWeeklyLessonScheduleSnapshot(
   const weekStartIso = getWeekStartMondayIso(filters.weekStart);
   const weekEndIso = getWeekEndExclusiveIso(weekStartIso);
   const locationFilter = filters.location?.trim() || "";
+  const locationColorByName = new Map<string, string>();
+
+  const { data: locationRows, error: locationsErr } = await adminClient
+    .from("locations")
+    .select("name, color")
+    .eq("organization_id", actor.organizationId);
+  if (!locationsErr) {
+    for (const row of (locationRows || []) as LocationColorRow[]) {
+      const name = (row.name || "").trim().toLocaleLowerCase("tr-TR");
+      const color = (row.color || "").trim();
+      if (!name || !color) continue;
+      locationColorByName.set(name, color);
+    }
+  }
 
   const { data: coachRows, error: coachErr } = await adminClient
     .from("profiles")
@@ -207,6 +223,9 @@ export async function listWeeklyLessonScheduleSnapshot(
           startsAt: row.start_time,
           endsAt: row.end_time,
           location: row.location?.trim() || null,
+          locationColor: row.location?.trim()
+            ? (locationColorByName.get(row.location.trim().toLocaleLowerCase("tr-TR")) ?? null)
+            : null,
           note: row.description?.trim() || null,
           detailHref: `${PATHS.dersler}/${row.id}`,
           status: row.status || "scheduled",
@@ -251,6 +270,9 @@ export async function listWeeklyLessonScheduleSnapshot(
           startsAt: row.starts_at,
           endsAt: row.ends_at,
           location: row.location?.trim() || null,
+          locationColor: row.location?.trim()
+            ? (locationColorByName.get(row.location.trim().toLocaleLowerCase("tr-TR")) ?? null)
+            : null,
           note: row.note?.trim() || null,
           detailHref: `${PATHS.ozelDersPaketleri}/${row.package_id}`,
           status: row.status || "planned",
@@ -288,19 +310,38 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
     actor.role === "coach" ? await getCoachPermissions(actor.id, actor.organizationId) : DEFAULT_COACH_PERMISSIONS;
   const pager = normalizePagination(page, pageSize, 200);
 
+  let lessonsQuery = adminClient
+    .from("training_schedule")
+    .select("*", { count: "exact" })
+    .eq("organization_id", actor.organizationId)
+    .order("start_time", { ascending: false })
+    .range(pager.from, pager.to);
+  if (actor.role === "coach" && !permissions.can_view_all_organization_lessons) {
+    lessonsQuery = lessonsQuery.eq("coach_id", actor.id);
+  }
+
+  let coachesQuery = adminClient
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .eq("organization_id", actor.organizationId)
+    .order("full_name");
+  if (actor.role === "coach" && !permissions.can_view_all_organization_lessons) {
+    coachesQuery = coachesQuery.eq("id", actor.id);
+  }
+
+  let athletesQuery = adminClient
+    .from("profiles")
+    .select("id, full_name, email, role, is_active")
+    .eq("organization_id", actor.organizationId)
+    .order("full_name");
+  if (actor.role === "coach" && !permissions.can_view_all_athletes) {
+    athletesQuery = athletesQuery.eq("id", actor.id);
+  }
+
   const [lessonRes, coachRes, athleteRes] = await Promise.all([
-    adminClient
-      .from("training_schedule")
-      .select("*", { count: "exact" })
-      .eq("organization_id", actor.organizationId)
-      .order("start_time", { ascending: false })
-      .range(pager.from, pager.to),
-    adminClient.from("profiles").select("id, full_name, email, role").eq("organization_id", actor.organizationId).order("full_name"),
-    adminClient
-      .from("profiles")
-      .select("id, full_name, email, role, is_active")
-      .eq("organization_id", actor.organizationId)
-      .order("full_name"),
+    lessonsQuery,
+    coachesQuery,
+    athletesQuery,
   ]);
 
   if (lessonRes.error) return { error: `Dersler alinamadi: ${lessonRes.error.message}` };

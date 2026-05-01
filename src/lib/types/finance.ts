@@ -8,8 +8,8 @@ export interface FinanceStatusSummary {
   label:
     | "Ödeme Tamamlandı"
     | "Ödeme Bekleniyor"
-    | "Kısmi Ödeme Var"
-    | "Gecikmiş Ödeme Var"
+    | "Kısmi Ödeme"
+    | "Gecikmiş Ödeme"
     | "Borç Bulunmuyor";
   nextDueDate: string | null;
   nextAmount: number | null;

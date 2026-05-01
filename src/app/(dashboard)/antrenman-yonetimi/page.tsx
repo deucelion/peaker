@@ -16,19 +16,11 @@ import {
   Search,
 } from "lucide-react";
 import { listAttendanceSnapshot, listLessonsSnapshot, listTrainingParticipantsSnapshot } from "@/lib/actions/snapshotActions";
-import {
-  getPrivateLessonPackageDetail,
-  listPrivateLessonPackagesForManagement,
-  updatePrivateLessonPackageCore,
-} from "@/lib/actions/privateLessonPackageActions";
-import {
-  cancelPrivateLessonSession,
-  completePrivateLessonSession,
-  listPrivateLessonSessionsForPackage,
-} from "@/lib/actions/privateLessonSessionActions";
+import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import type { TrainingParticipantRow, TrainingScheduleRow } from "@/types/domain";
 import type { PrivateLessonPackage } from "@/lib/types";
 import Notification from "@/components/Notification";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import { setAttendanceStatus } from "@/lib/actions/attendanceActions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { cancelLesson, getLessonManagementDetail, hardDeleteLesson } from "@/lib/actions/lessonActions";
@@ -137,7 +129,12 @@ export default function AntrenmanYonetimi() {
   const moduleView = useMemo(() => {
     if (rawModuleView === "ders-operasyonu") return "grup-dersleri";
     if (rawModuleView === "ozel-ders-servisi") return "ozel-dersler";
-    if (rawModuleView === "grup-dersleri" || rawModuleView === "ozel-dersler" || rawModuleView === "haftalik-takvim") {
+    if (
+      rawModuleView === "grup-dersleri" ||
+      rawModuleView === "ozel-dersler" ||
+      rawModuleView === "haftalik-takvim" ||
+      rawModuleView === "notlar"
+    ) {
       return rawModuleView;
     }
     return "haftalik-takvim";
@@ -164,6 +161,7 @@ export default function AntrenmanYonetimi() {
     { key: "haftalik-takvim", label: "Haftalık Takvim", href: "/antrenman-yonetimi?modul=haftalik-takvim&view=takvim" },
     { key: "grup-dersleri", label: "Grup Dersleri", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-listesi" },
     { key: "ozel-dersler", label: "Özel Dersler", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" },
+    { key: "notlar", label: "Notlar", href: "/antrenman-yonetimi?modul=notlar" },
   ] as const;
   const activeWorkspaceView: TrainingWorkspaceView =
     requestedView && VALID_TRAINING_VIEWS.includes(requestedView as TrainingWorkspaceView)
@@ -172,6 +170,8 @@ export default function AntrenmanYonetimi() {
         ? "paket-listesi"
         : moduleView === "grup-dersleri"
           ? "ders-listesi"
+        : moduleView === "notlar"
+          ? "notlar"
           : "takvim";
 
   const moduleContextTabs =
@@ -187,8 +187,9 @@ export default function AntrenmanYonetimi() {
           { key: "ders-listesi", label: "Ders Listesi" },
           { key: "ders-olustur", label: "Ders Oluştur" },
           { key: "yoklama", label: "Yoklama" },
-          { key: "notlar", label: "Notlar" },
           ]
+        : moduleView === "notlar"
+          ? [{ key: "notlar", label: "Notlar" }]
         : [{ key: "takvim", label: "Takvim Operasyonu" }];
 
   useEffect(() => {
@@ -199,6 +200,11 @@ export default function AntrenmanYonetimi() {
       next.set("modul", "haftalik-takvim");
       next.set("view", "takvim");
       router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+      return;
+    }
+    // Geriye uyumluluk: eski "grup dersleri + notlar" çağrıları doğrudan notlar modülüne taşınır.
+    if (moduleView === "grup-dersleri" && requestedView === "notlar") {
+      router.replace("/notlar-haftalik-program", { scroll: false });
     }
   }, [moduleView, requestedView, pathname, router, searchParams]);
 
@@ -309,22 +315,6 @@ export default function AntrenmanYonetimi() {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }
 
-  function openPrivatePackageDetail(packageId: string) {
-    const next = new URLSearchParams(searchParams.toString());
-    next.set("modul", "ozel-dersler");
-    next.set("packageId", packageId);
-    if (!next.get("view")) next.set("view", "paket-listesi");
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-  }
-
-  function closePrivatePackageDetail() {
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("packageId");
-    next.set("modul", "ozel-dersler");
-    if (!next.get("view")) next.set("view", "paket-listesi");
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-  }
-
   // YOKLAMA DURUMUNU GÜNCELLEME
   async function updateAttendance(profileId: string, status: "registered" | "attended" | "missed" | "cancelled") {
     if (!selectedTrainingId) return;
@@ -421,11 +411,10 @@ export default function AntrenmanYonetimi() {
         <PrivateLessonsWorkspaceView
           view={activeWorkspaceView}
           packageId={requestedPackageId}
-          onOpenPackage={openPrivatePackageDetail}
-          onBackToList={closePrivatePackageDetail}
         />
       );
     }
+    if (moduleView === "notlar") return <ProgramNotesPage />;
     if (moduleView === "haftalik-takvim") return <WeeklyLessonSchedulePage />;
     if (activeWorkspaceView === "ders-listesi") {
       return (
@@ -883,14 +872,14 @@ export default function AntrenmanYonetimi() {
                           ? "Tahsilat"
                           : "Paket Yönetimi"
                 }`
+              : moduleView === "notlar"
+                ? "Notlar"
               : `Grup Dersleri · ${
                   activeWorkspaceView === "ders-listesi"
                     ? "Ders Listesi"
                     : activeWorkspaceView === "ders-olustur"
                       ? "Ders Oluştur"
-                      : activeWorkspaceView === "notlar"
-                        ? "Notlar"
-                        : "Yoklama"
+                      : "Yoklama"
                 }`}
           </span>
         </div>
@@ -1286,9 +1275,19 @@ function GroupLessonsWorkspaceListDetail({
       {error ? <div className="mt-3"><Notification message={error} variant="error" /></div> : null}
       <div className="mt-4 grid gap-3">
         {filtered.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-[12px] font-semibold text-gray-500">
-            Listeye uygun ders bulunamadı.
-          </p>
+          <EmptyStateCard
+            title="Kayıt bulunamadı"
+            description="Seçili filtreye uygun ders kaydı bulunamadı."
+            reason="Durum filtresi veya arama metni sonucu daraltmış olabilir."
+            primaryAction={{
+              label: "Filtreleri sıfırla",
+              onClick: () => {
+                setQuery("");
+                setStatusFilter("all");
+              },
+            }}
+            secondaryAction={{ label: "Takvime git", href: "/haftalik-ders-programi" }}
+          />
         ) : (
           filtered.map((lesson) => (
             <div
@@ -1361,45 +1360,14 @@ function GroupLessonsWorkspaceListDetail({
 function PrivateLessonsWorkspaceView({
   view,
   packageId,
-  onOpenPackage,
-  onBackToList,
 }: {
   view: TrainingWorkspaceView;
   packageId: string | null;
-  onOpenPackage: (packageId: string) => void;
-  onBackToList: () => void;
 }) {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<PrivateLessonPackage[]>([]);
-  const [nextPlannedByPackage, setNextPlannedByPackage] = useState<Record<string, string>>({});
-  const [sessionRows, setSessionRows] = useState<Array<{
-    id: string;
-    startsAt: string;
-    endsAt: string;
-    athleteName: string | null;
-    coachName: string | null;
-    coachId: string;
-    packageName: string | null;
-    status: "planned" | "completed" | "cancelled";
-    completedAt: string | null;
-    note: string | null;
-  }>>([]);
-  const [sessionBusyId, setSessionBusyId] = useState<string | null>(null);
-  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [packageDetail, setPackageDetail] = useState<Awaited<ReturnType<typeof getPrivateLessonPackageDetail>> | null>(null);
-  const [coreSaving, setCoreSaving] = useState(false);
-  const [coreMessage, setCoreMessage] = useState<string | null>(null);
-  const [coreForm, setCoreForm] = useState({
-    packageName: "",
-    coachId: "",
-    totalLessons: "1",
-    totalPrice: "0",
-    isActive: true,
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1422,28 +1390,6 @@ function PrivateLessonsWorkspaceView({
     return () => clearTimeout(id);
   }, [load]);
 
-  const loadDetail = useCallback(async (currentPackageId: string) => {
-    setDetailLoading(true);
-    const res = await getPrivateLessonPackageDetail(currentPackageId);
-    if ("error" in res) {
-      setDetailError(res.error || "Paket detayı alınamadı.");
-      setPackageDetail(null);
-    } else {
-      setDetailError(null);
-      setPackageDetail(res);
-    }
-    setDetailLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!packageId) return;
-    const currentPackageId = packageId;
-    const id = setTimeout(() => {
-      void loadDetail(currentPackageId);
-    }, 0);
-    return () => clearTimeout(id);
-  }, [packageId, loadDetail]);
-
   const activeRows = useMemo(() => rows.filter((p) => p.isActive), [rows]);
   const doneRows = useMemo(() => rows.filter((p) => !p.isActive), [rows]);
 
@@ -1459,85 +1405,11 @@ function PrivateLessonsWorkspaceView({
     [rows]
   );
   const selectedPackage = useMemo(() => rows.find((p) => p.id === packageId) || null, [rows, packageId]);
-  const packageDetailData = packageDetail && !("error" in packageDetail) ? packageDetail : null;
   const planDate = searchParams.get("planDate") || "";
   const planTime = searchParams.get("planTime") || "";
   const hasCalendarPrefill = Boolean(planDate && planTime);
-
-  useEffect(() => {
-    if (view !== "paket-listesi") return;
-    const ids = rows.map((r) => r.id);
-    if (ids.length === 0) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void (async () => {
-        const now = Date.now();
-        const entries = await Promise.all(
-          ids.map(async (id) => {
-            const res = await listPrivateLessonSessionsForPackage(id);
-            if ("error" in res) return [id, ""] as const;
-            const planned = (res.sessions || [])
-              .filter((s) => s.status === "planned")
-              .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-            const upcoming = planned.find((s) => new Date(s.startsAt).getTime() >= now) || planned[0];
-            return [id, upcoming?.startsAt || ""] as const;
-          })
-        );
-        if (cancelled) return;
-        setNextPlannedByPackage(Object.fromEntries(entries));
-      })();
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [rows, view]);
-
-  const loadPackageSessions = useCallback(async (pkgId: string) => {
-    const res = await listPrivateLessonSessionsForPackage(pkgId);
-    if ("error" in res) {
-      setSessionRows([]);
-      setSessionMessage(res.error || "Özel ders oturumları alınamadı.");
-      return;
-    }
-    setSessionRows(
-      (res.sessions || []).map((s) => ({
-        id: s.id,
-        startsAt: s.startsAt,
-        endsAt: s.endsAt,
-        athleteName: s.athleteName,
-        coachName: s.coachName,
-        coachId: s.coachId,
-        packageName: s.packageName,
-        status: s.status,
-        completedAt: s.completedAt,
-        note: s.note,
-      }))
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!selectedPackage?.id) return;
-    const id = setTimeout(() => {
-      void loadPackageSessions(selectedPackage.id);
-    }, 0);
-    return () => clearTimeout(id);
-  }, [selectedPackage?.id, loadPackageSessions]);
-
-  useEffect(() => {
-    if (!selectedPackage) return;
-    const id = setTimeout(() => {
-      setCoreForm({
-        packageName: selectedPackage.packageName,
-        coachId: selectedPackage.coachId || "",
-        totalLessons: String(selectedPackage.totalLessons),
-        totalPrice: String(selectedPackage.totalPrice),
-        isActive: selectedPackage.isActive,
-      });
-      setCoreMessage(null);
-    }, 0);
-    return () => clearTimeout(id);
-  }, [selectedPackage]);
+  const detailHrefFor = (pkgId: string) =>
+    `/ozel-ders-paketleri/${pkgId}?from=antrenman-yonetimi&returnView=${encodeURIComponent(view || "paket-listesi")}`;
 
   if (loading) {
     return (
@@ -1558,151 +1430,36 @@ function PrivateLessonsWorkspaceView({
 
   if (selectedPackage) {
     const remainingPayment = Math.max(selectedPackage.totalPrice - selectedPackage.amountPaid, 0);
-    const packageStatus = selectedPackage.isActive ? "Aktif" : "Tamamlandı";
-    const paymentStatusLabel =
-      selectedPackage.paymentStatus === "paid"
-        ? "Ödeme Tamamlandı"
-        : selectedPackage.paymentStatus === "partial"
-          ? "Kısmi Ödeme"
-          : "Ödeme Bekleniyor";
-    const paymentStatusClass =
-      selectedPackage.paymentStatus === "paid"
-        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-        : selectedPackage.paymentStatus === "partial"
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-          : "border-rose-500/40 bg-rose-500/10 text-rose-200";
-    const usagePreview = packageDetailData ? packageDetailData.usageRows.slice(0, 5) : [];
-    const plannedPreview = packageDetailData ? packageDetailData.plannedSessionPreview : [];
-    const plannedCount = packageDetailData ? packageDetailData.plannedPrivateSessionCount : 0;
-    const viewerRole = packageDetailData?.viewerRole || "admin";
-    const viewerId = packageDetailData?.viewerId || "";
-    const isCompletedPackage = selectedPackage.remainingLessons <= 0 || !selectedPackage.isActive;
-    const hasPendingPayment = remainingPayment > 0;
-    const hasUsage = usagePreview.length > 0;
-    const operationAlerts: string[] = [];
-    if (selectedPackage.remainingLessons <= 0) operationAlerts.push("Bu paketin ders hakkı tamamlanmış.");
-    if (hasPendingPayment) operationAlerts.push("Bu pakette tahsilat bekleniyor.");
-    if (plannedCount === 0) operationAlerts.push("Bu paket için planlı ders bulunmuyor.");
-    if (!hasUsage) operationAlerts.push("Henüz kullanım kaydı yok.");
-
-    async function onSaveCoreEdit(e: React.FormEvent) {
-      e.preventDefault();
-      if (!selectedPackage) return;
-      setCoreSaving(true);
-      setCoreMessage(null);
-      const fd = new FormData();
-      fd.append("packageId", selectedPackage.id);
-      fd.append("packageName", coreForm.packageName);
-      fd.append("coachId", coreForm.coachId);
-      fd.append("totalLessons", coreForm.totalLessons);
-      fd.append("totalPrice", coreForm.totalPrice);
-      fd.append("isActive", String(coreForm.isActive));
-      const res = await updatePrivateLessonPackageCore(fd);
-      if ("success" in res && res.success) {
-        setCoreMessage("Paket ayarları güncellendi.");
-        await load();
-        await loadDetail(selectedPackage.id);
-      } else {
-        setCoreMessage(("error" in res && res.error) || "Paket ayarları güncellenemedi.");
-      }
-      setCoreSaving(false);
-    }
-
-    function onResetCoreEdit() {
-      if (!selectedPackage) return;
-      setCoreForm({
-        packageName: selectedPackage.packageName,
-        coachId: selectedPackage.coachId || "",
-        totalLessons: String(selectedPackage.totalLessons),
-        totalPrice: String(selectedPackage.totalPrice),
-        isActive: selectedPackage.isActive,
-      });
-      setCoreMessage(null);
-    }
-
-    async function onCompletePrivateSession(sessionId: string) {
-      if (!selectedPackage) return;
-      const ok = window.confirm("Bu işlem paketten 1 ders düşecektir. Dersi tamamlandı olarak işaretlemek istiyor musunuz?");
-      if (!ok) return;
-      setSessionBusyId(sessionId);
-      setSessionMessage(null);
-      const res = await completePrivateLessonSession(sessionId);
-      if ("success" in res && res.success) {
-        setSessionMessage("Ders yapıldı olarak işlendi. Paket hakkı güncellendi.");
-        await load();
-        await loadDetail(selectedPackage.id);
-        await loadPackageSessions(selectedPackage.id);
-      } else {
-        setSessionMessage(("error" in res && res.error) || "Ders tamamlanamadı.");
-      }
-      setSessionBusyId(null);
-    }
-
-    async function onCancelPrivateSession(sessionId: string) {
-      if (!selectedPackage) return;
-      const ok = window.confirm("Bu planı iptal etmek istediğinize emin misiniz?");
-      if (!ok) return;
-      setSessionBusyId(sessionId);
-      setSessionMessage(null);
-      const res = await cancelPrivateLessonSession(sessionId);
-      if ("success" in res && res.success) {
-        setSessionMessage("Plan iptal edildi.");
-        await load();
-        await loadDetail(selectedPackage.id);
-        await loadPackageSessions(selectedPackage.id);
-      } else {
-        setSessionMessage(("error" in res && res.error) || "Plan iptal edilemedi.");
-      }
-      setSessionBusyId(null);
-    }
+    const returnHref = `/antrenman-yonetimi?modul=ozel-dersler&view=${encodeURIComponent(
+      view || "paket-listesi"
+    )}`;
+    const detailHref = `/ozel-ders-paketleri/${selectedPackage.id}?from=antrenman-yonetimi&returnView=${encodeURIComponent(
+      view || "paket-listesi"
+    )}`;
     return (
       <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={onBackToList}
+          <Link
+            href={returnHref}
             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300"
           >
             <ArrowLeft size={14} aria-hidden />
             Listeye dön
-          </button>
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-            <Link
-              href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=plan${
-                hasCalendarPrefill
-                  ? `&lessonDate=${encodeURIComponent(planDate)}&startClock=${encodeURIComponent(planTime)}`
-                  : ""
-              }`}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-emerald-400/35 bg-emerald-500/20 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-100"
-            >
-              Ders Planla
-            </Link>
-            <Link
-              href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=payments`}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase tracking-wide text-gray-200"
-            >
-              Tahsilat
-            </Link>
-          </div>
+          </Link>
+          <Link
+            href={`${detailHref}${
+              hasCalendarPrefill
+                ? `&tab=plan&lessonDate=${encodeURIComponent(planDate)}&startClock=${encodeURIComponent(planTime)}`
+                : ""
+            }`}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+          >
+            Paket Detayına Git
+          </Link>
         </div>
         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-lg font-black uppercase text-white">{selectedPackage.athleteName}</p>
-              <p className="mt-1 text-[11px] font-semibold text-gray-300">{selectedPackage.packageName}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${
-                selectedPackage.isActive ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-white/15 bg-white/5 text-gray-300"
-              }`}>
-                {packageStatus}
-              </span>
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${paymentStatusClass}`}>
-                {paymentStatusLabel}
-              </span>
-            </div>
-          </div>
-
+          <p className="text-lg font-black uppercase text-white">{selectedPackage.athleteName}</p>
+          <p className="mt-1 text-[11px] font-semibold text-gray-300">{selectedPackage.packageName}</p>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kalan Ders</p>
@@ -1710,7 +1467,9 @@ function PrivateLessonsWorkspaceView({
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kullanılan / Toplam</p>
-              <p className="mt-1 text-[11px] font-semibold text-white">{selectedPackage.usedLessons} / {selectedPackage.totalLessons}</p>
+              <p className="mt-1 text-[11px] font-semibold text-white">
+                {selectedPackage.usedLessons} / {selectedPackage.totalLessons}
+              </p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Koç</p>
@@ -1721,352 +1480,9 @@ function PrivateLessonsWorkspaceView({
               <p className="mt-1 text-[11px] font-semibold text-white">₺{remainingPayment.toLocaleString("tr-TR")}</p>
             </div>
           </div>
-
-          {operationAlerts.length > 0 ? (
-            <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
-              <p className="text-[10px] font-black uppercase tracking-wide text-amber-200">Operasyonel Uyarılar</p>
-              <div className="mt-2 grid gap-1">
-                {operationAlerts.map((alert, idx) => (
-                  <p key={`${idx}-${alert}`} className="text-[11px] font-semibold text-amber-100/90">• {alert}</p>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3 sm:p-4">
-            <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Paket Ayarları</p>
-            <p className="mt-1 text-[10px] font-semibold text-gray-500">Core alanları güvenli kurallarla güncellenir.</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Sporcu (salt okunur)</p>
-                <p className="mt-1 text-[11px] font-semibold text-white">{selectedPackage.athleteName}</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Paket Türü (salt okunur)</p>
-                <p className="mt-1 text-[11px] font-semibold text-white">{selectedPackage.packageType}</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kullanılan Ders (salt okunur)</p>
-                <p className="mt-1 text-[11px] font-semibold text-white">{selectedPackage.usedLessons}</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Ödenen Tutar (salt okunur)</p>
-                <p className="mt-1 text-[11px] font-semibold text-white">₺{selectedPackage.amountPaid.toLocaleString("tr-TR")}</p>
-              </div>
-            </div>
-            <form onSubmit={onSaveCoreEdit} className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Paket Adı</span>
-                <input
-                  value={coreForm.packageName}
-                  onChange={(e) => setCoreForm((prev) => ({ ...prev, packageName: e.target.value }))}
-                  className="ui-input min-h-10"
-                  required
-                />
-              </label>
-              {viewerRole === "admin" ? (
-                <label className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Koç</span>
-                  <select
-                    value={coreForm.coachId}
-                    onChange={(e) => setCoreForm((prev) => ({ ...prev, coachId: e.target.value }))}
-                    className="ui-select min-h-10"
-                  >
-                    <option value="">Koç atanmadı</option>
-                    {rows
-                      .map((r) => ({ id: r.coachId, name: r.coachName }))
-                      .filter((x) => x.id && x.name)
-                      .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i)
-                      .map((coach) => (
-                        <option key={coach.id || ""} value={coach.id || ""}>{coach.name}</option>
-                      ))}
-                  </select>
-                </label>
-              ) : (
-                <label className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Koç</span>
-                  <input value="Siz" readOnly className="ui-input min-h-10 cursor-not-allowed opacity-80" />
-                </label>
-              )}
-              <label className="space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Toplam Ders</span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={coreForm.totalLessons}
-                  onChange={(e) => setCoreForm((prev) => ({ ...prev, totalLessons: e.target.value }))}
-                  className="ui-input min-h-10"
-                  required
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Toplam Ücret</span>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={coreForm.totalPrice}
-                  onChange={(e) => setCoreForm((prev) => ({ ...prev, totalPrice: e.target.value }))}
-                  className="ui-input min-h-10"
-                  required
-                />
-              </label>
-              <label className="space-y-1 sm:col-span-2">
-                <span className="text-[10px] font-black uppercase tracking-wide text-gray-400">Durum</span>
-                <select
-                  value={coreForm.isActive ? "true" : "false"}
-                  onChange={(e) => setCoreForm((prev) => ({ ...prev, isActive: e.target.value === "true" }))}
-                  className="ui-select min-h-10"
-                >
-                  <option value="true">Aktif</option>
-                  <option value="false">Pasif</option>
-                </select>
-              </label>
-              <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="submit"
-                  disabled={coreSaving}
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe] disabled:opacity-50"
-                >
-                  {coreSaving ? "Kaydediliyor..." : "Kaydet"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onResetCoreEdit}
-                  disabled={coreSaving}
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-200 disabled:opacity-50"
-                >
-                  İptal
-                </button>
-              </div>
-            </form>
-            {coreMessage ? (
-              <div className="mt-3">
-                <Notification
-                  message={coreMessage}
-                  variant={coreMessage.toLowerCase().includes("güncellendi") ? "success" : "error"}
-                />
-              </div>
-            ) : null}
-          </div>
-
-          {detailLoading ? (
-            <div className="mt-3 rounded-lg border border-white/10 bg-black/30 px-3 py-4 text-center text-[11px] font-semibold text-gray-400">
-              Paket detay verisi hazırlanıyor…
-            </div>
-          ) : detailError ? (
-            <div className="mt-3"><Notification message={detailError} variant="error" /></div>
-          ) : (
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-lg border border-white/10 bg-black/30 p-3 sm:p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Planlama</p>
-                    <p className="mt-1 text-[10px] font-semibold text-gray-500">Bu paket için planlı ders akışını yönetin.</p>
-                  </div>
-                  <span className="text-[10px] font-semibold text-gray-400">{plannedCount} planlı ders</span>
-                </div>
-                {plannedCount === 0 ? (
-                  <p className="mt-2 rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-500">
-                    Bu paket için henüz planlı ders bulunmuyor.
-                  </p>
-                ) : (
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {plannedPreview.length > 0 ? plannedPreview.map((session) => (
-                      <div key={session.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-300">
-                        {new Date(session.startsAt).toLocaleDateString("tr-TR")} · {new Date(session.startsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    )) : (
-                      <p className="text-[11px] font-semibold text-gray-400">Planlı ders kayıtları detay ekranda görüntülenebilir.</p>
-                    )}
-                  </div>
-                )}
-                <Link
-                  href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=plan`}
-                  className={`mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ${
-                    isCompletedPackage
-                      ? "border-white/15 bg-white/5 text-gray-400"
-                      : "border-emerald-500/30 bg-emerald-500/15 text-emerald-100"
-                  }`}
-                >
-                  {isCompletedPackage ? "Ders Planla (Pasif)" : "Ders Planla"}
-                </Link>
-              </div>
-
-              <div className="rounded-lg border border-white/10 bg-black/30 p-3 sm:p-4">
-                <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Tahsilat</p>
-                <p className="mt-1 text-[10px] font-semibold text-gray-500">Ödeme durumu ve bakiye dengesini izleyin.</p>
-                <p className="mt-2 text-[11px] font-semibold text-gray-300">
-                  Durum: <span className="text-white">{paymentStatusLabel}</span>
-                </p>
-                <p className="mt-1 text-[11px] font-semibold text-gray-400">
-                  Toplam: <span className="text-gray-200">₺{selectedPackage.totalPrice.toLocaleString("tr-TR")}</span> ·
-                  Kalan: <span className="text-gray-200"> ₺{remainingPayment.toLocaleString("tr-TR")}</span>
-                </p>
-                <Link
-                  href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=payments`}
-                  className={`mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ${
-                    hasPendingPayment
-                      ? "border-amber-500/40 bg-amber-500/20 text-amber-100"
-                      : "border-white/15 bg-white/5 text-gray-200"
-                  }`}
-                >
-                  Tahsilat Ekle
-                </Link>
-                {hasPendingPayment ? (
-                  <p className="mt-2 text-[10px] font-semibold text-amber-100">
-                    Kalan ödeme bulunduğu için tahsilat adımı önceliklidir.
-                  </p>
-                ) : (
-                  <p className="mt-2 text-[10px] font-semibold text-gray-500">
-                    Tahsilat tamam; yalnızca yeni ödeme kaydı gerektiğinde bu adımı kullanın.
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-white/10 bg-black/30 p-3 sm:p-4">
-                <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Kullanım Geçmişi</p>
-                <p className="mt-1 text-[10px] font-semibold text-gray-500">İşlenen ders kayıtlarını kısa geçmişte inceleyin.</p>
-                {usagePreview.length === 0 ? (
-                  <p className="mt-2 rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-500">
-                    Bu paket için henüz kullanım kaydı bulunmuyor. Ders işlendiğinde burada geçmiş oluşur.
-                  </p>
-                ) : (
-                  <div className="mt-2 grid gap-2">
-                    {usagePreview.map((usage) => (
-                      <div key={usage.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-300">
-                        {new Date(usage.usedAt).toLocaleDateString("tr-TR")} · {new Date(usage.usedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                        {usage.note ? <span className="text-gray-500"> · {usage.note}</span> : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Link
-                  href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=usage`}
-                  className="mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
-                >
-                  Kullanım Detayı
-                </Link>
-              </div>
-
-              <div className="rounded-lg border border-white/10 bg-black/30 p-3 sm:p-4">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Özel Ders Yoklama</p>
-                  <p className="text-[10px] font-semibold text-gray-500">
-                    Ders gerçekleşti / sporcu katılımı / koç onayı görünümü
-                  </p>
-                </div>
-                {sessionMessage ? (
-                  <div className="mt-2">
-                    <Notification
-                      message={sessionMessage}
-                      variant={sessionMessage.toLowerCase().includes("işlendi") || sessionMessage.toLowerCase().includes("iptal edildi") ? "success" : "error"}
-                    />
-                  </div>
-                ) : null}
-                {sessionRows.length === 0 ? (
-                  <p className="mt-2 rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-500">
-                    Özel ders yoklaması için planlı veya geçmiş oturum bulunmuyor.
-                  </p>
-                ) : (
-                  <div className="mt-2 grid gap-2">
-                    {sessionRows.map((s) => {
-                      const canManage =
-                        viewerRole === "admin" || (viewerRole === "coach" && s.coachId === viewerId);
-                      const statusTone =
-                        s.status === "completed"
-                          ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
-                          : s.status === "cancelled"
-                            ? "border-rose-500/35 bg-rose-500/10 text-rose-200"
-                            : "border-amber-500/35 bg-amber-500/10 text-amber-200";
-                      return (
-                        <div key={s.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-[11px] font-semibold text-gray-300">
-                              <p className="text-gray-100">
-                                {new Date(s.startsAt).toLocaleDateString("tr-TR")} · {new Date(s.startsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                              </p>
-                              <p className="mt-1 text-gray-400">
-                                Sporcu: {s.athleteName || "—"} · Koç: {s.coachName || "—"} · Paket: {s.packageName || selectedPackage.packageName}
-                              </p>
-                            </div>
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${statusTone}`}>
-                              {s.status === "completed" ? "Tamamlandı" : s.status === "cancelled" ? "İptal Edildi" : "Planlandı"}
-                            </span>
-                          </div>
-                          <div className="mt-2 grid gap-1 text-[10px] font-semibold text-gray-400 sm:grid-cols-3">
-                            <p>Ders Gerçekleşti: <span className="text-gray-200">{s.status === "completed" ? "Evet" : "Hayır"}</span></p>
-                            <p>Sporcu Katıldı: <span className="text-gray-200">{s.status === "completed" ? "Evet (ders yapıldı)" : "Bekliyor"}</span></p>
-                            <p>Koç Onayı: <span className="text-gray-200">{s.status === "completed" ? "Var" : "Bekliyor"}</span></p>
-                          </div>
-                          {s.status === "completed" ? (
-                            <p className="mt-1 text-[10px] font-semibold text-gray-500">
-                              İşlem tarihi: {s.completedAt ? new Date(s.completedAt).toLocaleString("tr-TR") : "—"} ·
-                              Kullanım kaydı: <Link href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=usage`} className="text-[#c4b5fd]">Kullanım Geçmişi</Link>
-                            </p>
-                          ) : null}
-                          {s.note ? <p className="mt-1 text-[10px] font-semibold text-gray-500">Not: {s.note}</p> : null}
-                          {s.status === "planned" ? (
-                            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                              <button
-                                type="button"
-                                disabled={!canManage || sessionBusyId === s.id}
-                                onClick={() => void onCompletePrivateSession(s.id)}
-                                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-emerald-500/35 bg-emerald-500/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-100 disabled:opacity-40"
-                              >
-                                Ders Yapıldı
-                              </button>
-                              <button
-                                type="button"
-                                disabled={!canManage || sessionBusyId === s.id}
-                                onClick={() => void onCancelPrivateSession(s.id)}
-                                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-rose-500/35 bg-rose-500/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-rose-100 disabled:opacity-40"
-                              >
-                                İptal
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-            <Link
-              href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=plan`}
-              className={`inline-flex min-h-10 items-center justify-center rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                isCompletedPackage
-                  ? "border-white/15 bg-white/5 text-gray-400"
-                  : !hasPendingPayment
-                    ? "border-emerald-400/35 bg-emerald-500/20 text-emerald-100"
-                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
-              }`}
-            >
-              {isCompletedPackage ? "Ders Planla (Pasif)" : "Ders Planla"}
-            </Link>
-            <Link
-              href={`/ozel-ders-paketleri/${selectedPackage.id}?tab=payments`}
-              className={`inline-flex min-h-10 items-center justify-center rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                hasPendingPayment
-                  ? "border-amber-500/40 bg-amber-500/20 text-amber-100"
-                  : "border-white/15 bg-white/5 text-gray-200"
-              }`}
-            >
-              Tahsilat
-            </Link>
-            <button
-              type="button"
-              onClick={onBackToList}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-200"
-            >
-              Listeye Dön
-            </button>
-          </div>
+          <p className="mt-3 text-[11px] font-semibold text-gray-500">
+            Bu alan yalnızca özet görünümüdür. Planlama, kullanım, tahsilat ve paket ayarları için paket detay ekranını kullanın.
+          </p>
         </div>
       </section>
     );
@@ -2084,20 +1500,26 @@ function PrivateLessonsWorkspaceView({
         ) : null}
         <div className="mt-4 grid gap-3">
           {activeRows.length === 0 ? (
-            <p className="text-[11px] font-bold text-gray-500">Aktif paket bulunmuyor.</p>
+            <EmptyStateCard
+              title="Kayıt bulunamadı"
+              description="Planlama için aktif özel ders paketi bulunamadı."
+              reason="Henüz paket oluşturulmamış veya tüm paketler tamamlanmış olabilir."
+              primaryAction={{ label: "Paket oluştur", href: "/ozel-ders-paketleri" }}
+              secondaryAction={{ label: "Paket listesi", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
+              compact
+            />
           ) : (
             activeRows.map((pkg) => (
               <div key={pkg.id} className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300">
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">{pkg.athleteName} · Koç: {pkg.coachName || "—"}</p>
                 <p className="mt-1 text-gray-500">Kalan ders: {pkg.remainingLessons} / {pkg.totalLessons}</p>
-                <button
-                  type="button"
-                  onClick={() => onOpenPackage(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-100"
+                <Link
+                  href={detailHrefFor(pkg.id)}
+                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
                 >
-                  Pakete geç
-                </button>
+                  Paket Detayına Git
+                </Link>
               </div>
             ))
           )}
@@ -2113,20 +1535,26 @@ function PrivateLessonsWorkspaceView({
         <p className="mt-1 text-[11px] font-semibold text-gray-500">Paket kullanım yoğunluğunu ve kalan ders dengesini izleyin.</p>
         <div className="mt-4 grid gap-3">
           {usageRows.length === 0 ? (
-            <p className="text-[11px] font-bold text-gray-500">Kullanım verisi bulunmuyor.</p>
+            <EmptyStateCard
+              title="Kayıt bulunamadı"
+              description="Kullanım görünümünde listelenecek paket verisi bulunamadı."
+              reason="Özel ders paketi olmadığı için kullanım kaydı oluşmamış olabilir."
+              primaryAction={{ label: "Paket oluştur", href: "/ozel-ders-paketleri" }}
+              secondaryAction={{ label: "Paket listesi", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
+              compact
+            />
           ) : (
             usageRows.map((pkg) => (
               <div key={pkg.id} className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300">
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">{pkg.athleteName} · Kullanılan: {pkg.usedLessons}</p>
                 <p className="mt-1 text-gray-500">Kalan: {pkg.remainingLessons} · Toplam: {pkg.totalLessons}</p>
-                <button
-                  type="button"
-                  onClick={() => onOpenPackage(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
+                <Link
+                  href={detailHrefFor(pkg.id)}
+                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
                 >
-                  Pakete geç
-                </button>
+                  Paket Detayına Git
+                </Link>
               </div>
             ))
           )}
@@ -2142,20 +1570,26 @@ function PrivateLessonsWorkspaceView({
         <p className="mt-1 text-[11px] font-semibold text-gray-500">Paket bazlı tahsilat durumunu ve kalan bakiyeyi takip edin.</p>
         <div className="mt-4 grid gap-3">
           {paymentRows.length === 0 ? (
-            <p className="text-[11px] font-bold text-gray-500">Tahsilat verisi bulunmuyor.</p>
+            <EmptyStateCard
+              title="Kayıt bulunamadı"
+              description="Tahsilat görünümünde listelenecek paket kaydı bulunamadı."
+              reason="Özel ders paketi olmadığı için tahsilat verisi oluşmamış olabilir."
+              primaryAction={{ label: "Paket oluştur", href: "/ozel-ders-paketleri" }}
+              secondaryAction={{ label: "Paket listesi", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
+              compact
+            />
           ) : (
             paymentRows.map((pkg) => (
               <div key={pkg.id} className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300">
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">{pkg.athleteName} · Ödenen: ₺{pkg.amountPaid.toLocaleString("tr-TR")}</p>
                 <p className="mt-1 text-gray-500">Kalan ödeme: ₺{Math.max(pkg.totalPrice - pkg.amountPaid, 0).toLocaleString("tr-TR")}</p>
-                <button
-                  type="button"
-                  onClick={() => onOpenPackage(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
+                <Link
+                  href={detailHrefFor(pkg.id)}
+                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
                 >
-                  Pakete geç
-                </button>
+                  Paket Detayına Git
+                </Link>
               </div>
             ))
           )}
@@ -2246,34 +1680,17 @@ function PrivateLessonsWorkspaceView({
                   <p>Kalan Ödeme: <span className="text-white">₺{Math.max(pkg.totalPrice - pkg.amountPaid, 0).toLocaleString("tr-TR")}</span></p>
                   <p>
                     Yaklaşan Planlı Ders:{" "}
-                    <span className="text-gray-200">
-                      {nextPlannedByPackage[pkg.id]
-                        ? `${new Date(nextPlannedByPackage[pkg.id]).toLocaleDateString("tr-TR")} · ${new Date(nextPlannedByPackage[pkg.id]).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`
-                        : "Planlı ders yok"}
-                    </span>
+                    <span className="text-gray-200">Paket detayında görüntüleyin</span>
                   </p>
                 </div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenPackage(pkg.id)}
+                <Link
+                  href={detailHrefFor(pkg.id)}
                   className="rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
                 >
-                  Paketi Aç
-                </button>
-                <Link
-                  href={`/ozel-ders-paketleri/${pkg.id}?tab=plan`}
-                  className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-100"
-                >
-                  Planla
-                </Link>
-                <Link
-                  href={`/ozel-ders-paketleri/${pkg.id}?tab=payments`}
-                  className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
-                >
-                  Tahsilat
+                  Paket Detayına Git
                 </Link>
               </div>
             </div>

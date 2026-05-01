@@ -38,7 +38,7 @@ export function computeFinanceStatusSummary(input: {
   if (overdueRows.length > 0) {
     return {
       tone: "overdue",
-      label: "Gecikmiş Ödeme Var",
+      label: "Gecikmiş Ödeme",
       nextDueDate: overdueRows[0]?.due_date || nextDueDate,
       nextAmount: overdueRows[0]?.amount ?? nextAmount,
       overdueCount: overdueRows.length,
@@ -62,7 +62,7 @@ export function computeFinanceStatusSummary(input: {
     if (days < 0) {
       return {
         tone: "overdue",
-        label: "Gecikmiş Ödeme Var",
+        label: "Gecikmiş Ödeme",
         nextDueDate,
         nextAmount,
         overdueCount: 1,
@@ -74,7 +74,7 @@ export function computeFinanceStatusSummary(input: {
   if (pending.length > 0 || input.hasPartialPackagePayment) {
     return {
       tone: "paid",
-      label: "Kısmi Ödeme Var",
+      label: "Kısmi Ödeme",
       nextDueDate,
       nextAmount,
       overdueCount: 0,

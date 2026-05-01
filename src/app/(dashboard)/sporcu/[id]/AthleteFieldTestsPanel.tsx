@@ -14,10 +14,11 @@ import {
 } from "recharts";
 
 export type FieldTestResultRow = {
-  value: number;
+  value: number | null;
+  value_text?: string | null;
   test_date: string;
   test_id?: string | null;
-  test_definitions?: { id?: string; name?: string; unit?: string } | null;
+  test_definitions?: { id?: string; name?: string; unit?: string; value_type?: "number" | "text" | null } | null;
 };
 
 function testName(r: FieldTestResultRow) {
@@ -39,9 +40,11 @@ function inDateRange(iso: string, from: string, to: string): boolean {
 function aggregateAvgByTest(rows: FieldTestResultRow[]) {
   const m = new Map<string, { sum: number; count: number; unit: string }>();
   for (const r of rows) {
+    if ((r.test_definitions?.value_type || "number") !== "number") continue;
+    if (typeof r.value !== "number" || !Number.isFinite(r.value)) continue;
     const n = testName(r);
     const cur = m.get(n) || { sum: 0, count: 0, unit: r.test_definitions?.unit || "" };
-    cur.sum += Number(r.value) || 0;
+    cur.sum += r.value;
     cur.count += 1;
     m.set(n, cur);
   }
@@ -107,8 +110,11 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
   }, [filteredByTests]);
 
   const chartData = useMemo(() => {
+    const numericRows = filteredByTests.filter(
+      (r) => (r.test_definitions?.value_type || "number") === "number" && typeof r.value === "number" && Number.isFinite(r.value)
+    );
     const daySet = new Set<string>();
-    for (const r of filteredByTests) {
+    for (const r of numericRows) {
       daySet.add(dayKey(r.test_date));
     }
     const days = Array.from(daySet).sort();
@@ -118,9 +124,9 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
         tarihLabel: new Date(`${dt}T12:00:00`).toLocaleDateString("tr-TR"),
       };
       for (const name of selectedTests) {
-        const same = filteredByTests.filter((r) => dayKey(r.test_date) === dt && testName(r) === name);
+        const same = numericRows.filter((r) => dayKey(r.test_date) === dt && testName(r) === name);
         if (same.length === 0) continue;
-        const avg = same.reduce((s, x) => s + (Number(x.value) || 0), 0) / same.length;
+        const avg = same.reduce((s, x) => s + (x.value || 0), 0) / same.length;
         point[name] = Math.round(avg * 100) / 100;
       }
       return point;
@@ -365,8 +371,12 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
                     </span>
                   </div>
                   <div className="text-xl font-black italic text-white">
-                    {m.value}{" "}
-                    <span className="text-[10px] text-[#7c3aed] not-italic uppercase">{m.test_definitions?.unit}</span>
+                    {(m.test_definitions?.value_type || "number") === "text"
+                      ? (m.value_text || "—")
+                      : m.value}
+                    {(m.test_definitions?.value_type || "number") === "number" ? (
+                      <span className="text-[10px] text-[#7c3aed] not-italic uppercase">{m.test_definitions?.unit}</span>
+                    ) : null}
                   </div>
                   <div className="mt-2 break-words text-[10px] font-black uppercase tracking-[0.15em] text-gray-500">{testName(m)}</div>
                 </div>

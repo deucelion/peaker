@@ -18,6 +18,7 @@ import Notification from "@/components/Notification";
 import { cancelLesson, createLesson, hardDeleteLesson } from "@/lib/actions/lessonActions";
 import { createPrivateLessonSession, cancelPrivateLessonSession } from "@/lib/actions/privateLessonSessionActions";
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
+import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import { listLessonsSnapshot, listWeeklyLessonScheduleSnapshot } from "@/lib/actions/snapshotActions";
 import { getWeekDayStarts, getWeekStartMondayIso, sameDayKey } from "@/lib/schedule/weeklySchedule";
 import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
@@ -64,6 +65,79 @@ function itemTopAndHeight(item: WeeklyLessonScheduleItem) {
   return { top, height };
 }
 
+type DayLayoutItem = {
+  item: WeeklyLessonScheduleItem;
+  laneIndex: number;
+  laneCount: number;
+  groupId: string;
+  groupSize: number;
+};
+
+function computeDayOverlapLayout(items: WeeklyLessonScheduleItem[]): DayLayoutItem[] {
+  if (items.length === 0) return [];
+  const sorted = [...items].sort(
+    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+  );
+  const groups: WeeklyLessonScheduleItem[][] = [];
+  let currentGroup: WeeklyLessonScheduleItem[] = [];
+  let currentGroupMaxEnd = -1;
+
+  for (const item of sorted) {
+    const startMs = new Date(item.startsAt).getTime();
+    const endMs = new Date(item.endsAt).getTime();
+    if (currentGroup.length === 0) {
+      currentGroup = [item];
+      currentGroupMaxEnd = endMs;
+      continue;
+    }
+    if (startMs < currentGroupMaxEnd) {
+      currentGroup.push(item);
+      currentGroupMaxEnd = Math.max(currentGroupMaxEnd, endMs);
+      continue;
+    }
+    groups.push(currentGroup);
+    currentGroup = [item];
+    currentGroupMaxEnd = endMs;
+  }
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  const layout: DayLayoutItem[] = [];
+  groups.forEach((group, groupIndex) => {
+    const laneEnds: number[] = [];
+    const laneById = new Map<string, number>();
+    const groupSorted = [...group].sort(
+      (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+    );
+
+    for (const item of groupSorted) {
+      const startMs = new Date(item.startsAt).getTime();
+      const endMs = new Date(item.endsAt).getTime();
+      let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd <= startMs);
+      if (laneIndex === -1) {
+        laneIndex = laneEnds.length;
+        laneEnds.push(endMs);
+      } else {
+        laneEnds[laneIndex] = endMs;
+      }
+      laneById.set(item.id, laneIndex);
+    }
+
+    const laneCount = Math.max(group.length, 1);
+    const groupId = `g-${groupIndex}`;
+    for (const item of group) {
+      layout.push({
+        item,
+        laneIndex: laneById.get(item.id) ?? 0,
+        laneCount,
+        groupId,
+        groupSize: group.length,
+      });
+    }
+  });
+
+  return layout;
+}
+
 function nowLineTopPercent(now: Date) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   if (minutes < GRID_START_HOUR * 60 || minutes > GRID_END_HOUR * 60) return null;
@@ -88,6 +162,30 @@ function minutesToClock(total: number) {
   const h = Math.floor(normalized / 60);
   const m = normalized % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.trim().toLowerCase();
+  const match = /^#([0-9a-f]{6})$/.exec(normalized);
+  if (!match) return null;
+  const raw = match[1];
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+  return { r, g, b };
+}
+
+function locationCardStyle(locationColor: string | null): React.CSSProperties | undefined {
+  if (!locationColor) return undefined;
+  const rgb = hexToRgb(locationColor);
+  if (!rgb) return undefined;
+  const { r, g, b } = rgb;
+  return {
+    background: `linear-gradient(to bottom, rgba(${r}, ${g}, ${b}, 0.26), rgba(${r}, ${g}, ${b}, 0.16))`,
+    borderColor: `rgba(${r}, ${g}, ${b}, 0.62)`,
+    boxShadow: `0 0 0 1px rgba(${r}, ${g}, ${b}, 0.34), 0 18px 30px -16px rgba(${r}, ${g}, ${b}, 0.52)`,
+  };
 }
 
 function SelectPremium({
@@ -139,6 +237,10 @@ export default function WeeklyLessonSchedulePage() {
   const [quickInfo, setQuickInfo] = useState<string | null>(null);
   const [quickCoachOptions, setQuickCoachOptions] = useState<Array<{ id: string; full_name: string }>>([]);
   const [quickPackages, setQuickPackages] = useState<PrivateLessonPackage[]>([]);
+  const [locationOptions, setLocationOptions] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [newLocationName, setNewLocationName] = useState("");
+  const [newLocationColor, setNewLocationColor] = useState("#6b7280");
+  const [locationBusy, setLocationBusy] = useState(false);
   const [groupForm, setGroupForm] = useState({
     title: "",
     coachId: "",
@@ -150,6 +252,8 @@ export default function WeeklyLessonSchedulePage() {
   });
   const [privateForm, setPrivateForm] = useState({
     packageId: "",
+    startClock: "",
+    endClock: "",
     durationMinutes: "60",
     coachId: "",
     location: "",
@@ -157,12 +261,33 @@ export default function WeeklyLessonSchedulePage() {
   const [quickGroupTitle, setQuickGroupTitle] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [focusedDayKey, setFocusedDayKey] = useState<string | null>(null);
+  const [overlapListOpen, setOverlapListOpen] = useState(false);
+  const [overlapListTitle, setOverlapListTitle] = useState("");
+  const [overlapListItems, setOverlapListItems] = useState<WeeklyLessonScheduleItem[]>([]);
   const [recentCreatedRange, setRecentCreatedRange] = useState<{
     dayKey: string;
     startMinutes: number;
     endMinutes: number;
     expiresAt: number;
   } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await listLocationsForActor();
+      if (cancelled || "error" in res) return;
+      const nextLocations = (res.locations || []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        color: row.color,
+      }));
+      setLocationOptions(nextLocations);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchSnapshot = useCallback(async () => {
     setLoading(true);
@@ -199,6 +324,16 @@ export default function WeeklyLessonSchedulePage() {
   }, []);
 
   const dayStarts = useMemo(() => getWeekDayStarts(weekStart), [weekStart]);
+  const shownDayStarts = useMemo(
+    () => (focusedDayKey ? dayStarts.filter((d) => sameDayKey(d) === focusedDayKey) : dayStarts),
+    [dayStarts, focusedDayKey]
+  );
+  useEffect(() => {
+    if (!focusedDayKey) return;
+    if (shownDayStarts.length > 0) return;
+    const id = window.setTimeout(() => setFocusedDayKey(null), 0);
+    return () => window.clearTimeout(id);
+  }, [focusedDayKey, shownDayStarts]);
   const itemsByDay = useMemo(() => {
     const map = new Map<string, WeeklyLessonScheduleItem[]>();
     for (const dayIso of dayStarts) map.set(sameDayKey(dayIso), []);
@@ -271,6 +406,8 @@ export default function WeeklyLessonSchedulePage() {
     ? quickCreateAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
     : "";
   const quickHasActivePackage = quickPackages.some((p) => p.isActive && p.remainingLessons > 0);
+  const selectedLocationColor =
+    locationOptions.find((loc) => loc.name === location)?.color || null;
 
   useEffect(() => {
     if (!quickCreateAt) return;
@@ -302,11 +439,33 @@ export default function WeeklyLessonSchedulePage() {
           setPrivateForm((prev) => ({
             ...prev,
             packageId: prev.packageId || active[0]?.id || "",
-            coachId: prev.coachId || active[0]?.coachId || "",
+            coachId: (() => {
+              const selectedPackageId = prev.packageId || active[0]?.id || "";
+              const selectedPackage = active.find((pkg) => pkg.id === selectedPackageId);
+              return selectedPackage?.coachId || "";
+            })(),
           }));
         } else {
           setQuickPackages([]);
           setQuickInfo("Özel ders planlama verisi alınamadı. Yetki veya paket durumu kontrol edilmelidir.");
+        }
+
+        const locationsRes = await listLocationsForActor();
+        if (!("error" in locationsRes)) {
+          const nextLocations = (locationsRes.locations || []).map((row) => ({
+            id: row.id,
+            name: row.name,
+            color: row.color,
+          }));
+          setLocationOptions(nextLocations);
+          setGroupForm((prev) => ({
+            ...prev,
+            location: prev.location || nextLocations[0]?.name || "Ana Saha",
+          }));
+          setPrivateForm((prev) => ({
+            ...prev,
+            location: prev.location || nextLocations[0]?.name || "",
+          }));
         }
         setQuickBusy(false);
       })();
@@ -327,6 +486,12 @@ export default function WeeklyLessonSchedulePage() {
       setGroupForm((prev) => ({
         ...prev,
         coachId: lastCoach || prev.coachId || "",
+        startClock: slotClock,
+        endClock: slotEnd,
+        durationMinutes: "60",
+      }));
+      setPrivateForm((prev) => ({
+        ...prev,
         startClock: slotClock,
         endClock: slotEnd,
         durationMinutes: "60",
@@ -384,6 +549,20 @@ export default function WeeklyLessonSchedulePage() {
     setGroupForm((prev) => ({ ...prev, endClock: minutesToClock(startMin + duration) }));
   }
 
+  function syncPrivateDurationFromRange(startClock: string, endClock: string) {
+    const startMin = parseClockToMinutes(startClock);
+    const endMin = parseClockToMinutes(endClock);
+    if (startMin == null || endMin == null || endMin <= startMin) return;
+    setPrivateForm((prev) => ({ ...prev, durationMinutes: String(endMin - startMin) }));
+  }
+
+  function syncPrivateEndFromDuration(startClock: string, durationValue: string) {
+    const startMin = parseClockToMinutes(startClock);
+    const duration = Number(durationValue);
+    if (startMin == null || !Number.isFinite(duration) || duration <= 0) return;
+    setPrivateForm((prev) => ({ ...prev, endClock: minutesToClock(startMin + duration) }));
+  }
+
   const groupTimeValidation = useMemo(() => {
     const startMin = parseClockToMinutes(groupForm.startClock);
     const endMin = parseClockToMinutes(groupForm.endClock);
@@ -401,6 +580,18 @@ export default function WeeklyLessonSchedulePage() {
     return `Bu ders ${groupForm.startClock} - ${groupForm.endClock} arasında planlanacak`;
   }, [groupForm.startClock, groupForm.endClock]);
 
+  const privateTimeValidation = useMemo(() => {
+    const startMin = parseClockToMinutes(privateForm.startClock);
+    const endMin = parseClockToMinutes(privateForm.endClock);
+    if (startMin == null || endMin == null) {
+      return { ok: false, message: "Başlangıç ve bitiş saati geçerli olmalı." };
+    }
+    if (endMin <= startMin) {
+      return { ok: false, message: "Bitiş saati başlangıç saatinden büyük olmalı." };
+    }
+    return { ok: true, message: "" };
+  }, [privateForm.startClock, privateForm.endClock]);
+
   async function submitQuickGroupLesson() {
     if (!quickCreateAt) return;
     const duration = Number(groupForm.durationMinutes);
@@ -408,8 +599,8 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError("Ders adı zorunludur.");
       return;
     }
-    if (!Number.isFinite(duration) || duration < 30) {
-      setQuickError("Süre en az 30 dakika olmalıdır.");
+    if (!Number.isFinite(duration) || duration < 15) {
+      setQuickError("Süre en az 15 dakika olmalıdır.");
       return;
     }
     if (!groupTimeValidation.ok) {
@@ -462,13 +653,21 @@ export default function WeeklyLessonSchedulePage() {
       return;
     }
     const duration = Number(privateForm.durationMinutes);
-    if (!Number.isFinite(duration) || duration < 30) {
-      setQuickError("Süre en az 30 dakika olmalıdır.");
+    if (!Number.isFinite(duration) || duration < 15) {
+      setQuickError("Süre en az 15 dakika olmalıdır.");
+      return;
+    }
+    if (!privateForm.coachId.trim()) {
+      setQuickError("Özel ders planlamak için koç seçmelisiniz.");
+      return;
+    }
+    if (!privateTimeValidation.ok) {
+      setQuickError(privateTimeValidation.message);
       return;
     }
     const dt = localDateParts(quickCreateAt);
-    const startMin = parseClockToMinutes(groupForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
-    const endMin = parseClockToMinutes(groupForm.endClock || minutesToClock(startMin + duration)) || (startMin + duration);
+    const startMin = parseClockToMinutes(privateForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
+    const endMin = parseClockToMinutes(privateForm.endClock || minutesToClock(startMin + duration)) || (startMin + duration);
     const effectiveDuration = Math.max(15, endMin - startMin);
     const fd = new FormData();
     fd.append("packageId", privateForm.packageId);
@@ -556,12 +755,16 @@ export default function WeeklyLessonSchedulePage() {
     if (!quickCreateAt) return;
     const active = quickPackages.filter((p) => p.isActive && p.remainingLessons > 0);
     if (active.length !== 1 || !active[0].coachId) {
-      setQuickError("Hızlı özel ders için tek aktif paket ve paket koçu gerekli.");
+      setQuickError("Özel ders planlamak için koç seçmelisiniz.");
+      return;
+    }
+    if (!privateTimeValidation.ok) {
+      setQuickError(privateTimeValidation.message);
       return;
     }
     const dt = localDateParts(quickCreateAt);
-    const startMin = parseClockToMinutes(groupForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
-    const endMin = parseClockToMinutes(groupForm.endClock || minutesToClock(startMin + 60)) || (startMin + 60);
+    const startMin = parseClockToMinutes(privateForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
+    const endMin = parseClockToMinutes(privateForm.endClock || minutesToClock(startMin + 60)) || (startMin + 60);
     const duration = Math.max(15, endMin - startMin);
     const fd = new FormData();
     fd.append("packageId", active[0].id);
@@ -624,6 +827,38 @@ export default function WeeklyLessonSchedulePage() {
       if (selected?.id === item.id) setSelected(null);
     }
     setActionBusy(null);
+  }
+
+  async function handleCreateLocation() {
+    const name = newLocationName.trim();
+    if (!name) {
+      setQuickError("Lokasyon adı zorunludur.");
+      return;
+    }
+    setLocationBusy(true);
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("color", newLocationColor);
+    const res = await createLocationAction(fd);
+    if ("error" in res) {
+      setQuickError(res.error || "Lokasyon oluşturulamadı.");
+      setLocationBusy(false);
+      return;
+    }
+    const listRes = await listLocationsForActor();
+    if (!("error" in listRes)) {
+      const nextLocations = (listRes.locations || []).map((row) => ({ id: row.id, name: row.name, color: row.color }));
+      setLocationOptions(nextLocations);
+      const created = nextLocations.find((loc) => loc.name.toLocaleLowerCase("tr-TR") === name.toLocaleLowerCase("tr-TR"));
+      if (created) {
+        setGroupForm((prev) => ({ ...prev, location: created.name }));
+        setPrivateForm((prev) => ({ ...prev, location: created.name }));
+      }
+    }
+    setNewLocationName("");
+    setQuickError(null);
+    setQuickInfo("Lokasyon eklendi.");
+    setLocationBusy(false);
   }
 
   return (
@@ -701,12 +936,35 @@ export default function WeeklyLessonSchedulePage() {
 
           <label className="lg:col-span-1">
             <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-gray-500">Lokasyon</span>
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Saha, salon..."
-              className="ui-input min-h-10 rounded-xl border-white/10 bg-[#17171f]"
-            />
+            <div className="relative">
+              <select
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="ui-select min-h-10 w-full appearance-none rounded-xl border-white/10 bg-[#17171f] pr-10"
+              >
+                <option value="">Tüm lokasyonlar</option>
+                {locationOptions.map((loc) => (
+                  <option key={loc.id} value={loc.name}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#c4b5fd]"
+              />
+              {selectedLocationColor ? (
+                <span
+                  className="pointer-events-none absolute right-8 top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-white/40"
+                  style={{ backgroundColor: selectedLocationColor }}
+                  aria-hidden
+                />
+              ) : null}
+            </div>
+            {locationOptions.length === 0 ? (
+              <p className="mt-1 text-[10px] font-bold text-amber-300/90">Tanımlı lokasyon yok. Hızlı planlama penceresinden lokasyon ekleyin.</p>
+            ) : null}
           </label>
         </div>
 
@@ -744,22 +1002,40 @@ export default function WeeklyLessonSchedulePage() {
         </div>
       ) : (
         <>
+          {focusedDayKey ? (
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#121215] px-3 py-2">
+              <p className="text-[11px] font-black uppercase tracking-wide text-gray-200">
+                Gün detayı · {dayTitle(shownDayStarts[0] || dayStarts[0])}
+              </p>
+              <button
+                type="button"
+                onClick={() => setFocusedDayKey(null)}
+                className="ui-btn-ghost min-h-10 px-3 text-[10px]"
+              >
+                Haftalık görünüme dön
+              </button>
+            </div>
+          ) : null}
           <div className="mt-5 hidden overflow-x-auto rounded-2xl border border-white/10 bg-[#111114] md:block">
             <div className="min-w-[1120px]">
-              <div className="grid grid-cols-[88px_repeat(7,minmax(140px,1fr))] border-b border-white/10">
+              <div
+                className="grid border-b border-white/10"
+                style={{ gridTemplateColumns: `88px repeat(${shownDayStarts.length}, minmax(140px, 1fr))` }}
+              >
                 <div className="sticky left-0 z-30 bg-[#0f0f13] px-2 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
                   Saat
                 </div>
-                {dayStarts.map((dayIso) => {
+                {shownDayStarts.map((dayIso) => {
                   const isToday = sameDayKey(dayIso) === todayKey;
                   return (
                     <div
                       key={dayIso}
+                      onClick={() => setFocusedDayKey(sameDayKey(dayIso))}
                       className={`border-l px-3 py-3 text-[11px] font-black uppercase tracking-wide ${
                         isToday
                           ? "border-[#7c3aed]/45 bg-gradient-to-b from-[#7c3aed]/18 to-[#7c3aed]/6 text-[#f0e9ff]"
                           : "border-white/10 bg-white/[0.01] text-white/90"
-                      }`}
+                      } ${focusedDayKey ? "cursor-default" : "cursor-pointer hover:bg-white/[0.03]"}`}
                     >
                       {dayTitle(dayIso)}
                       {isToday ? (
@@ -772,7 +1048,10 @@ export default function WeeklyLessonSchedulePage() {
                 })}
               </div>
 
-              <div className="relative grid grid-cols-[88px_repeat(7,minmax(140px,1fr))]">
+              <div
+                className="relative grid"
+                style={{ gridTemplateColumns: `88px repeat(${shownDayStarts.length}, minmax(140px, 1fr))` }}
+              >
                 {weekContainsToday && nowTop != null ? (
                   <div
                     className="pointer-events-none absolute left-[88px] right-0 z-20 border-t border-rose-300/80"
@@ -797,9 +1076,10 @@ export default function WeeklyLessonSchedulePage() {
                   ))}
                 </div>
 
-                {dayStarts.map((dayIso) => {
+                {shownDayStarts.map((dayIso) => {
                   const dayKey = sameDayKey(dayIso);
                   const rows = itemsByDay.get(dayKey) || [];
+                  const laidOutRows = computeDayOverlapLayout(rows);
                   const showRecentPulse =
                     recentCreatedRange &&
                     recentCreatedRange.dayKey === dayKey &&
@@ -844,9 +1124,69 @@ export default function WeeklyLessonSchedulePage() {
                           className={`h-16 border-b ${h % 2 === 0 ? "border-white/10 bg-white/[0.018]" : "border-white/5"}`}
                         />
                       ))}
-                      {rows.map((item) => {
+                      {(() => {
+                        const grouped = new Map<string, DayLayoutItem[]>();
+                        for (const row of laidOutRows) {
+                          const key = row.groupId;
+                          const prev = grouped.get(key) || [];
+                          prev.push(row);
+                          grouped.set(key, prev);
+                        }
+
+                        const renderRows: Array<
+                          | { kind: "lesson"; row: DayLayoutItem }
+                          | { kind: "group"; rows: DayLayoutItem[] }
+                        > = [];
+
+                        for (const rowsInGroup of grouped.values()) {
+                          const ordered = [...rowsInGroup].sort((a, b) => a.laneIndex - b.laneIndex);
+                          const shouldCompact = !focusedDayKey && (ordered[0]?.groupSize || 0) > 2;
+                          if (shouldCompact) {
+                            if (ordered[0]) renderRows.push({ kind: "lesson", row: { ...ordered[0], laneIndex: 0, laneCount: 2 } });
+                            renderRows.push({ kind: "group", rows: ordered.slice(1) });
+                          } else {
+                            for (const row of ordered) renderRows.push({ kind: "lesson", row });
+                          }
+                        }
+
+                        return renderRows.map((entry, idx) => {
+                          if (entry.kind === "group") {
+                            const anchor = entry.rows[0];
+                            const { top, height } = itemTopAndHeight(anchor.item);
+                            return (
+                              <button
+                                key={`group-${dayKey}-${idx}`}
+                                type="button"
+                                onClick={() => {
+                                  setOverlapListItems(entry.rows.map((r) => r.item));
+                                  setOverlapListTitle(
+                                    `${dayTitle(dayIso)} · ${clockLabel(anchor.item.startsAt)} - ${clockLabel(anchor.item.endsAt)}`
+                                  );
+                                  setOverlapListOpen(true);
+                                }}
+                                className="absolute rounded-2xl border border-amber-300/40 bg-amber-500/20 px-2 py-2 text-left text-[10px] font-black uppercase tracking-wide text-amber-50"
+                                style={{
+                                  top: `${top}%`,
+                                  height: `${height}%`,
+                                  width: "calc(50% - 0.5rem)",
+                                  left: "calc(50% + 0.25rem)",
+                                }}
+                              >
+                                +{entry.rows.length} ders
+                              </button>
+                            );
+                          }
+
+                          const { item, laneIndex, laneCount } = entry.row;
+                        console.log("CARD DATA", item);
                         const { top, height } = itemTopAndHeight(item);
                         const isGroup = item.sourceType === "group";
+                        const coachLabel = item.coachName || "Koç atanmadı";
+                        const locationLabel = item.location || "Lokasyon belirtilmedi";
+                        const isCompactCard = !focusedDayKey && (laneCount > 1 || height < 11);
+                        const widthPercent = 100 / laneCount;
+                        const leftPercent = laneIndex * widthPercent;
+                        const locationStyle = locationCardStyle(item.locationColor);
                         return (
                           <div
                             key={`${item.sourceType}-${item.id}`}
@@ -860,25 +1200,55 @@ export default function WeeklyLessonSchedulePage() {
                                 setSelected(item);
                               }
                             }}
-                          className={`group absolute left-1.5 right-1.5 min-h-[60px] overflow-hidden rounded-2xl border px-3 py-2.5 text-left shadow-[0_12px_28px_-16px_rgba(0,0,0,0.95)] transition-all duration-150 sm:hover:-translate-y-0.5 ${
-                              isGroup
-                                ? "border-indigo-400/55 bg-gradient-to-b from-indigo-500/22 to-indigo-500/14 text-indigo-50 sm:hover:shadow-[0_0_0_1px_rgba(129,140,248,0.55),0_18px_30px_-16px_rgba(99,102,241,0.9)]"
-                                : "border-emerald-400/55 border-dashed bg-gradient-to-b from-emerald-500/22 to-emerald-500/14 text-emerald-50 sm:hover:shadow-[0_0_0_1px_rgba(52,211,153,0.55),0_18px_30px_-16px_rgba(16,185,129,0.9)]"
+                          title={`${item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} | ${item.title} | ${clockLabel(item.startsAt)} - ${clockLabel(item.endsAt)} | Koç: ${coachLabel}${item.location ? ` | Lokasyon: ${item.location}` : ""}`}
+                          className={`group absolute min-h-[60px] overflow-hidden rounded-2xl border px-2 py-2 text-left shadow-[0_12px_28px_-16px_rgba(0,0,0,0.95)] transition-all duration-150 sm:hover:-translate-y-0.5 ${
+                              locationStyle
+                                ? "text-white"
+                                : isGroup
+                                  ? "border-indigo-400/55 bg-gradient-to-b from-indigo-500/22 to-indigo-500/14 text-indigo-50 sm:hover:shadow-[0_0_0_1px_rgba(129,140,248,0.55),0_18px_30px_-16px_rgba(99,102,241,0.9)]"
+                                  : "border-emerald-400/55 border-dashed bg-gradient-to-b from-emerald-500/22 to-emerald-500/14 text-emerald-50 sm:hover:shadow-[0_0_0_1px_rgba(52,211,153,0.55),0_18px_30px_-16px_rgba(16,185,129,0.9)]"
                             }`}
-                            style={{ top: `${top}%`, height: `${height}%` }}
+                            style={{
+                              top: `${top}%`,
+                              height: `${height}%`,
+                              width: `calc(${widthPercent}% - 0.5rem)`,
+                              left: `calc(${leftPercent}% + 0.25rem)`,
+                              ...(locationStyle || {}),
+                            }}
                           >
+                            {item.locationColor ? (
+                              <span
+                                className="absolute left-0 top-0 h-full w-1.5 rounded-l-2xl opacity-90"
+                                style={{ backgroundColor: item.locationColor }}
+                                aria-hidden
+                              />
+                            ) : null}
                             <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider">
                               {isGroup ? <Users size={11} aria-hidden /> : <User size={11} aria-hidden />}
-                              {isGroup ? "Grup Dersi" : "Özel Ders"}
+                              <span
+                                className={`rounded px-1 py-0.5 ${
+                                  isGroup ? "bg-indigo-950/45 text-indigo-100" : "bg-emerald-950/45 text-emerald-100"
+                                }`}
+                              >
+                                {isGroup ? "Grup Dersi" : "Özel Ders"}
+                              </span>
                             </p>
-                            <p className="mt-1 line-clamp-2 text-[11px] font-black leading-tight text-white">{item.title}</p>
-                            <p className="mt-1 text-[10px] font-bold text-white/85">
+                            <p className={`mt-1 overflow-hidden text-[11px] font-black leading-tight text-white ${isCompactCard ? "line-clamp-1" : "line-clamp-2"}`}>
+                              {item.title}
+                            </p>
+                            <p className="mt-1 line-clamp-1 overflow-hidden text-[10px] font-bold text-white/85">
                               {clockLabel(item.startsAt)} - {clockLabel(item.endsAt)}
                             </p>
-                            <p className="mt-1 inline-flex max-w-full items-center gap-1 truncate text-[10px] font-black text-white/90">
+                            <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-white/90" title={`Koç: ${coachLabel}`}>
                               <User2 size={11} aria-hidden className="shrink-0 text-white/70" />
-                              <span className="truncate">{item.coachName || "Koç atanmamış"}</span>
+                              <span className="min-w-0 truncate">Koç: {coachLabel}</span>
                             </p>
+                            {!isCompactCard || focusedDayKey ? (
+                              <p className="mt-1 inline-flex max-w-full items-center gap-1 overflow-hidden text-[10px] font-black text-white/85">
+                                <MapPin size={11} aria-hidden className="shrink-0 text-white/70" />
+                                <span className="line-clamp-1 overflow-hidden">Lokasyon: {locationLabel}</span>
+                              </p>
+                            ) : null}
                             <div className="mt-2 hidden flex-wrap gap-1.5 opacity-0 transition group-hover:flex group-hover:opacity-100">
                               <Link
                                 href={item.detailHref}
@@ -931,7 +1301,8 @@ export default function WeeklyLessonSchedulePage() {
                             </div>
                           </div>
                         );
-                      })}
+                        });
+                      })()}
                     </div>
                   );
                 })}
@@ -940,7 +1311,7 @@ export default function WeeklyLessonSchedulePage() {
           </div>
 
           <div className="mt-5 grid gap-3 md:hidden">
-            {dayStarts.map((dayIso) => {
+            {shownDayStarts.map((dayIso) => {
               const rows = itemsByDay.get(sameDayKey(dayIso)) || [];
               return (
                 <section key={dayIso} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
@@ -949,20 +1320,24 @@ export default function WeeklyLessonSchedulePage() {
                     <p className="mt-2 text-[11px] font-bold text-gray-500">Ders yok.</p>
                   ) : (
                     <div className="mt-3 space-y-2">
-                      {rows.map((item) => (
-                        <button
-                          key={`${item.sourceType}-${item.id}`}
-                          type="button"
-                          onClick={() => setSelected(item)}
-                          className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
-                        >
-                          <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
-                            {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {clockLabel(item.startsAt)}
-                          </p>
-                          <p className="mt-1 text-sm font-black text-white">{item.title}</p>
-                          <p className="text-[11px] font-bold text-gray-400">{item.coachName || "Koç yok"}</p>
-                        </button>
-                      ))}
+                      {rows.map((item) => {
+                        console.log("CARD DATA", item);
+                        return (
+                          <button
+                            key={`${item.sourceType}-${item.id}`}
+                            type="button"
+                            onClick={() => setSelected(item)}
+                            className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
+                          >
+                            <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                              {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {clockLabel(item.startsAt)}
+                            </p>
+                            <p className="mt-1 text-sm font-black text-white">{item.title}</p>
+                            <p className="text-[11px] font-semibold text-gray-300">Koç: {item.coachName || "Koç atanmadı"}</p>
+                            <p className="text-[11px] font-bold text-gray-500">Lokasyon: {item.location || "Lokasyon belirtilmedi"}</p>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </section>
@@ -1007,7 +1382,7 @@ export default function WeeklyLessonSchedulePage() {
               </p>
               <p className="flex items-center gap-2">
                 <User2 size={14} aria-hidden className="text-[#c4b5fd]" />
-                Koç: {selected.coachName || "Atanmadı"}
+                Koç: {selected.coachName || "Koç atanmadı"}
               </p>
               <p className="flex items-center gap-2">
                 {selected.sourceType === "group" ? (
@@ -1066,6 +1441,54 @@ export default function WeeklyLessonSchedulePage() {
               <Link href={selected.detailHref} className="ui-btn-primary min-h-11 px-5">
                 İlgili detay sayfasına git
               </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {overlapListOpen ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
+          onClick={() => setOverlapListOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#17171d] p-5 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">Çakışan dersler</p>
+            <h3 className="mt-2 text-sm font-black text-white">{overlapListTitle}</h3>
+            <div className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto">
+              {overlapListItems.map((item) => {
+                console.log("CARD DATA", item);
+                return (
+                  <button
+                    key={`ov-${item.id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelected(item);
+                      setOverlapListOpen(false);
+                    }}
+                    className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
+                    style={locationCardStyle(item.locationColor)}
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
+                      {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {clockLabel(item.startsAt)} - {clockLabel(item.endsAt)}
+                    </p>
+                    <p className="mt-1 line-clamp-1 text-sm font-black text-white">{item.title}</p>
+                    <p className="line-clamp-1 text-[11px] font-semibold text-white/90" title={`Koç: ${item.coachName || "Koç atanmadı"}`}>
+                      Koç: {item.coachName || "Koç atanmadı"}
+                    </p>
+                    <p className="line-clamp-1 text-[11px] font-bold text-white/80">Lokasyon: {item.location || "Lokasyon belirtilmedi"}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={() => setOverlapListOpen(false)} className="ui-btn-ghost min-h-11 px-4">
+                Kapat
+              </button>
             </div>
           </div>
         </div>
@@ -1151,7 +1574,7 @@ export default function WeeklyLessonSchedulePage() {
                     onClick={() => void submitOneClickPrivateLesson()}
                     className="rounded-lg border border-emerald-400/40 bg-emerald-500/25 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-emerald-100 disabled:opacity-50"
                   >
-                    {quickBusy ? "Planlanıyor…" : "Hızlı özel ders oluştur"}
+                    {quickBusy ? "Planlanıyor…" : `⚡ ${privateForm.startClock || "--:--"} - ${privateForm.endClock || "--:--"} özel ders`}
                   </button>
                 </div>
               ) : (
@@ -1245,12 +1668,23 @@ export default function WeeklyLessonSchedulePage() {
                   </label>
                   <label className="block sm:col-span-2">
                     <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Lokasyon</span>
-                    <input
-                      value={groupForm.location}
-                      onChange={(e) => setGroupForm((p) => ({ ...p, location: e.target.value }))}
-                      placeholder="Ana saha"
-                      className="ui-input"
-                    />
+                    {locationOptions.length > 0 ? (
+                      <select
+                        value={groupForm.location}
+                        onChange={(e) => setGroupForm((p) => ({ ...p, location: e.target.value }))}
+                        className="ui-select"
+                      >
+                        {locationOptions.map((loc) => (
+                          <option key={loc.id} value={loc.name}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100">
+                        Kayıtlı lokasyon yok. Aşağıdan yeni lokasyon ekleyin.
+                      </p>
+                    )}
                   </label>
                 </div>
                 {inlineTimePreview ? (
@@ -1294,7 +1728,7 @@ export default function WeeklyLessonSchedulePage() {
                           setPrivateForm((p) => ({
                             ...p,
                             packageId: e.target.value,
-                            coachId: selected?.coachId || p.coachId || "",
+                                coachId: selected?.coachId || "",
                           }));
                         }}
                         className="ui-select"
@@ -1306,26 +1740,58 @@ export default function WeeklyLessonSchedulePage() {
                         ))}
                       </select>
                     </label>
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-4">
                       <label className="block">
-                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Süre (dk)</span>
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Başlangıç saati</span>
                         <input
-                          type="number"
-                          min={30}
-                          step={15}
-                          value={privateForm.durationMinutes}
-                          onChange={(e) => setPrivateForm((p) => ({ ...p, durationMinutes: e.target.value }))}
+                          type="time"
+                          step={900}
+                          value={privateForm.startClock}
+                          onChange={(e) => {
+                            const nextStart = e.target.value;
+                            setPrivateForm((p) => ({ ...p, startClock: nextStart }));
+                            syncPrivateDurationFromRange(nextStart, privateForm.endClock);
+                          }}
                           className="ui-input"
                         />
                       </label>
                       <label className="block">
-                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Koç (opsiyonel)</span>
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Bitiş saati</span>
+                        <input
+                          type="time"
+                          step={900}
+                          value={privateForm.endClock}
+                          onChange={(e) => {
+                            const nextEnd = e.target.value;
+                            setPrivateForm((p) => ({ ...p, endClock: nextEnd }));
+                            syncPrivateDurationFromRange(privateForm.startClock, nextEnd);
+                          }}
+                          className="ui-input"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Süre (dk)</span>
+                        <input
+                          type="number"
+                          min={15}
+                          step={15}
+                          value={privateForm.durationMinutes}
+                          onChange={(e) => {
+                            const nextDuration = e.target.value;
+                            setPrivateForm((p) => ({ ...p, durationMinutes: nextDuration }));
+                            syncPrivateEndFromDuration(privateForm.startClock, nextDuration);
+                          }}
+                          className="ui-input"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Koç</span>
                         <select
                           value={privateForm.coachId}
                           onChange={(e) => setPrivateForm((p) => ({ ...p, coachId: e.target.value }))}
                           className="ui-select"
                         >
-                          <option value="">Koç seçimi</option>
+                          <option value="">Koç seçin</option>
                           {quickCoachOptions.map((coach) => (
                             <option key={coach.id} value={coach.id}>
                               {coach.full_name}
@@ -1334,15 +1800,31 @@ export default function WeeklyLessonSchedulePage() {
                         </select>
                       </label>
                       <label className="block">
-                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Lokasyon (opsiyonel)</span>
-                        <input
-                          value={privateForm.location}
-                          onChange={(e) => setPrivateForm((p) => ({ ...p, location: e.target.value }))}
-                          placeholder="Salon / saha"
-                          className="ui-input"
-                        />
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-gray-500">Lokasyon</span>
+                        {locationOptions.length > 0 ? (
+                          <select
+                            value={privateForm.location}
+                            onChange={(e) => setPrivateForm((p) => ({ ...p, location: e.target.value }))}
+                            className="ui-select"
+                          >
+                            {locationOptions.map((loc) => (
+                              <option key={loc.id} value={loc.name}>
+                                {loc.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100">
+                            Kayıtlı lokasyon yok. Aşağıdan yeni lokasyon ekleyin.
+                          </p>
+                        )}
                       </label>
                     </div>
+                    {!privateTimeValidation.ok ? (
+                      <p className="rounded-lg border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-[11px] font-semibold text-rose-200">
+                        {privateTimeValidation.message}
+                      </p>
+                    ) : null}
                     {selectedPackage() ? (
                       <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-[11px]">
                         <p className="font-black text-emerald-100">Seçili paket</p>
@@ -1368,6 +1850,31 @@ export default function WeeklyLessonSchedulePage() {
                 )}
               </div>
             )}
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c4b5fd]">Lokasyon ekle</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px_auto]">
+                <input
+                  value={newLocationName}
+                  onChange={(e) => setNewLocationName(e.target.value)}
+                  placeholder="Örn. Ana Salon"
+                  className="ui-input"
+                />
+                <input
+                  type="color"
+                  value={newLocationColor}
+                  onChange={(e) => setNewLocationColor(e.target.value)}
+                  className="ui-input h-11 p-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleCreateLocation()}
+                  disabled={locationBusy}
+                  className="ui-btn-ghost min-h-11 px-4"
+                >
+                  {locationBusy ? "Ekleniyor..." : "Lokasyon ekle"}
+                </button>
+              </div>
+            </div>
             <div className="mt-5 flex justify-end">
               <button
                 type="button"

@@ -118,6 +118,20 @@ export async function listPrivateLessonSessionsForPackage(
   if (role === "coach") {
     const mg = await assertManagement(actor);
     if (!mg.ok) return { error: mg.error };
+    const permissions = await getCoachPermissions(actor.id, actor.organization_id);
+    if (!permissions.can_view_all_organization_lessons) {
+      const { data: ownSession } = await adminClient
+        .from("private_lesson_sessions")
+        .select("id")
+        .eq("organization_id", actor.organization_id)
+        .eq("package_id", pid)
+        .eq("coach_id", actor.id)
+        .limit(1)
+        .maybeSingle();
+      if (!ownSession) {
+        return { error: "Bu paketin planlarını görüntüleme yetkiniz yok." };
+      }
+    }
   }
 
   const { data, error } = await adminClient
@@ -256,6 +270,20 @@ export async function createPrivateLessonSession(formData: FormData) {
     if (Number.isNaN(start.getTime())) return { error: "Geçersiz tarih veya saat." };
     const end = new Date(start.getTime() + durationMinutes * 60_000);
 
+    const { data: conflictRows, error: conflictErr } = await adminClient
+      .from("private_lesson_sessions")
+      .select("id")
+      .eq("organization_id", actor.organization_id!)
+      .eq("status", "planned")
+      .eq("coach_id", coachId)
+      .lt("starts_at", end.toISOString())
+      .gt("ends_at", start.toISOString())
+      .limit(1);
+    if (conflictErr) return { error: `Plan kontrolü başarısız: ${conflictErr.message}` };
+    if ((conflictRows || []).length > 0) {
+      return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
+    }
+
     const { error: insertErr } = await adminClient.from("private_lesson_sessions").insert({
       organization_id: actor.organization_id,
       package_id: packageId,
@@ -268,7 +296,12 @@ export async function createPrivateLessonSession(formData: FormData) {
       status: "planned",
       created_by: actor.id,
     });
-    if (insertErr) return { error: `Plan oluşturulamadı: ${insertErr.message}` };
+    if (insertErr) {
+      if (insertErr.message.includes("private_lesson_sessions_no_overlap_planned")) {
+        return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
+      }
+      return { error: `Plan oluşturulamadı: ${insertErr.message}` };
+    }
 
     const label = (pkg as { package_name?: string }).package_name || "Özel ders";
     const when = start.toLocaleString("tr-TR", {

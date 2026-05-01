@@ -89,6 +89,7 @@ export default function PrivateLessonPackageDetailPage() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [coachOptions, setCoachOptions] = useState<Array<{ id: string; full_name: string }>>([]);
   const [planForm, setPlanForm] = useState({
     lessonDate: "",
@@ -101,6 +102,13 @@ export default function PrivateLessonPackageDetailPage() {
   const planDateParam = searchParams.get("lessonDate") || "";
   const startClockParam = searchParams.get("startClock") || "";
   const tabParam = searchParams.get("tab");
+  const fromParam = searchParams.get("from") || "";
+  const returnViewParam = searchParams.get("returnView") || "";
+  const backHref =
+    fromParam === "antrenman-yonetimi"
+      ? `/antrenman-yonetimi?modul=ozel-dersler&view=${encodeURIComponent(returnViewParam || "paket-listesi")}`
+      : "/ozel-ders-paketleri";
+  const backLabel = fromParam === "antrenman-yonetimi" ? "Ders Yönetimi > Özel Dersler" : "Özel ders paketleri";
 
   const loadDetail = useCallback(async () => {
     if (!packageId) return;
@@ -190,6 +198,11 @@ export default function PrivateLessonPackageDetailPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [usageModalOpen, paymentModalOpen]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const pkg = snapshot?.package;
   const remainingBalance = useMemo(
     () => (pkg ? Math.max(pkg.totalPrice - pkg.amountPaid, 0) : 0),
@@ -198,16 +211,26 @@ export default function PrivateLessonPackageDetailPage() {
 
   const lastUsage = snapshot?.usageRows[0];
   const lastPayment = snapshot?.paymentRows[0];
+  const upcomingPlannedSessions = useMemo(
+    () =>
+      sessions
+        .filter((s) => s.status === "planned" && new Date(s.startsAt).getTime() > nowMs)
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
+    [sessions, nowMs]
+  );
+  const awaitingCompletionSessions = useMemo(
+    () =>
+      sessions
+        .filter((s) => s.status === "planned" && new Date(s.startsAt).getTime() <= nowMs)
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
+    [sessions, nowMs]
+  );
 
   const usageBlocked = pkg ? !pkg.isActive || pkg.remainingLessons <= 0 : true;
   const plannedPrivateSessionCount = snapshot?.plannedPrivateSessionCount ?? 0;
   const manualBlockedByOpenPlan = plannedPrivateSessionCount > 0;
-  const manualUnplannedUsageBlocked = usageBlocked || manualBlockedByOpenPlan;
-  const manualUsageDisabledTitle = manualBlockedByOpenPlan
-    ? "Açık özel ders planı varken plansız/geçmiş kayıt eklenemez; önce “Ders yapıldı” veya iptal kullanın."
-    : usageBlocked
-      ? "Pasif paket veya kalan ders hakkı yok."
-      : undefined;
+  const manualUnplannedUsageBlocked = usageBlocked;
+  const manualUsageDisabledTitle = usageBlocked ? "Pasif paket veya kalan ders hakkı yok." : undefined;
 
   const parsedPaymentAdd = Number(String(paymentAmount).replace(",", "."));
   const paymentPreviewNewPaid = pkg && Number.isFinite(parsedPaymentAdd) ? pkg.amountPaid + Math.max(parsedPaymentAdd, 0) : null;
@@ -221,9 +244,9 @@ export default function PrivateLessonPackageDetailPage() {
     if (!pkg) return "";
     if (plannedPrivateSessionCount > 0 && pkg.isActive && pkg.remainingLessons > 0) {
       if (remainingBalance > 0) {
-        return "Açık özel ders planı var: “Ders yapıldı” ile kullanım otomatik düşer; tahsilatı ödeme kaydıyla güncel tutun. Plansız ders yalnızca açık plan kalmayınca manuel kayıtla eklenir.";
+        return "Açık özel ders planı var: “Ders yapıldı” ile kullanım düşer; manuel kullanım da eklenebilir ancak aynı ders için ikinci düşüm riski vardır.";
       }
-      return "Açık özel ders planı var: tamamlandığında kullanım otomatik düşer. Plansız veya önceden yapılmış dersler için manuel kayıt, açık plan kalmayınca kullanılır.";
+      return "Açık özel ders planı var: tamamlandığında kullanım düşer. Gerekirse manuel kullanım eklenebilir; aynı dersi iki kez düşmemeye dikkat edin.";
     }
     if (usageBlocked && remainingBalance > 0) return "Paket dersleri tamamlanmış veya pasif; kalan bakiye için ödeme kaydı ekleyebilirsiniz.";
     if (usageBlocked && remainingBalance <= 0) return "Paket tamamlanmış görünüyor. Gerekirse yeni paket oluşturun.";
@@ -236,11 +259,20 @@ export default function PrivateLessonPackageDetailPage() {
 
   async function submitUsage() {
     if (!packageId || manualUnplannedUsageBlocked) return;
+    if (manualBlockedByOpenPlan) {
+      const confirmed = window.confirm(
+        "Bu pakette açık planlı ders var. Manuel kullanım eklerseniz paket hakkı ayrıca düşer. Devam etmek istiyor musunuz?"
+      );
+      if (!confirmed) return;
+    }
     setUsageSaving(true);
     setMessage(null);
     const fd = new FormData();
     fd.append("packageId", packageId);
     fd.append("usedAt", new Date().toISOString());
+    if (manualBlockedByOpenPlan) {
+      fd.append("forceWithOpenPlanned", "true");
+    }
     const n = usageNote.trim();
     if (n) fd.append("note", n);
     const res = await addPrivateLessonUsage(fd);
@@ -292,11 +324,11 @@ export default function PrivateLessonPackageDetailPage() {
     return (
       <div className="min-w-0 space-y-4">
         <Link
-          href="/ozel-ders-paketleri"
+          href={backHref}
           className="inline-flex min-h-11 items-center gap-2 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
         >
           <ChevronLeft size={16} aria-hidden />
-          Özel ders paketleri
+          {backLabel}
         </Link>
         <Notification message={error || "Paket bulunamadı."} variant="error" />
       </div>
@@ -380,7 +412,7 @@ export default function PrivateLessonPackageDetailPage() {
     <div className="ui-page min-w-0 space-y-6 overflow-x-hidden pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
-          href="/ozel-ders-paketleri"
+          href={backHref}
           className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 touch-manipulation sm:hover:border-[#7c3aed]/30 sm:hover:text-white"
         >
           <ChevronLeft size={16} aria-hidden />
@@ -482,9 +514,9 @@ export default function PrivateLessonPackageDetailPage() {
               >
                 <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-300" aria-hidden />
                 <p>
-                  <span className="font-black uppercase tracking-wide text-amber-200/95">Plansız / geçmiş kayıt şu an kapalı.</span>{" "}
-                  Bu pakette açık özel ders planı var; ders yapıldığında kullanım otomatik düşer. Plansız veya geçmişte
-                  kalan dersleri kaydetmek için önce bu planı “Ders yapıldı” ile kapatın veya iptal edin.
+                  <span className="font-black uppercase tracking-wide text-amber-200/95">Açık planlı ders uyarısı.</span>{" "}
+                  Bu pakette açık özel ders planı var. Manuel kullanım eklerseniz paket hakkı ayrıca düşer.
+                  Aynı dersi iki kez düşmemek için önce planlı dersi “Ders yapıldı” veya “İptal et” ile kapatın.
                 </p>
               </div>
             ) : null}
@@ -499,9 +531,7 @@ export default function PrivateLessonPackageDetailPage() {
                 }}
                 className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border px-4 text-[11px] font-black uppercase tracking-wide transition disabled:cursor-not-allowed ${
                   manualUnplannedUsageBlocked
-                    ? manualBlockedByOpenPlan && !usageBlocked
-                      ? "border-amber-500/30 bg-amber-500/5 text-amber-200/75 opacity-80"
-                      : "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 opacity-40"
+                    ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 opacity-40"
                     : "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 enabled:sm:hover:bg-emerald-500/20"
                 }`}
               >
@@ -527,8 +557,8 @@ export default function PrivateLessonPackageDetailPage() {
           <p className="mt-3 text-[11px] font-bold leading-relaxed text-gray-500">
             Planlı özel derslerde <span className="text-gray-300">“Ders yapıldı”</span> dediğinizde paketten kullanım{" "}
             <span className="text-gray-300">otomatik düşer</span>. Takvime bağlı olmayan veya geçmişte yapılmış dersler
-            için yalnızca <span className="text-emerald-200/90">plansız / geçmiş ders kaydı</span> kullanın; açık plan
-            varken bu kayıt kapalıdır.
+            için <span className="text-emerald-200/90">plansız / geçmiş ders kaydı</span> kullanın. Açık plan varken
+            manuel kayıt mümkündür ancak aynı ders için ikinci düşüm riski nedeniyle uyarı + onay gerekir.
           </p>
         ) : null}
       </header>
@@ -690,17 +720,14 @@ export default function PrivateLessonPackageDetailPage() {
 
           <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
             <div className="mb-4 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-black uppercase tracking-wide text-white">Planlı oturumlar</h3>
+              <h3 className="text-xs font-black uppercase tracking-wide text-white">Yaklaşan planlı oturumlar</h3>
               {sessionsLoading ? <Loader2 className="size-5 animate-spin text-[#7c3aed]" aria-hidden /> : null}
             </div>
-            {sessions.filter((s) => s.status === "planned").length === 0 ? (
+            {upcomingPlannedSessions.length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Açık plan yok.</p>
             ) : (
               <ul className="space-y-3">
-                {sessions
-                  .filter((s) => s.status === "planned")
-                  .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-                  .map((s) => {
+                {upcomingPlannedSessions.map((s) => {
                     const canRow =
                       snapshot.viewerRole === "admin" ||
                       (snapshot.viewerRole === "coach" && s.coachId === snapshot.viewerId);
@@ -749,7 +776,60 @@ export default function PrivateLessonPackageDetailPage() {
           </section>
 
           <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
-              <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Geçmiş planlar</h3>
+            <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Tamamlanmayı bekleyen geçmiş planlı dersler</h3>
+            {awaitingCompletionSessions.length === 0 ? (
+              <p className="text-[11px] font-bold text-gray-500">Tamamlanmayı bekleyen geçmiş plan bulunmuyor.</p>
+            ) : (
+              <ul className="space-y-3">
+                {awaitingCompletionSessions.map((s) => {
+                    const canRow =
+                      snapshot.viewerRole === "admin" ||
+                      (snapshot.viewerRole === "coach" && s.coachId === snapshot.viewerId);
+                    return (
+                    <li
+                      key={s.id}
+                      className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[11px] font-bold text-amber-100"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[9px] font-black uppercase text-amber-100">
+                          Tamamlanmayı Bekliyor
+                        </span>
+                        <span className="text-white">{formatLessonDateTimeTr(s.startsAt)}</span>
+                        <span className="text-amber-200/70">→ {formatLessonDateTimeTr(s.endsAt)}</span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-amber-100/90">
+                        Koç: {s.coachName || "—"}
+                        {s.location ? ` · ${s.location}` : ""}
+                      </p>
+                      {canRow ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={sessionActionId === s.id}
+                            onClick={() => void onCompleteSession(s.id)}
+                            className="min-h-10 rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-3 text-[10px] font-black uppercase text-emerald-100 touch-manipulation disabled:opacity-50 sm:hover:bg-emerald-500/25"
+                          >
+                            {sessionActionId === s.id ? "…" : "Ders Yapıldı"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sessionActionId === s.id}
+                            onClick={() => void onCancelSession(s.id)}
+                            className="min-h-10 rounded-xl border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-200 touch-manipulation disabled:opacity-50 sm:hover:border-red-500/30 sm:hover:text-red-300"
+                          >
+                            İptal Et
+                          </button>
+                        </div>
+                      ) : null}
+                    </li>
+                    );
+                  })}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+            <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Tamamlanan ve iptal edilen dersler</h3>
             {sessions.filter((s) => s.status !== "planned").length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Tamamlanan veya iptal edilen plan yok.</p>
             ) : (
@@ -885,6 +965,11 @@ export default function PrivateLessonPackageDetailPage() {
                 className={`${INPUT} min-h-[5.5rem] resize-y`}
               />
             </label>
+            {manualBlockedByOpenPlan ? (
+              <p className="mt-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-100">
+                Bu pakette açık planlı ders var. Manuel kullanım eklerseniz paket hakkı ayrıca düşer.
+              </p>
+            ) : null}
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"

@@ -241,7 +241,7 @@ export default function SporcuDetayDinamik() {
       const latestMap: Record<string, RadarPoint> = {};
       results.forEach((r) => {
         const mName = r.test_definitions?.name;
-        if (mName && !latestMap[mName]) {
+        if (mName && !latestMap[mName] && typeof r.value === "number" && Number.isFinite(r.value)) {
           latestMap[mName] = {
             subject: mName,
             A: r.value,
@@ -655,7 +655,7 @@ export default function SporcuDetayDinamik() {
           <textarea
             value={injuryNoteText}
             onChange={(e) => setInjuryNoteText(e.target.value)}
-            placeholder="Antrenör notu"
+            placeholder="Koç notu"
             rows={3}
             className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
           />

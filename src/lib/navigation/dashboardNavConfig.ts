@@ -63,7 +63,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     section: "management",
     roles: ["admin", "coach"],
     activeMatch: "prefix",
-    activePrefixes: [PATHS.oyuncular, PATHS.sporcularYeni, PATHS.takimlar, PATHS.koclar, PATHS.sporcu],
+    activePrefixes: [PATHS.oyuncular, PATHS.sporcularYeni, PATHS.takimlar, PATHS.sporcu],
   },
   {
     href: PATHS.antrenmanYonetimi,
@@ -98,6 +98,16 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     roles: ["admin", "coach"],
     coachNeedsAll: ["can_view_reports"],
     activeMatch: "prefix",
+    activePrefixes: [PATHS.finans],
+  },
+  {
+    href: PATHS.muhasebeFinans,
+    icon: "CreditCard",
+    label: "Muhasebe & Finans",
+    section: "management",
+    roles: ["admin"],
+    activeMatch: "prefix",
+    activePrefixes: [PATHS.muhasebeFinans],
   },
   {
     href: PATHS.koclar,
@@ -107,6 +117,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     roles: ["admin"],
     adminOnly: true,
     activeMatch: "prefix",
+    activePrefixes: [PATHS.koclar],
   },
 
   {
@@ -171,17 +182,21 @@ export function isDashboardNavItemVisible(
   item: DashboardNavItem,
   ctx: {
     role: UserRole | null;
-    coachPermissions: CoachPermissions;
-    athletePermissions: AthletePermissions;
+    coachPermissions: CoachPermissions | null;
+    athletePermissions: AthletePermissions | null;
   }
 ): boolean {
   if (!ctx.role || !item.roles.includes(ctx.role)) return false;
   if (item.adminOnly && ctx.role !== "admin") return false;
   if (item.coachNeedsAll?.length && ctx.role === "coach") {
-    return item.coachNeedsAll.every((k) => Boolean(ctx.coachPermissions[k]));
+    const coachPermissions = ctx.coachPermissions;
+    if (!coachPermissions) return false;
+    return item.coachNeedsAll.every((k) => Boolean(coachPermissions[k]));
   }
   if (item.athleteNeeds && ctx.role === "sporcu") {
-    return Boolean(ctx.athletePermissions[item.athleteNeeds]);
+    const athletePermissions = ctx.athletePermissions;
+    if (!athletePermissions) return false;
+    return Boolean(athletePermissions[item.athleteNeeds]);
   }
   return true;
 }

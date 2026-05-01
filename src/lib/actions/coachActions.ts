@@ -197,30 +197,65 @@ export async function loadCoachesPageData(orgFromQuery: string | null | undefine
 
   const coaches = listRes.coaches || [];
   const upcomingCountByCoach: Record<string, number> = {};
+  const lessonCountersByCoach: Record<string, { today: number; upcoming: number; past: number; total: number }> = {};
   const coachIds = coaches.map((c) => c.id).filter(Boolean) as string[];
   if (coachIds.length > 0) {
-    const nowIso = new Date().toISOString();
-    const { data: scheduleRows, error: schedErr } = await adminClient
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const { data: groupRows, error: groupErr } = await adminClient
       .from("training_schedule")
-      .select("coach_id")
+      .select("coach_id, start_time")
       .eq("organization_id", orgId)
       .in("coach_id", coachIds)
-      .gte("start_time", nowIso)
       .neq("status", "cancelled");
-    if (schedErr) {
-      return { error: `Yaklasan ders sayilari alinamadi: ${schedErr.message}` as const };
+    if (groupErr) {
+      return { error: `Ders sayilari alinamadi: ${groupErr.message}` as const };
     }
-    (scheduleRows || []).forEach((row: { coach_id?: string | null }) => {
-      const idKey = row.coach_id || "";
-      if (!idKey) return;
-      upcomingCountByCoach[idKey] = (upcomingCountByCoach[idKey] || 0) + 1;
+
+    const { data: privateRows, error: privateErr } = await adminClient
+      .from("private_lesson_sessions")
+      .select("coach_id, starts_at")
+      .eq("organization_id", orgId)
+      .in("coach_id", coachIds)
+      .neq("status", "cancelled");
+    if (privateErr) {
+      return { error: `Ozel ders sayilari alinamadi: ${privateErr.message}` as const };
+    }
+
+    for (const coachId of coachIds) {
+      lessonCountersByCoach[coachId] = { today: 0, upcoming: 0, past: 0, total: 0 };
+    }
+
+    const ingest = (coachId: string | null | undefined, startsAtRaw: string | null | undefined) => {
+      if (!coachId || !startsAtRaw) return;
+      const startsAt = new Date(startsAtRaw);
+      if (Number.isNaN(startsAt.getTime()) || !lessonCountersByCoach[coachId]) return;
+      const counters = lessonCountersByCoach[coachId];
+      counters.total += 1;
+      if (startsAt.getTime() > now.getTime()) counters.upcoming += 1;
+      if (startsAt.getTime() < now.getTime()) counters.past += 1;
+      if (startsAt.getTime() >= dayStart.getTime() && startsAt.getTime() <= dayEnd.getTime()) counters.today += 1;
+    };
+
+    (groupRows || []).forEach((row: { coach_id?: string | null; start_time?: string | null }) => {
+      ingest(row.coach_id, row.start_time);
     });
+    (privateRows || []).forEach((row: { coach_id?: string | null; starts_at?: string | null }) => {
+      ingest(row.coach_id, row.starts_at);
+    });
+
+    for (const coachId of coachIds) {
+      upcomingCountByCoach[coachId] = lessonCountersByCoach[coachId]?.upcoming || 0;
+    }
   }
 
   return {
     organizationId: orgId,
     coaches,
     upcomingCountByCoach,
+    lessonCountersByCoach,
   };
 }
 
@@ -369,6 +404,32 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
     return { error: `Ders listesi alinamadi: ${sErr.message}` as const };
   }
 
+  const { data: privateRows, error: privateErr } = await adminClient
+    .from("private_lesson_sessions")
+    .select(
+      "id, starts_at, location, status, athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name)"
+    )
+    .eq("organization_id", organizationId)
+    .eq("coach_id", coachId)
+    .neq("status", "cancelled");
+
+  if (privateErr) {
+    return { error: `Özel ders listesi alınamadı: ${privateErr.message}` as const };
+  }
+
+  const mappedPrivateRows: CoachAdminScheduleRow[] = (privateRows || []).map((row) => {
+    const athlete = Array.isArray(row.athlete_profile) ? row.athlete_profile[0] : row.athlete_profile;
+    const pkg = Array.isArray(row.pkg) ? row.pkg[0] : row.pkg;
+    const athleteName = athlete?.full_name?.trim() || athlete?.email?.trim() || "Sporcu";
+    const pkgName = pkg?.package_name?.trim() || "Özel Ders";
+    return {
+      id: `private-${row.id}`,
+      title: `${pkgName} · ${athleteName}`,
+      start_time: row.starts_at,
+      location: row.location,
+    };
+  });
+
   const { data: permissionRow } = await adminClient
     .from("coach_permissions")
     .select(COACH_PERMISSION_KEYS.join(","))
@@ -377,7 +438,7 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
 
   return {
     row: base.row,
-    scheduleRows: (scheduleRows || []) as CoachAdminScheduleRow[],
+    scheduleRows: [...((scheduleRows || []) as CoachAdminScheduleRow[]), ...mappedPrivateRows],
     permissions: normalizeCoachPermissions((permissionRow ?? null) as Partial<CoachPermissions> | null),
   };
 }

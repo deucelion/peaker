@@ -5,7 +5,9 @@ import { Search, ChevronRight, Loader2, Clock3, CheckCircle2, AlertTriangle } fr
 import { listOrgPaymentsForAdmin } from "@/lib/actions/financeActions";
 import type { FinanceStatusSummary } from "@/lib/types";
 import Notification from "@/components/Notification";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 type FinanceListPlayer = {
   id: string;
   full_name: string;
@@ -26,8 +28,10 @@ export default function FinansYonetimi() {
   const [pendingAmountTotal, setPendingAmountTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Tümü");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [canOpenAccountingPanel, setCanOpenAccountingPanel] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -54,10 +58,42 @@ export default function FinansYonetimi() {
     return () => clearTimeout(id);
   }, [fetchData]);
 
-  const filteredPlayers = useMemo(
-    () => players.filter((p) => (p.full_name || "").toLowerCase().includes(searchTerm.toLowerCase())),
-    [players, searchTerm]
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      void (async () => {
+        const me = await fetchMeRoleClient();
+        if (cancelled || !me.ok) return;
+        setCanOpenAccountingPanel(me.role === "admin" || me.role === "super_admin");
+      })();
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, []);
+
+  const statusOptions = useMemo(
+    () => [
+      "Tümü",
+      "Ödeme Tamamlandı",
+      "Ödeme Bekleniyor",
+      "Kısmi Ödeme",
+      "Gecikmiş Ödeme",
+      "Borç Bulunmuyor",
+    ],
+    []
   );
+
+  const filteredPlayers = useMemo(() => {
+    return players
+      .filter((p) => (p.full_name || "").toLowerCase().includes(searchTerm.toLowerCase()))
+      .filter((p) => {
+        if (statusFilter === "Tümü") return true;
+        const presentation = getFinanceStatusPresentation(p.financeSummary);
+        return presentation.label === statusFilter;
+      });
+  }, [players, searchTerm, statusFilter]);
 
   if (loading) {
     return (
@@ -72,7 +108,18 @@ export default function FinansYonetimi() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="ui-h1">Sporcu <span className="text-green-500">Ödemeleri</span></h1>
-          <p className="ui-lead border-green-500">Odeme modeli, borc ve tahsilat durumunu tek listede izleyin</p>
+          <p className="ui-lead border-green-500">Sporcu bazlı borç, ödeme ve tahsilat durumlarını yönetin.</p>
+          <p className="mt-2 text-xs font-semibold text-gray-400">
+            Bu ekran sporcu finans takibi içindir; genel muhasebe ve koç ödemesi süreci ayrı panelde yönetilir.
+          </p>
+          {canOpenAccountingPanel ? (
+            <Link
+              href="/muhasebe-finans"
+              className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/15"
+            >
+              Genel muhasebe paneline git
+            </Link>
+          ) : null}
         </div>
         <div className="flex gap-3">
           <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
@@ -97,6 +144,23 @@ export default function FinansYonetimi() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="ui-input min-h-11 pl-11"
         />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full max-w-sm">
+          <label className="mb-1 block text-[10px] font-black uppercase text-gray-500">Durum filtresi</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="ui-select min-h-11 w-full"
+          >
+            {statusOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="text-[11px] font-bold text-gray-500">{filteredPlayers.length} kayıt gösteriliyor</p>
       </div>
 
       <div className="grid gap-3">
@@ -124,8 +188,8 @@ export default function FinansYonetimi() {
                   <p className="text-[10px] font-bold uppercase text-gray-500">#{player.number || "00"} · {player.position || "Gelisim"} · {player.paymentModel}</p>
                   <p className="text-[10px] font-semibold text-gray-400">{player.activeProductLabel || "Aktif plan bulunmuyor"}</p>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+                <div className="text-left sm:text-right">
                     <p className="text-[9px] font-black uppercase text-gray-500">Sonraki planli tahsilat</p>
                   <p className="text-xs font-black text-white">{player.financeSummary.nextDueDate || player.nextAidatPlan.dueDate || "-"}</p>
                   <p className="text-xs font-bold text-gray-400">₺{player.financeSummary.nextAmount ?? player.nextAidatPlan.amount ?? 0}</p>
@@ -137,15 +201,27 @@ export default function FinansYonetimi() {
                     </p>
                 </div>
                 <div className="text-[11px] font-black uppercase">{toneNode}</div>
-                <ChevronRight className="text-gray-600 sm:group-hover:text-green-400" />
+                <ChevronRight className="self-end text-gray-600 sm:self-auto sm:group-hover:text-green-400" />
               </div>
             </Link>
           );
         })}
         {filteredPlayers.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-center text-xs font-black uppercase text-gray-500">
-            Kayit bulunamadi.
-          </div>
+          <EmptyStateCard
+            title="Kayıt bulunamadı"
+            description="Seçili filtrelerde sporcu ödeme kaydı görünmüyor."
+            reason="Filtreler çok dar olabilir veya henüz finans kaydı açılmamış olabilir."
+            primaryAction={{
+              label: "Filtreleri sıfırla",
+              onClick: () => {
+                setSearchTerm("");
+                setStatusFilter("Tümü");
+              },
+            }}
+            secondaryAction={
+              canOpenAccountingPanel ? { label: "Muhasebe paneline git", href: "/muhasebe-finans" } : undefined
+            }
+          />
         ) : null}
       </div>
     </div>
