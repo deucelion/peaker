@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Notification from "@/components/Notification";
@@ -12,6 +12,7 @@ import {
   type AccountingFinanceSnapshot,
   type AccountingFinanceFilters,
   type AccountingFinancePackageOption,
+  type AccountingFinancePaymentRow,
 } from "@/lib/actions/accountingFinanceActions";
 import {
   getAccountingLessonStatusLabel,
@@ -79,6 +80,13 @@ function formatShortDate(iso: string | null) {
   return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/** `YYYY-MM-DD` (date input) → `DD.MM.YYYY` */
+function formatWallDateInputTr(ymd: string) {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [y, m, d] = ymd.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 function getPaymentStatusBadgeClass(status: "bekliyor" | "odendi") {
   return status === "odendi"
     ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
@@ -94,6 +102,63 @@ function lessonStatusBadgeClass(status: string) {
 function monthKeyNow() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type GeneralFiltersState = {
+  month: string;
+  dateFrom: string;
+  dateTo: string;
+  coachId: string;
+  lessonType: string;
+  lessonStatus: string;
+  paymentKind: string;
+  paymentStatus: string;
+};
+
+type CoachesFiltersState = {
+  month: string;
+  dateFrom: string;
+  dateTo: string;
+  coachId: string;
+  lessonType: string;
+  lessonStatus: string;
+};
+
+function defaultGeneralFilters(): GeneralFiltersState {
+  return {
+    month: monthKeyNow(),
+    dateFrom: "",
+    dateTo: "",
+    coachId: "",
+    lessonType: "all",
+    lessonStatus: "all",
+    paymentKind: "",
+    paymentStatus: "all",
+  };
+}
+
+function defaultCoachesFilters(): CoachesFiltersState {
+  return {
+    month: monthKeyNow(),
+    dateFrom: "",
+    dateTo: "",
+    coachId: "",
+    lessonType: "all",
+    lessonStatus: "all",
+  };
+}
+
+function getPaymentTuruBucket(kind: string): string {
+  if (kind === "monthly_membership") return "Aylık üyelik";
+  if (kind === "private_lesson_package") return "Özel ders paketi";
+  return "Diğer";
+}
+
+function formatRemainingBalanceCell(row: AccountingFinancePaymentRow) {
+  if (row.packageId != null && row.remainingBalance != null) {
+    return formatMoney(row.remainingBalance);
+  }
+  return "—";
 }
 
 function formatPackageDropdownLabel(pkg: AccountingFinancePackageOption) {
@@ -121,25 +186,19 @@ export default function MuhasebeFinansPage() {
   const [activeView, setActiveView] = useState<ViewTab>("genel");
   const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const [filters, setFilters] = useState({
-    month: monthKeyNow(),
-    dateFrom: "",
-    dateTo: "",
-    coachId: "",
-    lessonType: "all",
-    lessonStatus: "all",
-    paymentKind: "",
-    paymentStatus: "all",
-  });
+  const [draftGeneralFilters, setDraftGeneralFilters] = useState<GeneralFiltersState>(defaultGeneralFilters);
+  const [appliedGeneralFilters, setAppliedGeneralFilters] = useState<GeneralFiltersState>(defaultGeneralFilters);
+  const [draftCoachesFilters, setDraftCoachesFilters] = useState<CoachesFiltersState>(defaultCoachesFilters);
+  const [appliedCoachesFilters, setAppliedCoachesFilters] = useState<CoachesFiltersState>(defaultCoachesFilters);
+  const [filterApplyFeedback, setFilterApplyFeedback] = useState<string | null>(null);
 
-  const [coachesFilters, setCoachesFilters] = useState({
-    month: monthKeyNow(),
-    dateFrom: "",
-    dateTo: "",
-    coachId: "",
-    lessonType: "all",
-    lessonStatus: "all",
-  });
+  const activeViewRef = useRef<ViewTab>(activeView);
+  const appliedGeneralRef = useRef(appliedGeneralFilters);
+  const appliedCoachesRef = useRef(appliedCoachesFilters);
+  const dataScopeRef = useRef<AccountingFinanceSnapshot["dataScope"]>("full");
+  activeViewRef.current = activeView;
+  appliedGeneralRef.current = appliedGeneralFilters;
+  appliedCoachesRef.current = appliedCoachesFilters;
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
@@ -161,70 +220,88 @@ export default function MuhasebeFinansPage() {
   const [canOpenAthletePayments, setCanOpenAthletePayments] = useState(false);
   const [refreshAck, setRefreshAck] = useState(false);
 
+  const runFetch = useCallback(
+    async (opts?: {
+      view?: ViewTab;
+      general?: GeneralFiltersState;
+      coaches?: CoachesFiltersState;
+    }): Promise<boolean> => {
+      setLoading(true);
+      const view = opts?.view ?? activeViewRef.current;
+      const isGeneral = view === "genel";
+      const cf = isGeneral ? (opts?.general ?? appliedGeneralRef.current) : (opts?.coaches ?? appliedCoachesRef.current);
+      const payload: AccountingFinanceFilters = {
+        orgId: readOrgFromUrl(),
+        month: cf.month,
+        dateFrom: cf.dateFrom || undefined,
+        dateTo: cf.dateTo || undefined,
+        coachId: cf.coachId || undefined,
+        lessonType: cf.lessonType as AccountingFinanceFilters["lessonType"],
+        lessonStatus: cf.lessonStatus as AccountingFinanceFilters["lessonStatus"],
+        paymentKind: isGeneral ? (cf as GeneralFiltersState).paymentKind || undefined : undefined,
+        paymentStatus: isGeneral
+          ? ((cf as GeneralFiltersState).paymentStatus as AccountingFinanceFilters["paymentStatus"])
+          : "all",
+        lessonsOnly: !isGeneral,
+      };
+      const res = await loadAccountingFinanceDashboard(payload);
+      if ("error" in res) {
+        setLoadError(res.error);
+        setSnapshot(null);
+        setLoading(false);
+        return false;
+      }
+      setLoadError(null);
+      dataScopeRef.current = res.snapshot.dataScope;
+      setSnapshot(res.snapshot);
+      setLoading(false);
+      return true;
+    },
+    []
+  );
+
   const resetGeneralFilters = useCallback(() => {
     setActionFeedback(null);
-    setFilters({
-      month: monthKeyNow(),
-      dateFrom: "",
-      dateTo: "",
-      coachId: "",
-      lessonType: "all",
-      lessonStatus: "all",
-      paymentKind: "",
-      paymentStatus: "all",
-    });
+    const next = defaultGeneralFilters();
+    setDraftGeneralFilters(next);
+    setAppliedGeneralFilters(next);
     setFiltersAdvancedOpen(false);
-  }, []);
+    void runFetch({ view: "genel", general: next });
+  }, [runFetch]);
 
   const resetCoachesFilters = useCallback(() => {
     setActionFeedback(null);
-    setCoachesFilters({
-      month: monthKeyNow(),
-      dateFrom: "",
-      dateTo: "",
-      coachId: "",
-      lessonType: "all",
-      lessonStatus: "all",
-    });
+    const next = defaultCoachesFilters();
+    setDraftCoachesFilters(next);
+    setAppliedCoachesFilters(next);
     setCoachesFiltersAdvancedOpen(false);
-  }, []);
+    void runFetch({ view: "koclar", coaches: next });
+  }, [runFetch]);
 
-  const fetchData = useCallback(async (): Promise<boolean> => {
-    setLoading(true);
-    const cf = activeView === "genel" ? filters : coachesFilters;
-    const payload: AccountingFinanceFilters = {
-      orgId: readOrgFromUrl(),
-      month: cf.month,
-      dateFrom: cf.dateFrom || undefined,
-      dateTo: cf.dateTo || undefined,
-      coachId: cf.coachId || undefined,
-      lessonType: cf.lessonType as AccountingFinanceFilters["lessonType"],
-      lessonStatus: cf.lessonStatus as AccountingFinanceFilters["lessonStatus"],
-      paymentKind: activeView === "genel" ? filters.paymentKind || undefined : undefined,
-      paymentStatus:
-        activeView === "genel" ? (filters.paymentStatus as AccountingFinanceFilters["paymentStatus"]) : "all",
-    };
-    const res = await loadAccountingFinanceDashboard(payload);
-    if ("error" in res) {
-      setLoadError(res.error);
-      setSnapshot(null);
-      setLoading(false);
-      return false;
-    }
-    setLoadError(null);
-    setSnapshot(res.snapshot);
-    setLoading(false);
-    return true;
-  }, [activeView, coachesFilters, filters]);
+  const applyGeneralFilters = useCallback(() => {
+    const next = { ...draftGeneralFilters };
+    setAppliedGeneralFilters(next);
+    setFilterApplyFeedback("Filtreler uygulandı");
+    window.setTimeout(() => setFilterApplyFeedback(null), 2400);
+    void runFetch({ view: "genel", general: next });
+  }, [draftGeneralFilters, runFetch]);
+
+  const applyCoachesFilters = useCallback(() => {
+    const next = { ...draftCoachesFilters };
+    setAppliedCoachesFilters(next);
+    setFilterApplyFeedback("Filtreler uygulandı");
+    window.setTimeout(() => setFilterApplyFeedback(null), 2400);
+    void runFetch({ view: "koclar", coaches: next });
+  }, [draftCoachesFilters, runFetch]);
 
   const refreshDashboardHard = useCallback(async () => {
-    const ok = await fetchData();
+    const ok = await runFetch();
     router.refresh();
     if (ok) {
       setRefreshAck(true);
       window.setTimeout(() => setRefreshAck(false), 2600);
     }
-  }, [fetchData, router]);
+  }, [runFetch, router]);
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | null = null;
@@ -233,7 +310,7 @@ export default function MuhasebeFinansPage() {
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         debounce = null;
-        void fetchData();
+        void runFetch();
       }, 400);
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -241,14 +318,15 @@ export default function MuhasebeFinansPage() {
       if (debounce) clearTimeout(debounce);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [fetchData]);
+  }, [runFetch]);
 
-  useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchData();
-    }, 0);
-    return () => clearTimeout(id);
-  }, [fetchData]);
+  useLayoutEffect(() => {
+    if (activeView === "genel" && dataScopeRef.current === "lessons_only") {
+      void runFetch({ view: "genel" });
+      return;
+    }
+    void runFetch({ view: activeView });
+  }, [activeView, runFetch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,9 +381,34 @@ export default function MuhasebeFinansPage() {
 
   const paymentKindOptions = useMemo(() => snapshot?.options.paymentKinds || [], [snapshot]);
   const periodLabel = useMemo(
-    () => formatMonthLabel(activeView === "genel" ? filters.month : coachesFilters.month),
-    [activeView, coachesFilters.month, filters.month]
+    () => formatMonthLabel(activeView === "genel" ? appliedGeneralFilters.month : appliedCoachesFilters.month),
+    [activeView, appliedCoachesFilters.month, appliedGeneralFilters.month]
   );
+
+  const activeGeneralFilterSummary = useMemo(() => {
+    const cf = appliedGeneralFilters;
+    const rangePart =
+      cf.dateFrom && cf.dateTo
+        ? `${formatWallDateInputTr(cf.dateFrom)} - ${formatWallDateInputTr(cf.dateTo)} arası`
+        : `${formatMonthLabel(cf.month)} · ay görünümü`;
+    const coachPart = cf.coachId
+      ? snapshot?.options.coaches.find((c) => c.id === cf.coachId)?.full_name || "Seçili koç"
+      : "Tüm koçlar";
+    const kindPart = cf.paymentKind ? getAccountingPaymentKindLabel(cf.paymentKind) : "Tüm ödeme türleri";
+    return { rangePart, coachPart, kindPart };
+  }, [appliedGeneralFilters, snapshot?.options.coaches]);
+
+  const activeCoachesFilterSummary = useMemo(() => {
+    const cf = appliedCoachesFilters;
+    const rangePart =
+      cf.dateFrom && cf.dateTo
+        ? `${formatWallDateInputTr(cf.dateFrom)} - ${formatWallDateInputTr(cf.dateTo)} arası`
+        : `${formatMonthLabel(cf.month)} · ay görünümü`;
+    const coachPart = cf.coachId
+      ? snapshot?.options.coaches.find((c) => c.id === cf.coachId)?.full_name || "Seçili koç"
+      : "Tüm koçlar";
+    return { rangePart, coachPart };
+  }, [appliedCoachesFilters, snapshot?.options.coaches]);
 
   const lessons = snapshot?.lessons || [];
   const lessonsEmpty = lessons.length === 0;
@@ -427,7 +530,10 @@ export default function MuhasebeFinansPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setActiveView("genel")}
+              onClick={() => {
+                setFilterApplyFeedback(null);
+                setActiveView("genel");
+              }}
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
                 activeView === "genel"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
@@ -438,7 +544,10 @@ export default function MuhasebeFinansPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveView("koclar")}
+              onClick={() => {
+                setFilterApplyFeedback(null);
+                setActiveView("koclar");
+              }}
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
                 activeView === "koclar"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
@@ -496,34 +605,55 @@ export default function MuhasebeFinansPage() {
         <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xs font-black uppercase text-white">Filtreler</h2>
+            {filterApplyFeedback ? (
+              <span className="text-[10px] font-semibold text-emerald-400/95" role="status">
+                {filterApplyFeedback}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-            <label className="min-w-0 flex-1 space-y-1 lg:max-w-md">
-              <span className="text-[10px] font-black uppercase text-gray-500">Ay (öncelikli)</span>
+            <label className="min-w-0 flex-1 space-y-1 lg:max-w-[14rem]">
+              <span className="text-[10px] font-black uppercase text-gray-500">Ay</span>
               <input
                 type="month"
-                value={filters.month}
-                onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
-                className="ui-input min-h-11 w-full"
+                value={draftGeneralFilters.month}
+                onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, month: e.target.value }))}
+                className="ui-input min-h-11 w-full max-w-full"
               />
             </label>
-            <button
-              type="button"
-              onClick={() => setFiltersAdvancedOpen((o) => !o)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
-            >
-              {filtersAdvancedOpen ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
-              Gelişmiş filtreler
-            </button>
+            <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+              <button
+                type="button"
+                onClick={() => applyGeneralFilters()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wide text-black shadow-md shadow-emerald-500/15 transition hover:bg-emerald-400"
+              >
+                Filtreleri uygula
+              </button>
+              <button
+                type="button"
+                onClick={() => resetGeneralFilters()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
+              >
+                Filtreleri sıfırla
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltersAdvancedOpen((o) => !o)}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
+              >
+                {filtersAdvancedOpen ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
+                Gelişmiş
+              </button>
+            </div>
           </div>
           {filtersAdvancedOpen ? (
-            <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2 lg:grid-cols-3">
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Tarih başlangıç</span>
                 <input
                   type="date"
-                  value={filters.dateFrom}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                  value={draftGeneralFilters.dateFrom}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
                   className="ui-input min-h-11 w-full"
                 />
               </label>
@@ -531,17 +661,17 @@ export default function MuhasebeFinansPage() {
                 <span className="text-[10px] font-black uppercase text-gray-500">Tarih bitiş</span>
                 <input
                   type="date"
-                  value={filters.dateTo}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                  value={draftGeneralFilters.dateTo}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
                   className="ui-input min-h-11 w-full"
                 />
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Koç</span>
                 <select
-                  value={filters.coachId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, coachId: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftGeneralFilters.coachId}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, coachId: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   <option value="">Tüm koçlar</option>
                   {(snapshot?.options.coaches || []).map((coach) => (
@@ -554,9 +684,9 @@ export default function MuhasebeFinansPage() {
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Ders tipi</span>
                 <select
-                  value={filters.lessonType}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, lessonType: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftGeneralFilters.lessonType}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, lessonType: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   {LESSON_TYPE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -568,9 +698,9 @@ export default function MuhasebeFinansPage() {
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Ders durumu</span>
                 <select
-                  value={filters.lessonStatus}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, lessonStatus: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftGeneralFilters.lessonStatus}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, lessonStatus: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   {LESSON_STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -582,9 +712,9 @@ export default function MuhasebeFinansPage() {
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Ödeme türü</span>
                 <select
-                  value={filters.paymentKind}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, paymentKind: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftGeneralFilters.paymentKind}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, paymentKind: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   <option value="">Tüm ödeme türleri</option>
                   {paymentKindOptions.map((kind) => (
@@ -594,12 +724,12 @@ export default function MuhasebeFinansPage() {
                   ))}
                 </select>
               </label>
-              <label className="space-y-1 sm:col-span-2 xl:col-span-3">
+              <label className="space-y-1 sm:col-span-2 lg:col-span-3">
                 <span className="text-[10px] font-black uppercase text-gray-500">Tahsilat durumu</span>
                 <select
-                  value={filters.paymentStatus}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, paymentStatus: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftGeneralFilters.paymentStatus}
+                  onChange={(e) => setDraftGeneralFilters((prev) => ({ ...prev, paymentStatus: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   {PAYMENT_STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -610,45 +740,71 @@ export default function MuhasebeFinansPage() {
               </label>
             </div>
           ) : null}
-          {filtersAdvancedOpen || filters.dateFrom || filters.dateTo ? (
+          {(filtersAdvancedOpen || draftGeneralFilters.dateFrom || draftGeneralFilters.dateTo) && (
             <p className="mt-3 text-[11px] font-semibold text-amber-300/90">
-              Özel tarih aralığı doluysa ay filtresi yok sayılır.
+              Özel tarih aralığı seçildiğinde ay filtresi dikkate alınmaz.
             </p>
-          ) : null}
-          <p className="mt-3 text-[10px] font-medium text-gray-500">Veriler seçili döneme ve filtrelere göre güncellenir.</p>
+          )}
+          <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[10px] font-semibold text-gray-400">
+            <p className="font-black uppercase tracking-wide text-gray-500">Aktif filtre özeti</p>
+            <p className="mt-1 text-gray-300">{activeGeneralFilterSummary.rangePart}</p>
+            <p className="mt-0.5">{activeGeneralFilterSummary.coachPart}</p>
+            <p className="mt-0.5">{activeGeneralFilterSummary.kindPart}</p>
+          </div>
         </section>
       ) : (
         <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xs font-black uppercase text-white">Filtreler</h2>
+            {filterApplyFeedback ? (
+              <span className="text-[10px] font-semibold text-emerald-400/95" role="status">
+                {filterApplyFeedback}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-            <label className="min-w-0 flex-1 space-y-1 lg:max-w-md">
-              <span className="text-[10px] font-black uppercase text-gray-500">Ay (öncelikli)</span>
+            <label className="min-w-0 flex-1 space-y-1 lg:max-w-[14rem]">
+              <span className="text-[10px] font-black uppercase text-gray-500">Ay</span>
               <input
                 type="month"
-                value={coachesFilters.month}
-                onChange={(e) => setCoachesFilters((prev) => ({ ...prev, month: e.target.value }))}
-                className="ui-input min-h-11 w-full"
+                value={draftCoachesFilters.month}
+                onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, month: e.target.value }))}
+                className="ui-input min-h-11 w-full max-w-full"
               />
             </label>
-            <button
-              type="button"
-              onClick={() => setCoachesFiltersAdvancedOpen((o) => !o)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
-            >
-              {coachesFiltersAdvancedOpen ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
-              Gelişmiş filtreler
-            </button>
+            <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+              <button
+                type="button"
+                onClick={() => applyCoachesFilters()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wide text-black shadow-md shadow-emerald-500/15 transition hover:bg-emerald-400"
+              >
+                Filtreleri uygula
+              </button>
+              <button
+                type="button"
+                onClick={() => resetCoachesFilters()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
+              >
+                Filtreleri sıfırla
+              </button>
+              <button
+                type="button"
+                onClick={() => setCoachesFiltersAdvancedOpen((o) => !o)}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/30 px-4 text-xs font-black uppercase text-gray-300 transition hover:border-white/25 hover:text-white"
+              >
+                {coachesFiltersAdvancedOpen ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
+                Gelişmiş
+              </button>
+            </div>
           </div>
           {coachesFiltersAdvancedOpen ? (
-            <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2 lg:grid-cols-3">
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Tarih başlangıç</span>
                 <input
                   type="date"
-                  value={coachesFilters.dateFrom}
-                  onChange={(e) => setCoachesFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                  value={draftCoachesFilters.dateFrom}
+                  onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
                   className="ui-input min-h-11 w-full"
                 />
               </label>
@@ -656,17 +812,17 @@ export default function MuhasebeFinansPage() {
                 <span className="text-[10px] font-black uppercase text-gray-500">Tarih bitiş</span>
                 <input
                   type="date"
-                  value={coachesFilters.dateTo}
-                  onChange={(e) => setCoachesFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                  value={draftCoachesFilters.dateTo}
+                  onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
                   className="ui-input min-h-11 w-full"
                 />
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Koç</span>
                 <select
-                  value={coachesFilters.coachId}
-                  onChange={(e) => setCoachesFilters((prev) => ({ ...prev, coachId: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftCoachesFilters.coachId}
+                  onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, coachId: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   <option value="">Tüm koçlar</option>
                   {(snapshot?.options.coaches || []).map((coach) => (
@@ -679,9 +835,9 @@ export default function MuhasebeFinansPage() {
               <label className="space-y-1">
                 <span className="text-[10px] font-black uppercase text-gray-500">Ders tipi</span>
                 <select
-                  value={coachesFilters.lessonType}
-                  onChange={(e) => setCoachesFilters((prev) => ({ ...prev, lessonType: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftCoachesFilters.lessonType}
+                  onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, lessonType: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   {LESSON_TYPE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -690,12 +846,12 @@ export default function MuhasebeFinansPage() {
                   ))}
                 </select>
               </label>
-              <label className="space-y-1 sm:col-span-2 xl:col-span-3">
+              <label className="space-y-1 sm:col-span-2 lg:col-span-3">
                 <span className="text-[10px] font-black uppercase text-gray-500">Ders durumu</span>
                 <select
-                  value={coachesFilters.lessonStatus}
-                  onChange={(e) => setCoachesFilters((prev) => ({ ...prev, lessonStatus: e.target.value }))}
-                  className="ui-select min-h-11 w-full"
+                  value={draftCoachesFilters.lessonStatus}
+                  onChange={(e) => setDraftCoachesFilters((prev) => ({ ...prev, lessonStatus: e.target.value }))}
+                  className="ui-select min-h-11 w-full max-w-full"
                 >
                   {LESSON_STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -706,12 +862,16 @@ export default function MuhasebeFinansPage() {
               </label>
             </div>
           ) : null}
-          {coachesFiltersAdvancedOpen || coachesFilters.dateFrom || coachesFilters.dateTo ? (
+          {(coachesFiltersAdvancedOpen || draftCoachesFilters.dateFrom || draftCoachesFilters.dateTo) && (
             <p className="mt-3 text-[11px] font-semibold text-amber-300/90">
-              Özel tarih aralığı doluysa ay filtresi yok sayılır.
+              Özel tarih aralığı seçildiğinde ay filtresi dikkate alınmaz.
             </p>
-          ) : null}
-          <p className="mt-3 text-[10px] font-medium text-gray-500">Veriler seçili döneme ve filtrelere göre güncellenir.</p>
+          )}
+          <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[10px] font-semibold text-gray-400">
+            <p className="font-black uppercase tracking-wide text-gray-500">Aktif filtre özeti</p>
+            <p className="mt-1 text-gray-300">{activeCoachesFilterSummary.rangePart}</p>
+            <p className="mt-0.5">{activeCoachesFilterSummary.coachPart}</p>
+          </div>
         </section>
       )}
 
@@ -791,7 +951,7 @@ export default function MuhasebeFinansPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-black text-white">{row.athleteName}</p>
                     <p className="mt-1 text-[11px] font-semibold text-gray-500">
-                      {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "-"}
+                      {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "—"}
                     </p>
                   </div>
                   <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${getPaymentStatusBadgeClass(row.status)}`}>
@@ -800,11 +960,17 @@ export default function MuhasebeFinansPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-semibold">
                   <p className="text-gray-400">
-                    Tür: <span className="text-gray-200">{getAccountingPaymentKindLabel(row.paymentKind)}</span>
+                    Tür: <span className="text-gray-200">{getPaymentTuruBucket(row.paymentKind)}</span>
                   </p>
-                  <p className="text-right text-emerald-300">{formatMoney(row.amount)}</p>
+                  <p className="text-right text-emerald-300">Ödenen {formatMoney(row.paidAmount)}</p>
                   <p className="col-span-2 text-gray-400">
-                    Kaynak: <span className="text-gray-300">{row.sourceLabel || "-"}</span>
+                    Kanal: <span className="text-gray-300">{row.channelLabel}</span>
+                  </p>
+                  <p className="col-span-2 text-gray-400">
+                    Kalan: <span className="text-gray-300">{formatRemainingBalanceCell(row)}</span>
+                  </p>
+                  <p className="col-span-2 text-gray-400">
+                    Açıklama: <span className="text-gray-300">{row.descriptionText}</span>
                   </p>
                 </div>
               </article>
@@ -842,10 +1008,12 @@ export default function MuhasebeFinansPage() {
               <thead className="border-b border-white/10 text-[10px] uppercase text-gray-500">
                 <tr>
                   <th className="px-3 py-2">Sporcu</th>
-                  <th className="px-3 py-2">Tür</th>
-                  <th className="px-3 py-2 text-right">Tutar</th>
+                  <th className="px-3 py-2">Ödeme türü</th>
+                  <th className="px-3 py-2">Ödeme zamanı / kaynak</th>
+                  <th className="px-3 py-2 text-right">Ödenen</th>
+                  <th className="px-3 py-2 text-right">Kalan</th>
                   <th className="px-3 py-2">Ödeme tarihi</th>
-                  <th className="px-3 py-2">Kaynak / Açıklama</th>
+                  <th className="px-3 py-2">Açıklama</th>
                   <th className="px-3 py-2">Durum</th>
                 </tr>
               </thead>
@@ -855,12 +1023,14 @@ export default function MuhasebeFinansPage() {
                     <td className="px-3 py-2">{row.athleteName}</td>
                     <td className="px-3 py-2">
                       <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-gray-300">
-                        {getAccountingPaymentKindLabel(row.paymentKind)}
+                        {getPaymentTuruBucket(row.paymentKind)}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-bold">{formatMoney(row.amount)}</td>
-                    <td className="px-3 py-2">{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "-"}</td>
-                    <td className="px-3 py-2">{row.sourceLabel}</td>
+                    <td className="max-w-[11rem] px-3 py-2 text-[11px] text-gray-300">{row.channelLabel}</td>
+                    <td className="px-3 py-2 text-right font-bold tabular-nums text-emerald-200/95">{formatMoney(row.paidAmount)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-300">{formatRemainingBalanceCell(row)}</td>
+                    <td className="px-3 py-2">{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "—"}</td>
+                    <td className="max-w-[14rem] px-3 py-2 text-[11px] text-gray-400">{row.descriptionText}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${getPaymentStatusBadgeClass(row.status)}`}>
                         {getAccountingPaymentStatusLabel(row.status)}
@@ -870,7 +1040,7 @@ export default function MuhasebeFinansPage() {
                 ))}
                 {(snapshot?.payments?.length ?? 0) === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center">
+                    <td colSpan={8} className="px-3 py-10 text-center">
                       <p className="text-xs font-bold text-gray-200">Bu aralıkta tahsilat kaydı yok</p>
                       <p className="mt-1 text-xs font-medium text-gray-500">
                         Filtreleri değiştirebilir veya yeni tahsilat ekleyebilirsiniz.

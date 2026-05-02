@@ -39,6 +39,8 @@ export type AccountingFinanceFilters = {
   lessonStatus?: LessonStatusFilter;
   paymentKind?: string | null;
   paymentStatus?: PaymentStatusFilter;
+  /** true: yalnızca ders/koç raporu; payments ve tahsilat KPI sorgulanmaz */
+  lessonsOnly?: boolean;
 };
 
 export type AccountingFinancePaymentRow = {
@@ -46,6 +48,8 @@ export type AccountingFinancePaymentRow = {
   athleteId: string | null;
   athleteName: string;
   amount: number;
+  paidAmount: number;
+  remainingBalance: number | null;
   paymentDate: string | null;
   dueDate: string | null;
   status: "bekliyor" | "odendi";
@@ -53,6 +57,9 @@ export type AccountingFinancePaymentRow = {
   paymentScope: string;
   paymentType: string;
   sourceLabel: string;
+  descriptionText: string;
+  channelLabel: string;
+  packageId: string | null;
 };
 
 export type AccountingFinanceLessonRow = {
@@ -93,6 +100,8 @@ export type AccountingFinancePackageOption = {
 export type AccountingFinanceSnapshot = {
   organizationId: string;
   actorRole: "admin" | "super_admin";
+  /** Koçlar sekmesinde yalnızca ders verisi istendiğinde `lessons_only` döner. */
+  dataScope: "full" | "lessons_only";
   compatibilityNotice: string | null;
   filtersApplied: {
     month: string;
@@ -145,6 +154,219 @@ function normalizePaymentDisplayDate(row: Record<string, unknown>): string | nul
   return null;
 }
 
+/** Tahsilatın operasyonel zamanı: önce ödeme anı, sonra kayıt tarihi (ders aralığı ile hizalı rapor). */
+function paymentRowEffectiveInstantMs(row: Record<string, unknown>): number | null {
+  const pa = row.paid_at;
+  if (pa != null && typeof pa === "string" && pa.trim()) {
+    const t = new Date(pa.trim()).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  const pd = row.payment_date;
+  if (pd != null && typeof pd === "string" && pd.trim()) {
+    const t = new Date(pd.trim()).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  const ca = row.created_at;
+  if (ca != null && typeof ca === "string" && ca.trim()) {
+    const t = new Date(ca.trim()).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+function paymentRowEffectiveInUtcHalfOpenRange(row: Record<string, unknown>, range: UtcHalfOpenRange): boolean {
+  const t = paymentRowEffectiveInstantMs(row);
+  if (t == null) return false;
+  const from = new Date(range.from).getTime();
+  const toEx = new Date(range.toExclusive).getTime();
+  return Number.isFinite(from) && Number.isFinite(toEx) && t >= from && t < toEx;
+}
+
+/**
+ * PostgREST OR: herhangi bir zaman damgası aralığa düşüyorsa aday satırı getir;
+ * ardından `paymentRowEffectiveInUtcHalfOpenRange` ile tek efektif tarih (paid_at > payment_date > created_at) uygulanır.
+ */
+function paymentsCandidateTimeOrFilter(range: UtcHalfOpenRange): string {
+  const { from, toExclusive } = range;
+  return [
+    `and(paid_at.gte.${from},paid_at.lt.${toExclusive})`,
+    `and(payment_date.gte.${from},payment_date.lt.${toExclusive})`,
+    `and(created_at.gte.${from},created_at.lt.${toExclusive})`,
+  ].join(",");
+}
+
+function finalizePaymentCandidateRows(rows: Record<string, unknown>[] | null | undefined, range: UtcHalfOpenRange): Record<string, unknown>[] {
+  const filtered = (rows || []).filter((r) => paymentRowEffectiveInUtcHalfOpenRange(r, range));
+  filtered.sort((a, b) => {
+    const ta = paymentRowEffectiveInstantMs(a) ?? 0;
+    const tb = paymentRowEffectiveInstantMs(b) ?? 0;
+    return tb - ta;
+  });
+  return filtered;
+}
+
+function parseMetadataJson(row: Record<string, unknown>): Record<string, unknown> | null {
+  const raw = row.metadata_json;
+  if (raw == null) return null;
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const o = JSON.parse(raw) as unknown;
+      if (o && typeof o === "object" && !Array.isArray(o)) return o as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function buildPaymentChannelLabel(row: Record<string, unknown>, normalizedKind: string, status: "bekliyor" | "odendi"): string {
+  const meta = parseMetadataJson(row);
+  if (meta && meta.accounting_origin === "package_ledger") {
+    return "Paket detayı (geçmiş kayıt)";
+  }
+  const desc = String(row.description || "").trim();
+  if (desc.startsWith("Muhasebe —") || desc.startsWith("Muhasebe -")) {
+    return "Muhasebe üzerinden tahsilat";
+  }
+  if (desc.startsWith("Paket detayı —") || desc.startsWith("Paket detayı -")) {
+    return "Paket detayı üzerinden ödeme";
+  }
+  if (status === "bekliyor") {
+    return "Ödeme bekleniyor";
+  }
+  const paidMs = paymentRowEffectiveInstantMs(row);
+  const created = row.created_at;
+  if (
+    paidMs != null &&
+    created != null &&
+    typeof created === "string" &&
+    created.trim() &&
+    Number.isFinite(paidMs)
+  ) {
+    const cMs = new Date(created.trim()).getTime();
+    if (Number.isFinite(cMs) && Math.abs(paidMs - cMs) <= 180_000) {
+      return "Kayıt sırasında ödendi";
+    }
+    if (Number.isFinite(cMs)) {
+      return "Sonradan ödeme";
+    }
+  }
+  if (normalizedKind === "private_lesson_package") {
+    return "Özel ders paketi tahsilatı";
+  }
+  return "Tahsilat kaydı";
+}
+
+function ledgerRowCoveredByPaymentRows(
+  ledger: { package_id: string; amount: unknown; paid_at: string },
+  paymentRows: Record<string, unknown>[]
+): boolean {
+  const lAmt = normalizeMoney(Number(ledger.amount));
+  const lMs = new Date(ledger.paid_at).getTime();
+  const lDay = Number.isFinite(lMs) ? isoToZonedDateKey(ledger.paid_at, SCHEDULE_APP_TIME_ZONE) : "";
+  for (const p of paymentRows) {
+    const pkg = String(p.package_id || "").trim();
+    if (!pkg || pkg !== ledger.package_id) continue;
+    if (normalizeMoney(Number(p.amount)) !== lAmt) continue;
+    const eff = paymentRowEffectiveInstantMs(p);
+    if (eff != null && Number.isFinite(lMs) && Math.abs(eff - lMs) <= 120_000) return true;
+    if (lDay && eff != null) {
+      const pDay = isoToZonedDateKey(new Date(eff).toISOString(), SCHEDULE_APP_TIME_ZONE);
+      if (pDay === lDay) return true;
+    }
+  }
+  return false;
+}
+
+async function loadSupplementalPrivateLessonLedgerRows(args: {
+  adminClient: ReturnType<typeof createSupabaseAdminClient>;
+  organizationId: string;
+  range: UtcHalfOpenRange;
+  existingPaymentRows: Record<string, unknown>[];
+  paymentStatus: PaymentStatusFilter;
+  paymentKind: string | null;
+}): Promise<Record<string, unknown>[]> {
+  const { adminClient, organizationId, range, existingPaymentRows, paymentStatus, paymentKind } = args;
+  if (paymentStatus === "bekliyor") return [];
+  if (paymentKind && paymentKind !== "private_lesson_package") return [];
+
+  const PAY_EMBED = "athlete_profile:profiles!private_lesson_payments_athlete_id_fkey(full_name, email)";
+  const PKG_EMBED =
+    "pkg:private_lesson_packages!private_lesson_payments_package_id_fkey(organization_id, package_name, total_price, amount_paid)";
+
+  const { data: ledgerRows, error } = await adminClient
+    .from("private_lesson_payments")
+    .select(`id, package_id, athlete_id, amount, paid_at, note, created_at, ${PAY_EMBED}, ${PKG_EMBED}`)
+    .eq("organization_id", organizationId)
+    .gte("paid_at", range.from)
+    .lt("paid_at", range.toExclusive);
+
+  if (error || !ledgerRows?.length) return [];
+
+  const out: Record<string, unknown>[] = [];
+  for (const raw of ledgerRows as Record<string, unknown>[]) {
+    const pkgRaw = raw.pkg;
+    const pkgOne = (Array.isArray(pkgRaw) ? pkgRaw[0] : pkgRaw) as { organization_id?: string } | null;
+    if (!pkgOne || pkgOne.organization_id !== organizationId) continue;
+    if (
+      ledgerRowCoveredByPaymentRows(
+        {
+          package_id: String(raw.package_id || ""),
+          amount: raw.amount,
+          paid_at: String(raw.paid_at || ""),
+        },
+        existingPaymentRows
+      )
+    ) {
+      continue;
+    }
+
+    out.push({
+      id: `plp-${String(raw.id || "")}`,
+      profile_id: raw.athlete_id,
+      package_id: raw.package_id,
+      amount: raw.amount,
+      payment_type: "paket",
+      payment_date: raw.paid_at,
+      paid_at: raw.paid_at,
+      status: "odendi",
+      payment_kind: "private_lesson_package",
+      payment_scope: "private_lesson",
+      display_name: null,
+      description: String(raw.note || "").trim() || null,
+      metadata_json: { accounting_origin: "package_ledger" },
+      created_at: raw.created_at,
+      deleted_at: null,
+      athlete_profile: raw.athlete_profile,
+      pkg: raw.pkg,
+    });
+  }
+  return out;
+}
+
+async function enrichPaymentRowsWithPackageBalance(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  rows: AccountingFinancePaymentRow[]
+): Promise<void> {
+  const pkgIds = [...new Set(rows.map((r) => r.packageId).filter(Boolean))] as string[];
+  if (!pkgIds.length) return;
+  const { data: pkgs } = await adminClient
+    .from("private_lesson_packages")
+    .select("id, total_price, amount_paid")
+    .eq("organization_id", organizationId)
+    .in("id", pkgIds);
+  const byId = new Map((pkgs || []).map((p) => [String(p.id), p]));
+  for (const row of rows) {
+    if (!row.packageId) continue;
+    const p = byId.get(row.packageId);
+    if (!p) continue;
+    const rem = normalizeMoney(Number(p.total_price) || 0) - normalizeMoney(Number(p.amount_paid) || 0);
+    row.remainingBalance = rem > 0.001 ? rem : 0;
+  }
+}
+
 function currentMonthKey() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -171,6 +393,12 @@ function isPaymentsSchemaCompatibilityError(message?: string | null): boolean {
     m.includes("payments.package_id") ||
     m.includes("payments.created_at")
   );
+}
+
+/** Yalnızca geliştirme ortamında; kalıcı üretim logu değil. */
+function logAccountingFinanceDebug(payload: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "development") return;
+  console.log("[accountingFinance] dashboard debug", payload);
 }
 
 /** Sunucu konsolu: gerçek PostgREST / Postgres mesajı (UI'da gösterme). */
@@ -279,9 +507,9 @@ async function loadPaymentsWithCompatibility(args: {
   const FALLBACK_SELECT =
     "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, due_date, status, payment_scope, display_name, metadata_json, description, created_at";
   const MINIMAL_PKG_SELECT =
-    "id, profile_id, package_id, amount, payment_type, payment_date, status, description, created_at";
+    "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, status, description, created_at";
   const MINIMAL_NOPKG_SELECT =
-    "id, profile_id, amount, payment_type, payment_date, status, description, created_at";
+    "id, profile_id, amount, payment_type, payment_date, paid_at, status, description, created_at";
   const LEGACY_PKG_SELECT = "id, profile_id, package_id, amount, payment_type, payment_date, status, description";
   const LEGACY_NOPKG_SELECT = "id, profile_id, amount, payment_type, payment_date, status, description";
 
@@ -294,13 +522,12 @@ async function loadPaymentsWithCompatibility(args: {
       .select(`${MODERN_SELECT}, ${PAY_EMBED}`)
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     if (paymentKind) q = q.eq("payment_kind", paymentKind);
     const { data, error } = await q;
-    if (!error) return { rows: data ?? [], compatibilityMode: false };
+    if (!error) return { rows: finalizePaymentCandidateRows(data ?? [], range), compatibilityMode: false };
     logPaymentsQueryFailure("payments_modern_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -312,13 +539,12 @@ async function loadPaymentsWithCompatibility(args: {
       .select(MODERN_SELECT)
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     if (paymentKind) q = q.eq("payment_kind", paymentKind);
     const { data, error } = await q;
-    if (!error) return { rows: data ?? [], compatibilityMode: false };
+    if (!error) return { rows: finalizePaymentCandidateRows(data ?? [], range), compatibilityMode: false };
     logPaymentsQueryFailure("payments_modern_flat", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -329,12 +555,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(`${FALLBACK_SELECT}, ${PAY_EMBED}`)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_fallback_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -345,12 +570,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(FALLBACK_SELECT)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_fallback_flat", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -361,12 +585,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(`${MINIMAL_PKG_SELECT}, ${PAY_EMBED}`)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_minimal_pkg_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -377,12 +600,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(MINIMAL_PKG_SELECT)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_minimal_pkg_flat", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -393,12 +615,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(`${MINIMAL_NOPKG_SELECT}, ${PAY_EMBED}`)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_minimal_nopkg_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -409,12 +630,11 @@ async function loadPaymentsWithCompatibility(args: {
       .from("payments")
       .select(MINIMAL_NOPKG_SELECT)
       .eq("organization_id", organizationId)
-      .gte("created_at", range.from)
-      .lt("created_at", range.toExclusive)
+      .or(paymentsCandidateTimeOrFilter(range))
       .order("created_at", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_minimal_nopkg_flat", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -430,7 +650,7 @@ async function loadPaymentsWithCompatibility(args: {
       .order("payment_date", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_legacy_payment_date_pkg_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -446,7 +666,7 @@ async function loadPaymentsWithCompatibility(args: {
       .order("payment_date", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_legacy_payment_date_pkg_flat", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -462,7 +682,7 @@ async function loadPaymentsWithCompatibility(args: {
       .order("payment_date", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_legacy_payment_date_nopkg_embed", error);
     if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
@@ -478,7 +698,7 @@ async function loadPaymentsWithCompatibility(args: {
       .order("payment_date", { ascending: false });
     if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
     const { data, error } = await q;
-    if (!error) return { rows: data || [], compatibilityMode: true };
+    if (!error) return { rows: finalizePaymentCandidateRows(data || [], range), compatibilityMode: true };
     logPaymentsQueryFailure("payments_legacy_payment_date_nopkg_flat", error);
   }
 
@@ -613,6 +833,7 @@ export async function loadAccountingFinanceDashboard(
   const lessonStatus = rawFilters.lessonStatus || "all";
   const paymentKind = (rawFilters.paymentKind || "").trim() || null;
   const paymentStatus = rawFilters.paymentStatus || "all";
+  const lessonsOnly = rawFilters.lessonsOnly === true;
 
   const { data: coachRows, error: coachErr } = await adminClient
     .from("profiles")
@@ -630,26 +851,52 @@ export async function loadAccountingFinanceDashboard(
   const coachSet = new Set(coaches.map((c) => c.id));
   const safeCoachId = coachId && coachSet.has(coachId) ? coachId : null;
 
-  const paymentLoad = await loadPaymentsWithCompatibility({
-    organizationId,
-    range: timeRange,
-    paymentDateBounds: payoutDateBounds,
-    paymentStatus,
-    paymentKind,
-  });
-  if ("error" in paymentLoad) return { error: paymentLoad.error };
+  let paymentLoad: { rows: Record<string, unknown>[]; compatibilityMode: boolean } = { rows: [], compatibilityMode: false };
+  if (!lessonsOnly) {
+    const loaded = await loadPaymentsWithCompatibility({
+      organizationId,
+      range: timeRange,
+      paymentDateBounds: payoutDateBounds,
+      paymentStatus,
+      paymentKind,
+    });
+    if ("error" in loaded) return { error: loaded.error };
+    paymentLoad = loaded;
+  }
 
-  const mappedPayments: AccountingFinancePaymentRow[] = (paymentLoad.rows || []).map((row: Record<string, unknown>) => {
+  let mergedPaymentRows = [...(paymentLoad.rows || [])];
+  if (!lessonsOnly) {
+    const supplemental = await loadSupplementalPrivateLessonLedgerRows({
+      adminClient,
+      organizationId,
+      range: timeRange,
+      existingPaymentRows: mergedPaymentRows,
+      paymentStatus,
+      paymentKind,
+    });
+    mergedPaymentRows = [...mergedPaymentRows, ...supplemental].sort(
+      (a, b) => (paymentRowEffectiveInstantMs(b) ?? 0) - (paymentRowEffectiveInstantMs(a) ?? 0)
+    );
+  }
+
+  const mapPaymentRow = (row: Record<string, unknown>): AccountingFinancePaymentRow => {
     const athleteRaw = Array.isArray(row.athlete_profile) ? row.athlete_profile[0] : row.athlete_profile;
     const athlete = athleteRaw as { full_name?: string | null; email?: string | null } | null;
     const status = row.status === "odendi" ? "odendi" : "bekliyor";
     const normalizedKind = inferPaymentKindFromLegacyRow(row);
     const normalizedScope = inferPaymentScopeFromLegacyRow(row);
+    const amt = normalizeMoney(Number(row.amount) || 0);
+    const pkgId = String(row.package_id || "").trim();
+    const desc = String(row.description || "").trim();
+    const disp = String(row.display_name || "").trim();
+    const descriptionText = desc || disp || "—";
     return {
       id: String(row.id || ""),
       athleteId: (row.profile_id as string | null) || null,
       athleteName: toDisplayName(athlete?.full_name ?? null, athlete?.email ?? null, "Sporcu"),
-      amount: Number(row.amount || 0),
+      amount: amt,
+      paidAmount: status === "odendi" ? amt : 0,
+      remainingBalance: null,
       paymentDate: normalizePaymentDisplayDate(row),
       dueDate: (row.due_date as string | null) || null,
       status,
@@ -657,10 +904,18 @@ export async function loadAccountingFinanceDashboard(
       paymentScope: normalizedScope,
       paymentType: String(row.payment_type || "aylik"),
       sourceLabel: String(row.display_name || row.description || "Tahsilat"),
+      descriptionText,
+      channelLabel: buildPaymentChannelLabel(row, normalizedKind, status),
+      packageId: pkgId && isUuid(pkgId) ? pkgId : null,
     };
-  });
-  const mappedPaymentsFiltered =
-    paymentKind && paymentLoad.compatibilityMode ? mappedPayments.filter((row) => row.paymentKind === paymentKind) : mappedPayments;
+  };
+
+  const mappedPaymentsAll: AccountingFinancePaymentRow[] = lessonsOnly ? [] : mergedPaymentRows.map(mapPaymentRow);
+  const mappedPaymentsFiltered = paymentKind ? mappedPaymentsAll.filter((row) => row.paymentKind === paymentKind) : mappedPaymentsAll;
+
+  if (!lessonsOnly && mappedPaymentsFiltered.length) {
+    await enrichPaymentRowsWithPackageBalance(adminClient, organizationId, mappedPaymentsFiltered);
+  }
 
   let groupLessons: AccountingFinanceLessonRow[] = [];
   if (lessonType !== "private") {
@@ -746,15 +1001,37 @@ export async function loadAccountingFinanceDashboard(
   const cancelledLessons = lessons.filter((l) => l.status === "cancelled").length;
   const activeCoachCount = new Set(lessons.map((l) => l.coachId).filter(Boolean)).size;
 
-  const totalCollected = mappedPaymentsFiltered.filter((p) => p.status === "odendi").reduce((sum, p) => sum + p.amount, 0);
-  const pendingCollection = mappedPaymentsFiltered.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + p.amount, 0);
-  const paymentKinds = Array.from(new Set(mappedPaymentsFiltered.map((p) => p.paymentKind))).sort((a, b) => a.localeCompare(b, "tr"));
+  const totalCollected = lessonsOnly
+    ? 0
+    : mappedPaymentsFiltered.filter((p) => p.status === "odendi").reduce((sum, p) => sum + p.paidAmount, 0);
+  const pendingCollection = lessonsOnly
+    ? 0
+    : mappedPaymentsFiltered.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + normalizeMoney(p.amount), 0);
+  const paymentKinds = lessonsOnly
+    ? []
+    : Array.from(new Set(mappedPaymentsAll.map((p) => p.paymentKind))).sort((a, b) => a.localeCompare(b, "tr"));
+
+  logAccountingFinanceDebug({
+    lessonsOnly,
+    rangeMode,
+    dateFromUtc: timeRange.from,
+    dateToExclusiveUtc: timeRange.toExclusive,
+    paymentRawCount: paymentLoad.rows?.length ?? 0,
+    mergedPaymentCount: mergedPaymentRows.length,
+    filteredPaymentCount: mappedPaymentsFiltered.length,
+    lessonCount: lessons.length,
+    kpiTotalCollectedInput: totalCollected,
+    kpiPendingInput: pendingCollection,
+    compatibilityMode: paymentLoad.compatibilityMode,
+  });
 
   return {
     snapshot: {
       organizationId,
       actorRole: role,
-      compatibilityNotice: paymentLoad.compatibilityMode ? "Tahsilat kayıtları yüklenirken uyumluluk modu kullanıldı." : null,
+      dataScope: lessonsOnly ? "lessons_only" : "full",
+      compatibilityNotice:
+        !lessonsOnly && paymentLoad.compatibilityMode ? "Tahsilat kayıtları yüklenirken uyumluluk modu kullanıldı." : null,
       filtersApplied: {
         month,
         dateFrom: timeRange.from,
