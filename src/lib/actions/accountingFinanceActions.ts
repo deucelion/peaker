@@ -1,12 +1,13 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
-import { calculateCoachPayout, pickCoachRule, type CoachPaymentRuleForCalc } from "@/lib/accountingFinance/payoutCalculation";
-import { isCoachPayoutTrackingPending } from "@/lib/accountingFinance/coachPayoutTracking";
+import { normalizeMoney } from "@/lib/privateLessons/packageMath";
+import { applyPrivateLessonPackagePaymentWithPaymentRow } from "@/lib/privateLessons/packagePaymentSync";
 import {
   istanbulCustomRangeToPayoutDateInclusiveBounds,
   istanbulDateWallRangeToHalfOpenUtc,
@@ -57,7 +58,6 @@ export type AccountingFinancePaymentRow = {
 export type AccountingFinanceLessonRow = {
   id: string;
   sourceType: "group" | "private";
-  payoutSourceType: "group_lesson" | "private_lesson";
   title: string;
   startsAt: string;
   endsAt: string | null;
@@ -66,18 +66,33 @@ export type AccountingFinanceLessonRow = {
   coachName: string;
   location: string | null;
   participantCount: number;
-  lessonPrice: number | null;
-  coachPayoutEligible: boolean;
-  payoutItemId: string | null;
-  payoutStatus: "eligible" | "included" | "paid" | null;
-  payoutAmount: number;
-  calculationStatus: "ok" | "no_rule" | "no_price" | "not_eligible";
+};
+
+export type AccountingFinanceCoachAggregateRow = {
+  coachId: string;
+  coachName: string;
+  total: number;
+  groupCount: number;
+  privateCount: number;
+  completedCount: number;
+  plannedCount: number;
+  cancelledCount: number;
+  lastLessonAt: string | null;
+};
+
+export type AccountingFinancePackageOption = {
+  id: string;
+  packageName: string;
+  remainingLessons: number;
+  totalPrice: number;
+  amountPaid: number;
+  paymentStatus: "unpaid" | "partial" | "paid";
+  isActive: boolean;
 };
 
 export type AccountingFinanceSnapshot = {
   organizationId: string;
   actorRole: "admin" | "super_admin";
-  canManagePayouts: boolean;
   compatibilityNotice: string | null;
   filtersApplied: {
     month: string;
@@ -93,17 +108,15 @@ export type AccountingFinanceSnapshot = {
   kpis: {
     totalCollected: number;
     pendingCollection: number;
-    coachPayoutEligibleLessonCount: number;
-    payoutPendingCount: number;
-    payoutIncludedCount: number;
-    payoutPaidCount: number;
-    payoutAmountTotal: number;
-    payoutAmountPending: number;
-    payoutAmountPaid: number;
-    estimatedNet: null;
+    totalLessons: number;
+    completedLessons: number;
+    plannedLessons: number;
+    cancelledLessons: number;
+    activeCoachCount: number;
   };
   payments: AccountingFinancePaymentRow[];
   lessons: AccountingFinanceLessonRow[];
+  coachAggregates: AccountingFinanceCoachAggregateRow[];
   options: {
     coaches: Array<{ id: string; full_name: string }>;
     athletes: Array<{ id: string; full_name: string }>;
@@ -496,10 +509,61 @@ function resolveMonthNameTr(month: number) {
   );
 }
 
-function resolvePayoutStatus(value: unknown): "eligible" | "included" | "paid" {
-  if (value === "paid") return "paid";
-  if (value === "eligible") return "eligible";
-  return "included";
+function buildCoachAggregates(lessons: AccountingFinanceLessonRow[]): AccountingFinanceCoachAggregateRow[] {
+  type Acc = {
+    coachId: string;
+    coachName: string;
+    total: number;
+    groupCount: number;
+    privateCount: number;
+    completedCount: number;
+    plannedCount: number;
+    cancelledCount: number;
+    lastMs: number;
+  };
+  const UNKNOWN = "__unassigned__";
+  const map = new Map<string, Acc>();
+
+  for (const l of lessons) {
+    const key = l.coachId || UNKNOWN;
+    let a = map.get(key);
+    if (!a) {
+      a = {
+        coachId: l.coachId || "",
+        coachName: l.coachId ? l.coachName : "Atanmamış koç",
+        total: 0,
+        groupCount: 0,
+        privateCount: 0,
+        completedCount: 0,
+        plannedCount: 0,
+        cancelledCount: 0,
+        lastMs: 0,
+      };
+      map.set(key, a);
+    }
+    a.total += 1;
+    if (l.sourceType === "group") a.groupCount += 1;
+    else a.privateCount += 1;
+    if (l.status === "completed") a.completedCount += 1;
+    else if (l.status === "planned") a.plannedCount += 1;
+    else if (l.status === "cancelled") a.cancelledCount += 1;
+    const t = new Date(l.startsAt).getTime();
+    if (Number.isFinite(t) && t > a.lastMs) a.lastMs = t;
+  }
+
+  return Array.from(map.values())
+    .map((a) => ({
+      coachId: a.coachId,
+      coachName: a.coachName,
+      total: a.total,
+      groupCount: a.groupCount,
+      privateCount: a.privateCount,
+      completedCount: a.completedCount,
+      plannedCount: a.plannedCount,
+      cancelledCount: a.cancelledCount,
+      lastLessonAt: a.lastMs > 0 ? new Date(a.lastMs).toISOString() : null,
+    }))
+    .sort((x, y) => x.coachName.localeCompare(y.coachName, "tr"));
 }
 
 export async function loadAccountingFinanceDashboard(
@@ -623,7 +687,6 @@ export async function loadAccountingFinanceDashboard(
       return {
         id: String(row.id || ""),
         sourceType: "group",
-        payoutSourceType: "group_lesson",
         title: String(row.title || "Grup Dersi"),
         startsAt: String(row.start_time || ""),
         endsAt: (row.end_time as string | null) || null,
@@ -632,12 +695,6 @@ export async function loadAccountingFinanceDashboard(
         coachName: toDisplayName(coach?.full_name ?? null, coach?.email ?? null, "Koç"),
         location: (row.location as string | null) || null,
         participantCount: Array.isArray(row.training_participants) ? row.training_participants.length : 0,
-        lessonPrice: null,
-        coachPayoutEligible: normalizedStatus === "completed",
-        payoutItemId: null,
-        payoutStatus: null,
-        payoutAmount: 0,
-        calculationStatus: "not_eligible",
       };
     });
   }
@@ -647,7 +704,7 @@ export async function loadAccountingFinanceDashboard(
     let privateQuery = adminClient
       .from("private_lesson_sessions")
       .select(
-        "id, starts_at, ends_at, status, coach_id, location, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name,total_price,total_lessons)"
+        "id, starts_at, ends_at, status, coach_id, location, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name)"
       )
       .eq("organization_id", organizationId)
       .gte("starts_at", timeRange.from)
@@ -661,15 +718,11 @@ export async function loadAccountingFinanceDashboard(
       const coachRaw = Array.isArray(row.coach_profile) ? row.coach_profile[0] : row.coach_profile;
       const coach = coachRaw as { full_name?: string | null; email?: string | null } | null;
       const pkgRaw = Array.isArray(row.pkg) ? row.pkg[0] : row.pkg;
-      const pkg = pkgRaw as { package_name?: string | null; total_price?: number | null; total_lessons?: number | null } | null;
+      const pkg = pkgRaw as { package_name?: string | null } | null;
       const normalizedStatus = normalizeLessonStatus(row.status as string | null);
-      const totalLessons = Number(pkg?.total_lessons || 0);
-      const totalPrice = Number(pkg?.total_price || 0);
-      const lessonUnitPrice = totalLessons > 0 && totalPrice > 0 ? Math.round((totalPrice / totalLessons) * 100) / 100 : null;
       return {
         id: String(row.id || ""),
         sourceType: "private",
-        payoutSourceType: "private_lesson",
         title: String(pkg?.package_name || "Özel Ders"),
         startsAt: String(row.starts_at || ""),
         endsAt: (row.ends_at as string | null) || null,
@@ -678,127 +731,29 @@ export async function loadAccountingFinanceDashboard(
         coachName: toDisplayName(coach?.full_name ?? null, coach?.email ?? null, "Koç"),
         location: (row.location as string | null) || null,
         participantCount: 1,
-        lessonPrice: lessonUnitPrice,
-        coachPayoutEligible: normalizedStatus === "completed",
-        payoutItemId: null,
-        payoutStatus: null,
-        payoutAmount: 0,
-        calculationStatus: "not_eligible",
       };
     });
   }
 
-  /** Bu dönemde listelenen derslerle eşleşen payout kalemleri (lesson_date UTC kesiti yanlış kalmasın diye source_id ile). */
-  const groupLessonIds = groupLessons.map((l) => l.id).filter(Boolean);
-  const privateLessonIds = privateLessons.map((l) => l.id).filter(Boolean);
-  const payoutRowsMerged: Array<Record<string, unknown>> = [];
-  for (const tuple of [
-    ["group_lesson", groupLessonIds],
-    ["private_lesson", privateLessonIds],
-  ] as const) {
-    const [sourceType, ids] = tuple;
-    if (ids.length === 0) continue;
-    const fullRes = await adminClient
-      .from("coach_payout_items")
-      .select("id, source_type, source_id, status, payout_amount, calculated_at")
-      .eq("organization_id", organizationId)
-      .eq("source_type", sourceType)
-      .in("source_id", ids);
-    if (!fullRes.error) {
-      payoutRowsMerged.push(...(fullRes.data || []));
-      continue;
-    }
-    if (String(fullRes.error.message || "").toLowerCase().includes("payout_amount")) {
-      const minRes = await adminClient
-        .from("coach_payout_items")
-        .select("id, source_type, source_id, status")
-        .eq("organization_id", organizationId)
-        .eq("source_type", sourceType)
-        .in("source_id", ids);
-      if (minRes.error) return { error: `Koç ödeme kalemleri alınamadı: ${minRes.error.message}` };
-      payoutRowsMerged.push(...(minRes.data || []));
-      continue;
-    }
-    return { error: `Koç ödeme kalemleri alınamadı: ${fullRes.error.message}` };
-  }
-
-  const payoutBySource = new Map<string, { id: string; status: "eligible" | "included" | "paid"; payoutAmount: number | null }>();
-  payoutRowsMerged.forEach((row) => {
-    const key = `${String(row.source_type || "")}:${String(row.source_id || "")}`;
-    payoutBySource.set(key, {
-      id: String(row.id || ""),
-      status: resolvePayoutStatus(row.status),
-      payoutAmount: row.payout_amount != null ? Number(row.payout_amount) : null,
-    });
-  });
-
-  const { data: rulesRows, error: rulesError } = await adminClient
-    .from("coach_payment_rules")
-    .select("coach_id, payment_type, amount, percentage, applies_to")
-    .eq("organization_id", organizationId);
-  if (rulesError && !(rulesError.code === "42P01" || rulesError.message?.includes("coach_payment_rules"))) {
-    return { error: `Koç ödeme kuralları alınamadı: ${rulesError.message}` };
-  }
-  const rulesByCoach = new Map<string, CoachPaymentRuleForCalc[]>();
-  (rulesRows || []).forEach((row) => {
-    const coachKey = String(row.coach_id || "");
-    if (!coachKey) return;
-    const arr = rulesByCoach.get(coachKey) || [];
-    arr.push({
-      payment_type: row.payment_type === "percentage" ? "percentage" : "per_lesson",
-      amount: row.amount != null ? Number(row.amount) : null,
-      percentage: row.percentage != null ? Number(row.percentage) : null,
-      applies_to: row.applies_to === "group" || row.applies_to === "private" ? row.applies_to : "all",
-    });
-    rulesByCoach.set(coachKey, arr);
-  });
-
-  const lessons = [...groupLessons, ...privateLessons]
-    .map((lesson) => {
-      const payout = payoutBySource.get(`${lesson.payoutSourceType}:${lesson.id}`);
-      const coachRules = lesson.coachId ? rulesByCoach.get(lesson.coachId) || [] : [];
-      const rule = pickCoachRule(coachRules, lesson.coachId, lesson.sourceType);
-      const calc = calculateCoachPayout(
-        {
-          sourceType: lesson.sourceType,
-          status: lesson.status,
-          lessonUnitPrice: lesson.lessonPrice,
-        },
-        rule
-      );
-      const payoutAmount = payout?.payoutAmount != null ? Number(payout.payoutAmount) : calc.payoutAmount;
-      return {
-        ...lesson,
-        payoutItemId: payout?.id || null,
-        payoutStatus: payout?.status || null,
-        payoutAmount,
-        calculationStatus: calc.calculationStatus,
-      };
-    })
-    .sort(
+  const lessons = [...groupLessons, ...privateLessons].sort(
     (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()
   );
 
+  const coachAggregates = buildCoachAggregates(lessons);
+  const totalLessons = lessons.length;
+  const completedLessons = lessons.filter((l) => l.status === "completed").length;
+  const plannedLessons = lessons.filter((l) => l.status === "planned").length;
+  const cancelledLessons = lessons.filter((l) => l.status === "cancelled").length;
+  const activeCoachCount = new Set(lessons.map((l) => l.coachId).filter(Boolean)).size;
+
   const totalCollected = mappedPaymentsFiltered.filter((p) => p.status === "odendi").reduce((sum, p) => sum + p.amount, 0);
   const pendingCollection = mappedPaymentsFiltered.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + p.amount, 0);
-  const coachPayoutEligibleLessonCount = lessons.filter((l) => l.coachPayoutEligible).length;
-  const payoutPendingCount = lessons.filter((l) => l.coachPayoutEligible && isCoachPayoutTrackingPending(l.payoutStatus)).length;
-  const payoutIncludedCount = lessons.filter((l) => l.coachPayoutEligible && l.payoutStatus === "included").length;
-  const payoutPaidCount = lessons.filter((l) => l.coachPayoutEligible && l.payoutStatus === "paid").length;
-  const payoutAmountTotal = lessons.filter((l) => l.coachPayoutEligible).reduce((sum, l) => sum + (l.payoutAmount || 0), 0);
-  const payoutAmountPending = lessons
-    .filter((l) => l.coachPayoutEligible && l.payoutStatus !== "paid")
-    .reduce((sum, l) => sum + (l.payoutAmount || 0), 0);
-  const payoutAmountPaid = lessons
-    .filter((l) => l.coachPayoutEligible && l.payoutStatus === "paid")
-    .reduce((sum, l) => sum + (l.payoutAmount || 0), 0);
   const paymentKinds = Array.from(new Set(mappedPaymentsFiltered.map((p) => p.paymentKind))).sort((a, b) => a.localeCompare(b, "tr"));
 
   return {
     snapshot: {
       organizationId,
       actorRole: role,
-      canManagePayouts: role === "admin" || role === "super_admin",
       compatibilityNotice: paymentLoad.compatibilityMode ? "Tahsilat kayıtları yüklenirken uyumluluk modu kullanıldı." : null,
       filtersApplied: {
         month,
@@ -814,17 +769,15 @@ export async function loadAccountingFinanceDashboard(
       kpis: {
         totalCollected,
         pendingCollection,
-        coachPayoutEligibleLessonCount,
-        payoutPendingCount,
-        payoutIncludedCount,
-        payoutPaidCount,
-        payoutAmountTotal,
-        payoutAmountPending,
-        payoutAmountPaid,
-        estimatedNet: null,
+        totalLessons,
+        completedLessons,
+        plannedLessons,
+        cancelledLessons,
+        activeCoachCount,
       },
       payments: mappedPaymentsFiltered,
       lessons,
+      coachAggregates,
       options: {
         coaches,
         athletes,
@@ -834,6 +787,96 @@ export async function loadAccountingFinanceDashboard(
       },
     },
   };
+}
+
+async function resolvePrivateLessonPaymentActorIdForRpc(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  role: ReturnType<typeof getSafeRole>,
+  sessionActorId: string,
+  fallbackCoachId: string | null
+): Promise<{ actorId: string } | { error: string }> {
+  if (role === "admin") {
+    if (!isUuid(sessionActorId)) return { error: "Oturum profili geçersiz." };
+    return { actorId: sessionActorId };
+  }
+  if (role === "super_admin") {
+    const { data: adminRow } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("role", "admin")
+      .limit(1)
+      .maybeSingle();
+    if (adminRow?.id) return { actorId: adminRow.id as string };
+    if (fallbackCoachId && isUuid(fallbackCoachId)) return { actorId: fallbackCoachId };
+    return { error: "Tahsilat kaydı için geçerli bir yönetici profili bulunamadı." };
+  }
+  return { error: "Bu işlem yalnızca yönetici tarafından yapılabilir." };
+}
+
+/**
+ * Muhasebe tahsilat modalı: seçili sporcu için aktif özel ders paketleri (dropdown).
+ */
+export async function listPrivateLessonPackagesForAccounting(payload: {
+  athleteId: string;
+  organizationId?: string | null;
+}): Promise<{ packages: AccountingFinancePackageOption[] } | { error: string }> {
+  const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
+  if ("error" in resolved) return { error: resolved.error };
+  const role = getSafeRole(resolved.actor.role);
+  if (role !== "admin" && role !== "super_admin") {
+    return { error: "Bu işlem yalnızca yönetici tarafından yapılabilir." };
+  }
+
+  const athleteId = (payload.athleteId || "").trim();
+  if (!isUuid(athleteId)) return { error: "Geçersiz sporcu." };
+
+  let organizationId = resolved.actor.organizationId || "";
+  const orgFromPayload = (payload.organizationId || "").trim();
+  if (role === "super_admin") {
+    if (!isUuid(orgFromPayload)) return { error: "Super admin için organizationId zorunludur." };
+    organizationId = orgFromPayload;
+  } else if (!organizationId) {
+    return { error: "Organizasyon bilgisi alınamadı." };
+  }
+
+  const adminClient = createSupabaseAdminClient();
+  const { data: athlete } = await adminClient
+    .from("profiles")
+    .select("id, role, organization_id")
+    .eq("id", athleteId)
+    .maybeSingle();
+  if (!athlete || getSafeRole(athlete.role) !== "sporcu" || athlete.organization_id !== organizationId) {
+    return { error: "Sporcu bu organizasyonda bulunamadı." };
+  }
+
+  const { data: rows, error } = await adminClient
+    .from("private_lesson_packages")
+    .select("id, package_name, remaining_lessons, total_price, amount_paid, payment_status, is_active")
+    .eq("organization_id", organizationId)
+    .eq("athlete_id", athleteId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) return { error: `Paketler alınamadı: ${error.message}` };
+
+  const packages: AccountingFinancePackageOption[] = (rows || [])
+    .map((row) => ({
+      id: String(row.id),
+      packageName: String(row.package_name || "Paket"),
+      remainingLessons: Math.max(0, Math.floor(Number(row.remaining_lessons) || 0)),
+      totalPrice: normalizeMoney(row.total_price),
+      amountPaid: normalizeMoney(row.amount_paid),
+      paymentStatus: (row.payment_status as AccountingFinancePackageOption["paymentStatus"]) || "unpaid",
+      isActive: row.is_active !== false,
+    }))
+    .filter((p) => {
+      if (p.totalPrice <= 0) return true;
+      return normalizeMoney(p.totalPrice - p.amountPaid) > 0.001;
+    });
+
+  return { packages };
 }
 
 export async function createAccountingPayment(formData: FormData) {
@@ -899,8 +942,45 @@ export async function createAccountingPayment(formData: FormData) {
   if (!athlete || getSafeRole(athlete.role) !== "sporcu" || athlete.organization_id !== organizationId) {
     return { error: "Sporcu bu organizasyonda bulunamadı." };
   }
-  if (paymentKind === "private_lesson_package" && packageId && !isUuid(packageId)) {
-    return { error: "Geçersiz paket seçimi." };
+
+  if (paymentKind !== "private_lesson_package" && packageId && isUuid(packageId)) {
+    return { error: "Paket yalnızca özel ders paketi tahsilat türünde seçilebilir." };
+  }
+
+  if (paymentKind === "private_lesson_package") {
+    if (!isUuid(packageId)) return { error: "Özel ders paketi için paket seçimi zorunludur." };
+
+    const { data: pkgCoach } = await adminClient
+      .from("private_lesson_packages")
+      .select("coach_id")
+      .eq("id", packageId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    const rpcActor = await resolvePrivateLessonPaymentActorIdForRpc(
+      adminClient,
+      organizationId,
+      role,
+      resolved.actor.id,
+      (pkgCoach?.coach_id as string | null) || null
+    );
+    if ("error" in rpcActor) return { error: rpcActor.error };
+
+    const sync = await applyPrivateLessonPackagePaymentWithPaymentRow({
+      organizationId,
+      packageId,
+      athleteProfileId: profileId,
+      amount,
+      paidAtIso: paidAt,
+      dueDateKey,
+      monthName,
+      yearInt,
+      rpcActorProfileId: rpcActor.actorId,
+      paymentsDescription: description,
+      rpcNote: description?.trim() || "Muhasebe — özel ders paketi tahsilatı",
+    });
+    if (!sync.ok) return { error: sync.error };
+    return { success: true as const };
   }
 
   let insertModern = await adminClient
@@ -919,7 +999,7 @@ export async function createAccountingPayment(formData: FormData) {
       payment_date: paidAt,
       status: "odendi",
       description,
-      package_id: paymentKind === "private_lesson_package" && packageId ? packageId : null,
+      package_id: null,
       paid_at: paidAt,
     })
     .select("id")
@@ -947,5 +1027,8 @@ export async function createAccountingPayment(formData: FormData) {
   if (insertModern.error || !insertModern.data?.id) {
     return { error: `Tahsilat kaydı oluşturulamadı: ${insertModern.error?.message || "unknown"}` };
   }
+
+  revalidatePath("/muhasebe-finans");
+  revalidatePath("/finans");
   return { success: true as const };
 }

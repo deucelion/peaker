@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -84,6 +84,7 @@ export default function PrivateLessonPackageDetailPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const paymentSubmitInFlightRef = useRef(false);
 
   const [sessions, setSessions] = useState<PrivateLessonSessionListItem[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -288,25 +289,30 @@ export default function PrivateLessonPackageDetailPage() {
   }
 
   async function submitPayment() {
-    if (!packageId || !paymentAmountValid) return;
+    if (paymentSubmitInFlightRef.current || !packageId || !paymentAmountValid) return;
+    paymentSubmitInFlightRef.current = true;
     setPaymentSaving(true);
     setMessage(null);
-    const fd = new FormData();
-    fd.append("packageId", packageId);
-    fd.append("paymentAmount", String(parsedPaymentAdd));
-    const n = paymentNote.trim();
-    if (n) fd.append("note", n);
-    const res = await updatePrivateLessonPayment(fd);
-    if ("success" in res && res.success) {
-      setMessage("Ödeme kaydı eklendi.");
-      setPaymentModalOpen(false);
-      setPaymentAmount("");
-      setPaymentNote("");
-      await loadDetail();
-    } else {
-      setMessage(("error" in res && res.error) || "Ödeme kaydı eklenemedi.");
+    try {
+      const fd = new FormData();
+      fd.append("packageId", packageId);
+      fd.append("paymentAmount", String(parsedPaymentAdd));
+      const n = paymentNote.trim();
+      if (n) fd.append("note", n);
+      const res = await updatePrivateLessonPayment(fd);
+      if ("success" in res && res.success) {
+        setMessage("Ödeme kaydı eklendi.");
+        setPaymentModalOpen(false);
+        setPaymentAmount("");
+        setPaymentNote("");
+        await loadDetail();
+      } else {
+        setMessage(("error" in res && res.error) || "Ödeme kaydı eklenemedi.");
+      }
+    } finally {
+      paymentSubmitInFlightRef.current = false;
+      setPaymentSaving(false);
     }
-    setPaymentSaving(false);
   }
 
   if (loading) {
@@ -1020,7 +1026,11 @@ export default function PrivateLessonPackageDetailPage() {
               </button>
             </div>
 
-            <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-[11px] font-bold">
+            <fieldset
+              disabled={paymentSaving}
+              className="mt-4 min-w-0 border-0 p-0 disabled:pointer-events-none disabled:opacity-55"
+            >
+            <div className="grid gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-[11px] font-bold">
               <div className="flex justify-between gap-4 text-gray-500">
                 <span>Toplam ücret</span>
                 <span className="tabular-nums text-white">{formatTry(pkg.totalPrice)}</span>
@@ -1072,6 +1082,7 @@ export default function PrivateLessonPackageDetailPage() {
                 className={INPUT}
               />
             </label>
+            </fieldset>
 
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
@@ -1086,9 +1097,10 @@ export default function PrivateLessonPackageDetailPage() {
                 type="button"
                 disabled={paymentSaving || !paymentAmountValid}
                 onClick={() => void submitPayment()}
-                className="min-h-12 rounded-2xl bg-[#7c3aed] px-5 text-[11px] font-black uppercase text-white shadow-lg disabled:opacity-45 sm:hover:bg-[#6d28d9]"
+                aria-busy={paymentSaving}
+                className="min-h-12 rounded-2xl bg-[#7c3aed] px-5 text-[11px] font-black uppercase text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-45 sm:hover:bg-[#6d28d9]"
               >
-                {paymentSaving ? "Kaydediliyor…" : "Ödeme ekle"}
+                {paymentSaving ? "Kaydediliyor..." : "Ödeme ekle"}
               </button>
             </div>
           </div>

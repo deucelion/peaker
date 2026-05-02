@@ -9,6 +9,10 @@ import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
 import { computePaymentStatus, normalizeMoney } from "@/lib/privateLessons/packageMath";
+import {
+  applyPrivateLessonPackagePaymentWithPaymentRow,
+  paymentBookkeepingFromPaidAtIso,
+} from "@/lib/privateLessons/packagePaymentSync";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -598,64 +602,55 @@ export async function updatePrivateLessonPayment(formData: FormData) {
   if (paymentAmount <= 0) return { error: "Tahsilat tutari sifirdan buyuk olmali." };
 
   const adminClient = createSupabaseAdminClient();
-  const { data: pkg } = await adminClient
+  const { data: pkgRow } = await adminClient
     .from("private_lesson_packages")
-    .select("id, organization_id, total_price, amount_paid, athlete_id, coach_id, package_name")
+    .select("athlete_id")
     .eq("id", packageId)
     .eq("organization_id", actor.organization_id!)
     .maybeSingle();
-  if (!pkg) return { error: "Paket bulunamadi." };
+  if (!pkgRow?.athlete_id) return { error: "Paket bulunamadi." };
 
-  const paymentCoachId = pkg.coach_id || (getSafeRole(actor.role) === "coach" ? actor.id : null);
-  const { data: atomicPaymentRows, error: atomicPaymentErr } = await adminClient.rpc(
-    "private_lesson_apply_payment_atomic",
-    {
-      p_package_id: packageId,
-      p_organization_id: actor.organization_id!,
-      p_actor_id: actor.id,
-      p_fallback_coach_id: paymentCoachId,
-      p_payment_amount: paymentAmount,
-      p_paid_at: new Date().toISOString(),
-      p_note: note,
-    }
-  );
-  if (atomicPaymentErr) {
-    captureServerActionSignal("privateLesson.updatePrivateLessonPayment", "atomic_payment_rpc_failed", {
+  const paidAt = new Date().toISOString();
+  const { dueDateKey, monthName, yearInt } = paymentBookkeepingFromPaidAtIso(paidAt);
+
+  const sync = await applyPrivateLessonPackagePaymentWithPaymentRow({
+    organizationId: actor.organization_id!,
+    packageId,
+    athleteProfileId: pkgRow.athlete_id as string,
+    amount: paymentAmount,
+    paidAtIso: paidAt,
+    dueDateKey,
+    monthName,
+    yearInt,
+    rpcActorProfileId: actor.id,
+    paymentsDescription: note,
+    rpcNote: note?.trim() || "Paket detayı — özel ders tahsilatı",
+  });
+
+  if (!sync.ok) {
+    captureServerActionSignal("privateLesson.updatePrivateLessonPayment", "package_payment_sync_failed", {
       packageId,
       organizationId: actor.organization_id,
       actorId: actor.id,
-      errorMessage: atomicPaymentErr.message,
+      errorMessage: sync.error,
     });
-    return { error: `Odeme guncellenemedi: ${atomicPaymentErr.message}` };
+    return { error: sync.error };
   }
-  if (!Array.isArray(atomicPaymentRows) || atomicPaymentRows.length === 0) {
-    captureServerActionSignal("privateLesson.updatePrivateLessonPayment", "atomic_payment_no_rows", {
-      packageId,
-      organizationId: actor.organization_id,
-      actorId: actor.id,
-    });
-    return { error: "Odeme islemi tamamlanamadi." };
-  }
-  const atomicRow = atomicPaymentRows[0] as {
-    next_amount_paid?: number;
-    payment_status?: "unpaid" | "partial" | "paid";
-    total_price?: number;
-  };
-  const nextAmountPaid = Number(atomicRow.next_amount_paid ?? 0);
-  const paymentStatus = (atomicRow.payment_status ?? "unpaid") as "unpaid" | "partial" | "paid";
-  const totalPrice = Number(atomicRow.total_price ?? pkg.total_price ?? 0);
 
-  const pName = (pkg as { package_name?: string }).package_name || "Ozel ders paketi";
+  const nextAmountPaid = sync.nextAmountPaid;
+  const paymentStatus = sync.paymentStatus;
+  const totalPrice = sync.totalPrice;
+  const pName = sync.packageName;
   const remainingBalance = normalizeMoney(totalPrice - nextAmountPaid);
   try {
     if (paymentStatus !== "paid") {
       await insertNotificationsForUsers(
-        [pkg.athlete_id as string],
+        [sync.athleteId],
         `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(totalPrice)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`
       );
     } else {
       await insertNotificationsForUsers(
-        [pkg.athlete_id as string],
+        [sync.athleteId],
         `${pName}: Yeni tahsilat ₺${paymentAmount}. Odeme tamamlandi.`
       );
     }
@@ -663,9 +658,7 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     /* bildirim opsiyonel */
   }
 
-  revalidatePath("/ozel-ders-paketleri");
   revalidatePath("/ozel-ders-paketlerim");
-  revalidatePath(`/ozel-ders-paketleri/${packageId}`);
   return { success: true as const };
   });
 }
