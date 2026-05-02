@@ -19,6 +19,7 @@ import {
   getAccountingPaymentKindLabel,
   getAccountingPaymentStatusLabel,
 } from "@/lib/accountingFinance/labels";
+import { isCoachPayoutTrackingPending } from "@/lib/accountingFinance/coachPayoutTracking";
 import { addCoachPayoutItem, markCoachPayoutAsPaid } from "@/lib/actions/coachPayoutActions";
 import { listCoachPaymentRulesForAccounting, upsertCoachPaymentRule } from "@/lib/actions/coachPaymentRuleActions";
 
@@ -360,7 +361,7 @@ export default function MuhasebeFinansPage() {
         const toMs = new Date(`${coachPayoutFilters.dateTo}T23:59:59`).getTime();
         if (new Date(row.startsAt).getTime() > toMs) return false;
       }
-      if (coachPayoutFilters.payoutStatus === "pending") return !row.payoutStatus;
+      if (coachPayoutFilters.payoutStatus === "pending") return isCoachPayoutTrackingPending(row.payoutStatus);
       if (coachPayoutFilters.payoutStatus === "included") return row.payoutStatus === "included";
       if (coachPayoutFilters.payoutStatus === "paid") return row.payoutStatus === "paid";
       return true;

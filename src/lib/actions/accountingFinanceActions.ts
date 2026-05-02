@@ -6,6 +6,7 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { calculateCoachPayout, pickCoachRule, type CoachPaymentRuleForCalc } from "@/lib/accountingFinance/payoutCalculation";
+import { isCoachPayoutTrackingPending } from "@/lib/accountingFinance/coachPayoutTracking";
 import {
   istanbulCustomRangeToPayoutDateInclusiveBounds,
   istanbulDateWallRangeToHalfOpenUtc,
@@ -687,35 +688,43 @@ export async function loadAccountingFinanceDashboard(
     });
   }
 
-  const payoutKeys = new Set<string>();
-  [...groupLessons, ...privateLessons].forEach((lesson) => {
-    payoutKeys.add(`${lesson.payoutSourceType}:${lesson.id}`);
-  });
-  let payoutRowsRes: { data: Array<Record<string, unknown>> | null; error: { message?: string } | null } = await adminClient
-    .from("coach_payout_items")
-    .select("id, source_type, source_id, status, payout_amount, calculated_at")
-    .eq("organization_id", organizationId)
-    .gte("lesson_date", payoutDateBounds.fromKey)
-    .lte("lesson_date", payoutDateBounds.toKeyInclusive) as unknown as {
-    data: Array<Record<string, unknown>> | null;
-    error: { message?: string } | null;
-  };
-  if (payoutRowsRes.error && String(payoutRowsRes.error.message || "").toLowerCase().includes("payout_amount")) {
-    payoutRowsRes = (await adminClient
+  /** Bu dönemde listelenen derslerle eşleşen payout kalemleri (lesson_date UTC kesiti yanlış kalmasın diye source_id ile). */
+  const groupLessonIds = groupLessons.map((l) => l.id).filter(Boolean);
+  const privateLessonIds = privateLessons.map((l) => l.id).filter(Boolean);
+  const payoutRowsMerged: Array<Record<string, unknown>> = [];
+  for (const tuple of [
+    ["group_lesson", groupLessonIds],
+    ["private_lesson", privateLessonIds],
+  ] as const) {
+    const [sourceType, ids] = tuple;
+    if (ids.length === 0) continue;
+    const fullRes = await adminClient
       .from("coach_payout_items")
-      .select("id, source_type, source_id, status")
+      .select("id, source_type, source_id, status, payout_amount, calculated_at")
       .eq("organization_id", organizationId)
-      .gte("lesson_date", payoutDateBounds.fromKey)
-      .lte("lesson_date", payoutDateBounds.toKeyInclusive)) as unknown as {
-      data: Array<Record<string, unknown>> | null;
-      error: { message?: string } | null;
-    };
+      .eq("source_type", sourceType)
+      .in("source_id", ids);
+    if (!fullRes.error) {
+      payoutRowsMerged.push(...(fullRes.data || []));
+      continue;
+    }
+    if (String(fullRes.error.message || "").toLowerCase().includes("payout_amount")) {
+      const minRes = await adminClient
+        .from("coach_payout_items")
+        .select("id, source_type, source_id, status")
+        .eq("organization_id", organizationId)
+        .eq("source_type", sourceType)
+        .in("source_id", ids);
+      if (minRes.error) return { error: `Koç ödeme kalemleri alınamadı: ${minRes.error.message}` };
+      payoutRowsMerged.push(...(minRes.data || []));
+      continue;
+    }
+    return { error: `Koç ödeme kalemleri alınamadı: ${fullRes.error.message}` };
   }
-  if (payoutRowsRes.error) return { error: `Koç ödeme kalemleri alınamadı: ${payoutRowsRes.error.message}` };
+
   const payoutBySource = new Map<string, { id: string; status: "eligible" | "included" | "paid"; payoutAmount: number | null }>();
-  (payoutRowsRes.data || []).forEach((row) => {
+  payoutRowsMerged.forEach((row) => {
     const key = `${String(row.source_type || "")}:${String(row.source_id || "")}`;
-    if (!payoutKeys.has(key)) return;
     payoutBySource.set(key, {
       id: String(row.id || ""),
       status: resolvePayoutStatus(row.status),
@@ -773,7 +782,7 @@ export async function loadAccountingFinanceDashboard(
   const totalCollected = mappedPaymentsFiltered.filter((p) => p.status === "odendi").reduce((sum, p) => sum + p.amount, 0);
   const pendingCollection = mappedPaymentsFiltered.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + p.amount, 0);
   const coachPayoutEligibleLessonCount = lessons.filter((l) => l.coachPayoutEligible).length;
-  const payoutPendingCount = lessons.filter((l) => l.coachPayoutEligible && !l.payoutStatus).length;
+  const payoutPendingCount = lessons.filter((l) => l.coachPayoutEligible && isCoachPayoutTrackingPending(l.payoutStatus)).length;
   const payoutIncludedCount = lessons.filter((l) => l.coachPayoutEligible && l.payoutStatus === "included").length;
   const payoutPaidCount = lessons.filter((l) => l.coachPayoutEligible && l.payoutStatus === "paid").length;
   const payoutAmountTotal = lessons.filter((l) => l.coachPayoutEligible).reduce((sum, l) => sum + (l.payoutAmount || 0), 0);
