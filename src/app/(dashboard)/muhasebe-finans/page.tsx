@@ -103,35 +103,26 @@ function monthKeyNow() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Bilgilendirici süreç göstergesi — backend değişmez; sadece UI. */
-function CoachPayoutFlowLegend() {
-  const steps = [
-    { id: "wait", label: "Ödeme bekliyor", desc: "Tamamlanan ders" },
-    { id: "list", label: "Koç ödemesi listesine alındı", desc: "Ödeme paketine eklendi" },
-    { id: "paid", label: "Koç ödemesi tamamlandı", desc: "Kapatıldı" },
-  ];
+/** Kompakt süreç özeti — detay tabloda. */
+/** Veri kaynağı şeffaflığı — kısa, güven hissi. */
+function DataSourceHint({ className = "" }: { className?: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-      <p className="text-[10px] font-black uppercase tracking-wide text-gray-500">Koç ödeme süreci</p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {steps.map((step, i) => (
-          <div key={step.id} className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-xs font-black text-gray-200">
-              {i + 1}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-white">{step.label}</p>
-              <p className="text-[11px] font-semibold text-gray-500">{step.desc}</p>
-            </div>
-            {i < steps.length - 1 ? (
-              <span className="mx-1 hidden text-lg font-black text-gray-600 sm:inline" aria-hidden>
-                →
-              </span>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
+    <p className={`text-[10px] font-semibold leading-relaxed text-gray-500 ${className}`}>
+      Veriler ders kayıtları ve tahsilatlardan otomatik hesaplanır. Filtrelere göre güncellenir.
+    </p>
+  );
+}
+
+function CoachPayoutFlowMini() {
+  return (
+    <p className="text-[10px] font-semibold text-gray-500" title="Tamamlanan ders → listeye al → ödendi">
+      <span className="font-black uppercase tracking-wide text-gray-600">Koç ödeme akışı:</span>{" "}
+      <span className="text-gray-400">Ödeme bekliyor</span>
+      <span className="mx-1 text-gray-600">→</span>
+      <span className="text-gray-400">Listeye alındı</span>
+      <span className="mx-1 text-gray-600">→</span>
+      <span className="text-gray-400">Ödendi</span>
+    </p>
   );
 }
 
@@ -202,6 +193,7 @@ export default function MuhasebeFinansPage() {
   const [coachPayoutFiltersAdvancedOpen, setCoachPayoutFiltersAdvancedOpen] = useState(false);
   const [coachPayoutSectionHighlight, setCoachPayoutSectionHighlight] = useState(false);
   const [canOpenAthletePayments, setCanOpenAthletePayments] = useState(false);
+  const [refreshAck, setRefreshAck] = useState(false);
 
   const openCoachPayoutFlow = useCallback(() => {
     setActiveView("coach-payout-items");
@@ -219,6 +211,7 @@ export default function MuhasebeFinansPage() {
   }, [router]);
 
   const resetGeneralFilters = useCallback(() => {
+    setActionFeedback(null);
     setFilters({
       month: monthKeyNow(),
       dateFrom: "",
@@ -233,6 +226,7 @@ export default function MuhasebeFinansPage() {
   }, []);
 
   const resetCoachPayoutFilters = useCallback(() => {
+    setActionFeedback(null);
     setCoachPayoutFilters({
       month: monthKeyNow(),
       dateFrom: "",
@@ -244,7 +238,7 @@ export default function MuhasebeFinansPage() {
     setCoachPayoutFiltersAdvancedOpen(false);
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     const activeFilters = activeView === "genel" ? filters : coachPayoutFilters;
     const payload: AccountingFinanceFilters = {
@@ -263,13 +257,39 @@ export default function MuhasebeFinansPage() {
       setLoadError(res.error);
       setSnapshot(null);
       setLoading(false);
-      return;
+      return false;
     }
-    setActionFeedback(null);
     setLoadError(null);
     setSnapshot(res.snapshot);
     setLoading(false);
+    return true;
   }, [activeView, coachPayoutFilters, filters]);
+
+  const refreshDashboardHard = useCallback(async () => {
+    const ok = await fetchData();
+    router.refresh();
+    if (ok) {
+      setRefreshAck(true);
+      window.setTimeout(() => setRefreshAck(false), 2600);
+    }
+  }, [fetchData, router]);
+
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        void fetchData();
+      }, 400);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [fetchData]);
 
   const fetchRules = useCallback(async () => {
     setRulesLoading(true);
@@ -358,10 +378,6 @@ export default function MuhasebeFinansPage() {
     [coachPayoutRows]
   );
 
-  const pendingPaymentCount = useMemo(
-    () => (snapshot?.payments || []).filter((p) => p.status === "bekliyor").length,
-    [snapshot]
-  );
   const paymentAmountValue = Number(paymentForm.amount || "0");
   const paymentSubmitDisabled =
     paymentSubmitting || !paymentForm.profileId || !Number.isFinite(paymentAmountValue) || paymentAmountValue <= 0 || !paymentForm.paymentDate;
@@ -392,11 +408,11 @@ export default function MuhasebeFinansPage() {
         setActionFeedback({ type: "error", message: res.error || "Koç ödeme kalemi eklenemedi." });
       } else {
         setActionFeedback({ type: "success", message: "Ders koç ödeme listesine alındı." });
-        await fetchData();
+        await refreshDashboardHard();
       }
       setRowActionBusyKey(null);
     },
-    [fetchData]
+    [refreshDashboardHard]
   );
 
   const handleMarkPaid = useCallback(
@@ -408,11 +424,11 @@ export default function MuhasebeFinansPage() {
         setActionFeedback({ type: "error", message: res.error || "Koç ödeme durumu güncellenemedi." });
       } else {
         setActionFeedback({ type: "success", message: "Koç ödeme kalemi ödendi olarak işaretlendi." });
-        await fetchData();
+        await refreshDashboardHard();
       }
       setRowActionBusyKey(null);
     },
-    [fetchData]
+    [refreshDashboardHard]
   );
 
   const handleRuleSubmit = useCallback(async () => {
@@ -432,10 +448,10 @@ export default function MuhasebeFinansPage() {
     }
     setActionFeedback({ type: "success", message: "Koç ödeme kuralı kaydedildi." });
     await fetchRules();
-    await fetchData();
+    await refreshDashboardHard();
     setRuleSubmitting(false);
     setShowRuleModal(false);
-  }, [fetchData, fetchRules, ruleForm]);
+  }, [fetchRules, refreshDashboardHard, ruleForm]);
 
   const handlePaymentSubmit = useCallback(async () => {
     setPaymentSubmitting(true);
@@ -456,12 +472,12 @@ export default function MuhasebeFinansPage() {
       return;
     }
     setActionFeedback({ type: "success", message: "Tahsilat kaydı başarıyla eklendi." });
-    await fetchData();
+    await refreshDashboardHard();
     setPaymentSubmitting(false);
     setShowPaymentModal(false);
-  }, [fetchData, paymentForm]);
+  }, [paymentForm, refreshDashboardHard]);
 
-  if (loading && !snapshot) {
+  if (loading && !snapshot && !loadError) {
     return (
       <div className="flex min-h-[45dvh] items-center justify-center text-green-500">
         <Loader2 className="size-10 animate-spin" aria-hidden />
@@ -469,65 +485,55 @@ export default function MuhasebeFinansPage() {
     );
   }
 
-  const eligiblePayoutLessons = snapshot?.kpis.coachPayoutEligibleLessonCount ?? 0;
   const lessonRows = activeView === "genel" ? snapshot?.lessons || [] : coachPayoutRows;
   const lessonsEmpty = lessonRows.length === 0;
 
   return (
     <div className="ui-page-loose space-y-5 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
-      <header className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#121215] p-5 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#121215] p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="ui-h1">
             Muhasebe & <span className="text-green-500">Finans</span>
           </h1>
-          <p className="mt-1.5 text-sm font-semibold leading-relaxed text-gray-300">
-            Genel tahsilatları, ders kayıtlarını ve koç ödeme sürecini takip edin.
+          <p className="mt-1 text-xs font-semibold text-gray-400">
+            Tahsilat ve ders özetleri. Sporcu borç / tahsilat detayı{" "}
+            {canOpenAthletePayments ? (
+              <button type="button" onClick={() => router.push("/finans")} className="text-emerald-400 underline-offset-2 hover:underline">
+                Sporcu ödemeleri
+              </button>
+            ) : (
+              <span className="text-gray-500">Sporcu ödemeleri</span>
+            )}{" "}
+            ekranında.
           </p>
-          <p className="mt-2 text-xs font-semibold text-gray-400">
-            Bu panel genel muhasebe operasyonu içindir; sporcu bazlı borç ve ödeme takibi ayrı ekranda yönetilir.
-          </p>
-          {canOpenAthletePayments ? (
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <div className="inline-flex rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] font-semibold text-gray-300">
+            Dönem: <span className="ml-1 text-white">{periodLabel}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push("/finans")}
-              className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/15"
+              onClick={() => void refreshDashboardHard()}
+              disabled={loading}
+              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:bg-white/5 disabled:opacity-50"
+              title="Sunucudan verileri yeniden yükle"
+              aria-busy={loading && !!snapshot}
             >
-              Sporcu ödemelerine git
+              {loading && snapshot ? <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden /> : null}
+              Yenile
             </button>
-          ) : null}
-          {snapshot ? (
-            <div className="mt-4 rounded-xl border border-amber-500/15 bg-amber-500/5 px-3 py-3 sm:px-4">
-              <p className="text-[10px] font-black uppercase tracking-wide text-amber-200/90">Bugün için önerilen odak</p>
-              <ul className="mt-2 space-y-1.5 text-xs font-semibold text-gray-200">
-                <li className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-emerald-400/90">Tahsilat</span>
-                  <span className="text-gray-400">
-                    {pendingPaymentCount > 0
-                      ? `${pendingPaymentCount.toLocaleString("tr-TR")} tahsilat kontrol bekliyor.`
-                      : "Bekleyen tahsilat yok."}
-                  </span>
-                </li>
-                <li className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-indigo-300/90">Koç ödemesi</span>
-                  <span className="text-gray-400">
-                    {eligiblePayoutLessons > 0
-                      ? `${eligiblePayoutLessons.toLocaleString("tr-TR")} ders koç ödeme sürecine alınabilir.`
-                      : "Koç ödeme adayı ders yok."}
-                  </span>
-                </li>
-              </ul>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-          <div className="inline-flex rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-gray-300">
-            Dönem: <span className="ml-1 text-white">{periodLabel}</span>
+            {refreshAck ? (
+              <span className="text-[10px] font-semibold text-emerald-400/90" role="status">
+                Güncellendi
+              </span>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <section className="rounded-2xl border border-white/10 bg-[#121215] p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="rounded-xl border border-white/10 bg-[#121215] p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -583,11 +589,18 @@ export default function MuhasebeFinansPage() {
         </div>
       </section>
 
-      {loadError ? <Notification message={loadError} variant="error" /> : null}
-      {snapshot?.compatibilityNotice ? (
-        <div className="rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-200">
-          Bazı eski ödeme kayıtları uyumluluk modunda gösteriliyor.
+      {loadError ? (
+        <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3">
+          <Notification message={loadError} variant="error" />
+          <p className="mt-2 text-[11px] font-semibold text-red-200/90">
+            Tekrar denemek için üstteki <span className="font-black uppercase text-white">Yenile</span> düğmesini kullanın.
+          </p>
         </div>
+      ) : null}
+      {snapshot?.compatibilityNotice ? (
+        <p className="text-[11px] font-semibold text-amber-100/85">
+          Bazı eski kayıtlar farklı formatta olabilir; sistem otomatik uyum sağlar.
+        </p>
       ) : null}
       {actionFeedback ? <Notification message={actionFeedback.message} variant={actionFeedback.type} /> : null}
 
@@ -597,6 +610,9 @@ export default function MuhasebeFinansPage() {
             <h2 className="text-xs font-black uppercase text-white">Filtreler</h2>
             <span className="text-[10px] font-semibold text-gray-500">Önce ay; diğerleri isteğe bağlı</span>
           </div>
+          <p className="mb-2 text-[10px] font-semibold text-gray-500" title="Dönem ve tarih aralığı Türkiye saatine göre">
+            Tarih aralığı Türkiye saatine göre filtrelenir.
+          </p>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <label className="min-w-0 flex-1 space-y-1 lg:max-w-md">
               <span className="text-[10px] font-black uppercase text-gray-500">Ay (öncelikli)</span>
@@ -722,6 +738,9 @@ export default function MuhasebeFinansPage() {
             <h2 className="text-xs font-black uppercase text-white">Filtreler</h2>
             <span className="text-[10px] font-semibold text-gray-500">Önce ay; diğerleri isteğe bağlı</span>
           </div>
+          <p className="mb-2 text-[10px] font-semibold text-gray-500" title="Dönem ve tarih aralığı Türkiye saatine göre">
+            Tarih aralığı Türkiye saatine göre filtrelenir.
+          </p>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <label className="min-w-0 flex-1 space-y-1 lg:max-w-md">
               <span className="text-[10px] font-black uppercase text-gray-500">Ay (öncelikli)</span>
@@ -815,148 +834,72 @@ export default function MuhasebeFinansPage() {
       )}
 
       {activeView === "genel" ? (
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <p className="mb-4 text-[11px] font-black uppercase tracking-wide text-gray-400">Tahsilat</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <article className="flex flex-col gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-emerald-200/85">Toplam tahsilat</p>
-                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-200/90">
-                    Dönem özeti
-                  </span>
-                </div>
-                <p className="text-2xl font-black tabular-nums tracking-tight text-emerald-300">
-                  {formatMoney(snapshot?.kpis.totalCollected || 0)}
-                </p>
-                <p className="text-[11px] font-semibold leading-snug text-gray-400">
-                  Seçili filtrelere göre tahsil edilmiş tutar. Liste ile çapraz kontrol edin.
-                </p>
-              </article>
-              <article className="flex flex-col gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-amber-200/85">Bekleyen tahsilat</p>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                      (snapshot?.kpis.pendingCollection || 0) > 0
-                        ? "border-amber-500/40 bg-amber-500/15 text-amber-100"
-                        : "border-white/10 bg-white/5 text-gray-400"
-                    }`}
-                  >
-                    {(snapshot?.kpis.pendingCollection || 0) > 0 ? "Takip gerekir" : "Güncel görünüm"}
-                  </span>
-                </div>
-                <p className="text-2xl font-black tabular-nums tracking-tight text-amber-300">
-                  {formatMoney(snapshot?.kpis.pendingCollection || 0)}
-                </p>
-                <p className="text-[11px] font-semibold leading-snug text-gray-400">
-                  {(snapshot?.kpis.pendingCollection || 0) > 0
-                    ? "Bekleyen tutar veya kısmi tahsilatlar finans ekranında detaylanır."
-                    : "Bu dönem için bekleyen tahsilat tutarı raporlanmıyor."}
-                </p>
-              </article>
-            </div>
+        <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+          <p className="mb-3 text-[10px] font-black uppercase tracking-wide text-gray-500">Özet</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <article
+              className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5"
+              title="Seçili dönemde tahsil edilmiş tutar (ödendi)"
+            >
+              <p className="text-[9px] font-black uppercase text-emerald-200/80">Toplam tahsilat</p>
+              <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-300">{formatMoney(snapshot?.kpis.totalCollected || 0)}</p>
+            </article>
+            <article
+              className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5"
+              title="Bekleyen / kısmi tahsilat tutarı"
+            >
+              <p className="text-[9px] font-black uppercase text-amber-200/80">Bekleyen tahsilat</p>
+              <p className="mt-0.5 text-lg font-black tabular-nums text-amber-300">{formatMoney(snapshot?.kpis.pendingCollection || 0)}</p>
+            </article>
+            <article
+              className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2.5"
+              title="Tamamlanan, listeye alınmamış koç ödeme adayı ders sayısı"
+            >
+              <p className="text-[9px] font-black uppercase text-gray-400">Koç ödeme bekleyen ders</p>
+              <p className="mt-0.5 text-lg font-black tabular-nums text-amber-200">
+                {(snapshot?.kpis.payoutPendingCount || 0).toLocaleString("tr-TR")}
+              </p>
+            </article>
+            <article
+              className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2.5"
+              title="Koç ödemesi tamamlanan ders sayısı"
+            >
+              <p className="text-[9px] font-black uppercase text-gray-400">Ödenen koç kalemi</p>
+              <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-200">
+                {(snapshot?.kpis.payoutPaidCount || 0).toLocaleString("tr-TR")}
+              </p>
+            </article>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <p className="mb-4 text-[11px] font-black uppercase tracking-wide text-gray-400">Koç ödeme takibi</p>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <article className="flex flex-col gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-amber-200/85">Ödeme bekleyen</p>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                      (snapshot?.kpis.payoutPendingCount || 0) > 0
-                        ? "border-amber-500/40 bg-amber-500/15 text-amber-100"
-                        : "border-white/10 bg-white/5 text-gray-400"
-                    }`}
-                  >
-                    {(snapshot?.kpis.payoutPendingCount || 0) > 0 ? "İşlem sırası" : "Boş kuyruk"}
-                  </span>
-                </div>
-                <p className="text-2xl font-black tabular-nums tracking-tight text-amber-300">
-                  {(snapshot?.kpis.payoutPendingCount || 0).toLocaleString("tr-TR")}
-                </p>
-                <p className="text-[11px] font-semibold text-gray-400">
-                  Listeye alınmayı bekleyen tamamlanan ders sayısı.
-                </p>
-              </article>
-              <article className="flex flex-col gap-2 rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.07] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-indigo-200/85">Listeye alınan</p>
-                  <span className="rounded-full border border-indigo-500/35 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-100">
-                    Ödeme hazırlığı
-                  </span>
-                </div>
-                <p className="text-2xl font-black tabular-nums tracking-tight text-indigo-300">
-                  {(snapshot?.kpis.payoutIncludedCount || 0).toLocaleString("tr-TR")}
-                </p>
-                <p className="text-[11px] font-semibold text-gray-400">Ödeme paketine eklenmiş dersler.</p>
-              </article>
-              <article className="flex flex-col gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-emerald-200/85">Ödenen</p>
-                  <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-100">
-                    Kapatılan
-                  </span>
-                </div>
-                <p className="text-2xl font-black tabular-nums tracking-tight text-emerald-300">
-                  {(snapshot?.kpis.payoutPaidCount || 0).toLocaleString("tr-TR")}
-                </p>
-                <p className="text-[11px] font-semibold text-gray-400">Koç ödemesi tamamlanan dersler.</p>
-              </article>
-            </div>
-          </div>
-          <article className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <p className="text-[10px] font-black uppercase tracking-wide text-gray-500">Faz-1 notu · tahmini net</p>
-            <p className="mt-2 text-base font-black text-gray-200">Henüz konsolide edilmiyor</p>
-            <p className="mt-1 max-w-prose text-[11px] font-semibold leading-relaxed text-gray-500">
-              Net kâr / gider dengesi bu panelde hesaplanmaz. Koç kuralları ve tahsilatlar oturduğunda bir sonraki fazda buraya
-              taşınacak.
-            </p>
-          </article>
+          <p className="mt-2 text-[10px] font-semibold text-gray-500">Seçili dönem · Filtrelenmiş veriler</p>
+          <DataSourceHint className="mt-1" />
         </section>
       ) : (
-        <section className="space-y-4">
-          <article className="rounded-2xl border border-indigo-500/25 bg-indigo-500/10 p-4">
-            <p className="text-xs font-semibold leading-relaxed text-indigo-100">
-              Bu sekmede maaş hesabı yapılmaz. Tamamlanan derslerin koç ödeme sürecinde hangi aşamada olduğunu yönetirsiniz.
-            </p>
-          </article>
-          <CoachPayoutFlowLegend />
-          <div className="grid gap-4 md:grid-cols-3">
-            <article className="flex flex-col gap-2 rounded-2xl border border-amber-500/20 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Bekleyen</p>
-              <p className="text-2xl font-black tabular-nums text-amber-300">{coachPayoutKpis.pending.toLocaleString("tr-TR")}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Ödeme listesine henüz alınmamış aday dersler.</p>
+        <section className="space-y-3 rounded-xl border border-white/10 bg-[#121215] p-4">
+          <CoachPayoutFlowMini />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <article className="rounded-lg border border-amber-500/15 bg-black/20 px-3 py-2" title="Listede bekleyen tamamlanan dersler">
+              <p className="text-[9px] font-black uppercase text-gray-500">Bekleyen</p>
+              <p className="text-xl font-black tabular-nums text-amber-300">{coachPayoutKpis.pending.toLocaleString("tr-TR")}</p>
             </article>
-            <article className="flex flex-col gap-2 rounded-2xl border border-indigo-500/20 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Listeye alınan</p>
-              <p className="text-2xl font-black tabular-nums text-indigo-300">{coachPayoutKpis.included.toLocaleString("tr-TR")}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Ödeme öncesi onay bekleyen satırlar.</p>
+            <article className="rounded-lg border border-indigo-500/15 bg-black/20 px-3 py-2">
+              <p className="text-[9px] font-black uppercase text-gray-500">Listeye alınan</p>
+              <p className="text-xl font-black tabular-nums text-indigo-300">{coachPayoutKpis.included.toLocaleString("tr-TR")}</p>
             </article>
-            <article className="flex flex-col gap-2 rounded-2xl border border-emerald-500/20 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Ödenen</p>
-              <p className="text-2xl font-black tabular-nums text-emerald-300">{coachPayoutKpis.paid.toLocaleString("tr-TR")}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Kapalı koç ödeme kalemleri.</p>
+            <article className="rounded-lg border border-emerald-500/15 bg-black/20 px-3 py-2">
+              <p className="text-[9px] font-black uppercase text-gray-500">Ödenen</p>
+              <p className="text-xl font-black tabular-nums text-emerald-300">{coachPayoutKpis.paid.toLocaleString("tr-TR")}</p>
             </article>
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <article className="flex flex-col gap-2 rounded-2xl border border-cyan-500/15 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Toplam koç payı</p>
-              <p className="text-xl font-black tabular-nums text-cyan-300">{formatMoney(coachPayoutKpis.amountTotal)}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Kural ve ders ücretine göre hesaplanan toplam.</p>
-            </article>
-            <article className="flex flex-col gap-2 rounded-2xl border border-amber-500/15 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Bekleyen koç payı</p>
-              <p className="text-xl font-black tabular-nums text-amber-300">{formatMoney(coachPayoutKpis.amountPending)}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Ödenmemiş veya listede bekleyen tutarlar.</p>
-            </article>
-            <article className="flex flex-col gap-2 rounded-2xl border border-emerald-500/15 bg-[#121215] p-4">
-              <p className="text-[10px] font-black uppercase text-gray-500">Ödenen koç payı</p>
-              <p className="text-xl font-black tabular-nums text-emerald-300">{formatMoney(coachPayoutKpis.amountPaid)}</p>
-              <p className="text-[11px] font-semibold text-gray-500">Koç ödemesi tamamlanan kalemlerin toplamı.</p>
-            </article>
-          </div>
+          <p className="text-[11px] font-semibold text-gray-400">
+            Toplam koç payı (filtreli liste):{" "}
+            <span className="font-black text-cyan-300">{formatMoney(coachPayoutKpis.amountTotal)}</span>
+            <span className="text-gray-600"> · </span>
+            Bekleyen: <span className="text-amber-200">{formatMoney(coachPayoutKpis.amountPending)}</span>
+            <span className="text-gray-600"> · </span>
+            Ödenen: <span className="text-emerald-200">{formatMoney(coachPayoutKpis.amountPaid)}</span>
+          </p>
+          <p className="text-[10px] font-semibold text-gray-500">Seçili dönem · Filtrelenmiş veriler</p>
+          <DataSourceHint />
         </section>
       )}
 
@@ -964,8 +907,9 @@ export default function MuhasebeFinansPage() {
       <section className="space-y-3">
         <div className="flex items-end justify-between">
           <h2 className="text-sm font-black uppercase text-white">Tahsilat Kayıtları</h2>
-          <p className="text-[11px] font-semibold text-gray-500">{snapshot?.payments.length || 0} kayıt</p>
+          <p className="text-[11px] font-semibold text-gray-500">{snapshot?.payments?.length ?? 0} kayıt</p>
         </div>
+        <DataSourceHint />
         <div className="space-y-3 md:hidden">
           {(snapshot?.payments || []).map((row) => (
             <article key={row.id} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
@@ -987,11 +931,11 @@ export default function MuhasebeFinansPage() {
               </div>
             </article>
           ))}
-          {(snapshot?.payments.length ?? 0) === 0 ? (
+          {(snapshot?.payments?.length ?? 0) === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-center">
-              <p className="text-xs font-bold uppercase text-gray-400">Kayıt bulunamadı</p>
+              <p className="text-xs font-bold uppercase text-gray-400">Bu aralıkta kayıt yok</p>
               <p className="mt-1 text-xs font-semibold text-gray-500">
-                Seçili dönemde tahsilat kaydı görünmüyor. Dönemi değiştirin veya yeni tahsilat ekleyin.
+                Filtreleri değiştirerek kontrol edebilirsiniz. İsterseniz yeni tahsilat da ekleyebilirsiniz.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button
@@ -1049,12 +993,12 @@ export default function MuhasebeFinansPage() {
                   </td>
                 </tr>
               ))}
-              {snapshot?.payments.length === 0 ? (
+              {(snapshot?.payments?.length ?? 0) === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-10 text-center">
-                    <p className="text-xs font-bold uppercase text-gray-400">Kayıt bulunamadı</p>
+                    <p className="text-xs font-bold uppercase text-gray-400">Bu aralıkta kayıt yok</p>
                     <p className="mt-1 text-xs font-semibold text-gray-500">
-                      Seçili dönemde tahsilat kaydı görünmüyor. Dönemi değiştirin veya yeni tahsilat ekleyin.
+                      Filtreleri değiştirerek kontrol edebilirsiniz. İsterseniz yeni tahsilat da ekleyebilirsiniz.
                     </p>
                     <div className="mt-4 flex flex-wrap justify-center gap-2">
                       <button
@@ -1094,6 +1038,7 @@ export default function MuhasebeFinansPage() {
             {lessonRows.length} kayıt
           </p>
         </div>
+        <DataSourceHint />
         <div className="space-y-3 md:hidden">
           {lessonRows.map((row) => (
             <article
@@ -1164,11 +1109,12 @@ export default function MuhasebeFinansPage() {
           ))}
           {lessonsEmpty ? (
             <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-center">
-              <p className="text-xs font-bold uppercase text-gray-400">Kayıt bulunamadı</p>
+              <p className="text-xs font-bold uppercase text-gray-400">Bu aralıkta kayıt yok</p>
               <p className="mt-1 text-xs font-semibold text-gray-500">
+                Filtreleri değiştirerek kontrol edebilirsiniz.
                 {activeView === "genel"
-                  ? "Seçili dönemde ders kaydı görünmüyor. Ayı değiştirin veya gelişmiş filtreleri sıfırlayın."
-                  : "Seçili filtrelerde koç ödeme kalemi görünmüyor. Tamamlanan dersler ödeme adayıdır."}
+                  ? " Ayı veya gelişmiş filtreleri gözden geçirebilirsiniz."
+                  : " Tamamlanan dersler ödeme adayıdır; filtreleri gevşetmeyi deneyin."}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {activeView === "genel" ? (
@@ -1219,7 +1165,7 @@ export default function MuhasebeFinansPage() {
         <div
           className={`hidden overflow-x-auto rounded-2xl border bg-[#121215] transition-all duration-700 md:block ${
             activeView === "coach-payout-items" && coachPayoutSectionHighlight
-              ? "border-indigo-400/60 ring-2 ring-indigo-400/35 shadow-[0_0_0_1px_rgba(129,140,248,0.18),0_0_24px_rgba(99,102,241,0.22)]"
+              ? "border-indigo-400/50 ring-1 ring-indigo-400/30"
               : "border-white/10"
           }`}
         >
@@ -1318,9 +1264,9 @@ export default function MuhasebeFinansPage() {
                   <td colSpan={activeView === "genel" ? 13 : 14} className="px-3 py-10 text-center">
                     {activeView === "genel" ? (
                       <>
-                        <p className="text-xs font-bold uppercase text-gray-400">Kayıt bulunamadı</p>
+                        <p className="text-xs font-bold uppercase text-gray-400">Bu aralıkta kayıt yok</p>
                         <p className="mt-1 text-xs font-semibold text-gray-500">
-                          Seçili dönemde ders kaydı görünmüyor. Ayı değiştirin veya gelişmiş filtreleri sıfırlayın.
+                          Filtreleri değiştirerek kontrol edebilirsiniz. Ayı veya gelişmiş filtreleri gözden geçirebilirsiniz.
                         </p>
                         <div className="mt-4 flex flex-wrap justify-center gap-2">
                           <button
@@ -1351,9 +1297,9 @@ export default function MuhasebeFinansPage() {
                       </>
                     ) : (
                       <>
-                        <p className="text-xs font-bold uppercase text-gray-400">Kayıt bulunamadı</p>
+                        <p className="text-xs font-bold uppercase text-gray-400">Bu aralıkta kayıt yok</p>
                         <p className="mt-1 text-xs font-semibold text-gray-500">
-                          Seçili filtrelerde koç ödeme kalemi görünmüyor. Tamamlanan dersler ödeme adayıdır.
+                          Filtreleri değiştirerek kontrol edebilirsiniz. Tamamlanan dersler ödeme adayıdır; filtreleri gevşetmeyi deneyin.
                         </p>
                         <div className="mt-4 flex flex-wrap justify-center gap-2">
                           <button
@@ -1398,9 +1344,7 @@ export default function MuhasebeFinansPage() {
                   <h3 id="rule-modal-title" className="text-base font-black uppercase tracking-wide text-white">
                     Koç ödeme kuralları
                   </h3>
-                  <p className="mt-1 text-xs font-semibold text-gray-500">
-                    Koç başına ders başı veya yüzde kuralı tanımlayın; liste hesaplamaları buna bağlanır.
-                  </p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-gray-500">Ders başı veya yüzde; tablo hesapları buna bağlanır.</p>
                 </div>
                 <button
                   type="button"
@@ -1539,9 +1483,7 @@ export default function MuhasebeFinansPage() {
                   <h3 id="payment-modal-title" className="text-base font-black uppercase tracking-wide text-white">
                     Tahsilat ekle
                   </h3>
-                  <p className="mt-1 text-xs font-semibold text-gray-500">
-                    Sporcu seçin, tutarı girin; kayıt genel tahsilat listesinde görünür.
-                  </p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-gray-500">Kayıt tahsilat tablosuna düşer.</p>
                 </div>
                 <button
                   type="button"
@@ -1620,7 +1562,7 @@ export default function MuhasebeFinansPage() {
                 <label className="flex flex-col gap-1.5 sm:col-span-2">
                   <span className="text-[10px] font-black uppercase text-gray-500">Açıklama</span>
                   <textarea
-                    className="ui-textarea min-h-[6.5rem] w-full"
+                    className="ui-textarea min-h-[4rem] w-full"
                     value={paymentForm.description}
                     onChange={(e) => setPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
                   />

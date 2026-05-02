@@ -6,6 +6,13 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { calculateCoachPayout, pickCoachRule, type CoachPaymentRuleForCalc } from "@/lib/accountingFinance/payoutCalculation";
+import {
+  istanbulCustomRangeToPayoutDateInclusiveBounds,
+  istanbulDateWallRangeToHalfOpenUtc,
+  istanbulMonthToPayoutDateInclusiveBounds,
+  istanbulMonthWallToHalfOpenUtc,
+} from "@/lib/accountingFinance/istanbulQueryRange";
+import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 
 type LessonTypeFilter = "all" | "group" | "private";
 type LessonStatusFilter = "all" | "planned" | "completed" | "cancelled";
@@ -105,14 +112,23 @@ export type AccountingFinanceSnapshot = {
   };
 };
 
-function parseMonthRange(month: string): { from: string; to: string } {
-  const [y, m] = month.split("-").map((v) => Number(v));
-  const fromDate = new Date(Date.UTC(y, Math.max((m || 1) - 1, 0), 1, 0, 0, 0));
-  const toDate = new Date(Date.UTC(y, Math.max((m || 1), 1), 0, 23, 59, 59));
-  return {
-    from: fromDate.toISOString(),
-    to: toDate.toISOString(),
-  };
+/** Supabase timestamptz filtreleri: [from, toExclusive) — gün sonu ms kaçırma riski yok. */
+type UtcHalfOpenRange = { from: string; toExclusive: string };
+
+function inclusiveUtcEndIso(toExclusive: string): string {
+  const t = new Date(toExclusive).getTime();
+  if (!Number.isFinite(t) || t <= 0) return toExclusive;
+  return new Date(t - 1).toISOString();
+}
+
+function normalizePaymentDisplayDate(row: Record<string, unknown>): string | null {
+  const pd = row.payment_date;
+  if (pd != null && typeof pd === "string" && pd.trim()) return pd.trim();
+  const pa = row.paid_at;
+  if (pa != null && typeof pa === "string" && pa.trim()) return pa.trim();
+  const ca = row.created_at;
+  if (ca != null && typeof ca === "string" && ca.trim()) return ca.trim();
+  return null;
 }
 
 function currentMonthKey() {
@@ -138,7 +154,52 @@ function isPaymentsSchemaCompatibilityError(message?: string | null): boolean {
     m.includes("payments.deleted_at") ||
     m.includes("payments.due_date") ||
     m.includes("payments.paid_at") ||
-    m.includes("payments.package_id")
+    m.includes("payments.package_id") ||
+    m.includes("payments.created_at")
+  );
+}
+
+/** Sunucu konsolu: gerçek PostgREST / Postgres mesajı (UI'da gösterme). */
+function logPaymentsQueryFailure(
+  stage: string,
+  error: { message?: string; code?: string; details?: string; hint?: string } | null | undefined
+) {
+  const message = error?.message?.trim();
+  if (!message && !error?.code) return;
+  console.error("[accountingFinance] payments query failed", {
+    stage,
+    message: error?.message ?? null,
+    code: error?.code ?? null,
+    details: error?.details ?? null,
+    hint: error?.hint ?? null,
+  });
+}
+
+/**
+ * Şema / ilişki / eksik kolon hatasında daha ince sorguya düş.
+ * Yetkilendirme veya RLS gibi gerçek hatalarda fallback yapma.
+ */
+function shouldFallbackPaymentsQuery(message?: string | null): boolean {
+  const m = String(message || "").toLowerCase();
+  if (!m) return false;
+  if (
+    m.includes("permission denied") ||
+    m.includes("rls policy") ||
+    m.includes("row-level security") ||
+    m.includes("jwt") ||
+    m.includes("invalid api key")
+  ) {
+    return false;
+  }
+  return (
+    isPaymentsSchemaCompatibilityError(m) ||
+    m.includes("created_at") ||
+    m.includes("could not embed") ||
+    m.includes("could not find a relationship") ||
+    m.includes("more than one relationship") ||
+    m.includes("42703") ||
+    (m.includes("column") && m.includes("does not exist")) ||
+    m.includes("schema cache")
   );
 }
 
@@ -187,7 +248,8 @@ function inferPaymentScopeFromLegacyRow(row: Record<string, unknown>): PaymentSc
 
 async function loadPaymentsWithCompatibility(args: {
   organizationId: string;
-  range: { from: string; to: string };
+  range: UtcHalfOpenRange;
+  paymentDateBounds: { fromKey: string; toKeyInclusive: string };
   paymentStatus: PaymentStatusFilter;
   paymentKind: string | null;
 }): Promise<
@@ -195,63 +257,223 @@ async function loadPaymentsWithCompatibility(args: {
   | { error: string }
 > {
   const adminClient = createSupabaseAdminClient();
-  const { organizationId, range, paymentStatus, paymentKind } = args;
-  let compatibilityMode = false;
+  const { organizationId, range, paymentDateBounds, paymentStatus, paymentKind } = args;
 
-  let modernQuery = adminClient
-    .from("payments")
-    .select(
-      "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, due_date, status, payment_kind, payment_scope, display_name, metadata_json, description, deleted_at, athlete_profile:profiles!payments_profile_id_fkey(full_name, email)"
-    )
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null)
-    .gte("created_at", range.from)
-    .lte("created_at", range.to)
-    .order("created_at", { ascending: false });
-  if (paymentStatus !== "all") modernQuery = modernQuery.eq("status", paymentStatus);
-  if (paymentKind) modernQuery = modernQuery.eq("payment_kind", paymentKind);
-  const modern = await modernQuery;
-  if (!modern.error) {
-    return { rows: modern.data || [], compatibilityMode };
-  }
-  if (!isPaymentsSchemaCompatibilityError(modern.error.message)) {
-    return { error: `Tahsilat kayıtları alınamadı.` };
-  }
+  const PAY_EMBED = "athlete_profile:profiles!payments_profile_id_fkey(full_name, email)";
+  const MODERN_SELECT =
+    "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, due_date, status, payment_kind, payment_scope, display_name, metadata_json, description, deleted_at, created_at";
+  const FALLBACK_SELECT =
+    "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, due_date, status, payment_scope, display_name, metadata_json, description, created_at";
+  const MINIMAL_PKG_SELECT =
+    "id, profile_id, package_id, amount, payment_type, payment_date, status, description, created_at";
+  const MINIMAL_NOPKG_SELECT =
+    "id, profile_id, amount, payment_type, payment_date, status, description, created_at";
+  const LEGACY_PKG_SELECT = "id, profile_id, package_id, amount, payment_type, payment_date, status, description";
+  const LEGACY_NOPKG_SELECT = "id, profile_id, amount, payment_type, payment_date, status, description";
 
-  compatibilityMode = true;
-  let fallbackQuery = adminClient
-    .from("payments")
-    .select(
-      "id, profile_id, package_id, amount, payment_type, payment_date, paid_at, due_date, status, payment_scope, display_name, metadata_json, description, athlete_profile:profiles!payments_profile_id_fkey(full_name, email)"
-    )
-    .eq("organization_id", organizationId)
-    .gte("created_at", range.from)
-    .lte("created_at", range.to)
-    .order("created_at", { ascending: false });
-  if (paymentStatus !== "all") fallbackQuery = fallbackQuery.eq("status", paymentStatus);
-  const fallback = await fallbackQuery;
-  if (!fallback.error) {
-    return { rows: fallback.data || [], compatibilityMode };
-  }
-  if (!isPaymentsSchemaCompatibilityError(fallback.error.message)) {
-    return { error: "Tahsilat kayıtları alınamadı." };
+  const USER_MSG = "Tahsilat kayıtları alınamadı.";
+
+  // 1 — tam şema + sporcu ilişkisi
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${MODERN_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    if (paymentKind) q = q.eq("payment_kind", paymentKind);
+    const { data, error } = await q;
+    if (!error) return { rows: data ?? [], compatibilityMode: false };
+    logPaymentsQueryFailure("payments_modern_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
 
-  let minimalQuery = adminClient
-    .from("payments")
-    .select(
-      "id, profile_id, amount, payment_type, payment_date, status, description, athlete_profile:profiles!payments_profile_id_fkey(full_name, email)"
-    )
-    .eq("organization_id", organizationId)
-    .gte("created_at", range.from)
-    .lte("created_at", range.to)
-    .order("created_at", { ascending: false });
-  if (paymentStatus !== "all") minimalQuery = minimalQuery.eq("status", paymentStatus);
-  const minimal = await minimalQuery;
-  if (minimal.error) {
-    return { error: "Tahsilat kayıtları alınamadı." };
+  // 2 — tam şema, ilişkisiz (FK / embed hatası)
+  {
+    let q = adminClient
+      .from("payments")
+      .select(MODERN_SELECT)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    if (paymentKind) q = q.eq("payment_kind", paymentKind);
+    const { data, error } = await q;
+    if (!error) return { rows: data ?? [], compatibilityMode: false };
+    logPaymentsQueryFailure("payments_modern_flat", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
   }
-  return { rows: minimal.data || [], compatibilityMode };
+
+  // 3 — payment_kind / deleted_at vb. eksik olabilir
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${FALLBACK_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_fallback_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 4
+  {
+    let q = adminClient
+      .from("payments")
+      .select(FALLBACK_SELECT)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_fallback_flat", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 5 — minimal + package_id + ilişki
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${MINIMAL_PKG_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_minimal_pkg_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 6 — minimal + package_id, ilişkisiz
+  {
+    let q = adminClient
+      .from("payments")
+      .select(MINIMAL_PKG_SELECT)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_minimal_pkg_flat", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 7 — package_id kolonu yoksa
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${MINIMAL_NOPKG_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_minimal_nopkg_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 8
+  {
+    let q = adminClient
+      .from("payments")
+      .select(MINIMAL_NOPKG_SELECT)
+      .eq("organization_id", organizationId)
+      .gte("created_at", range.from)
+      .lt("created_at", range.toExclusive)
+      .order("created_at", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_minimal_nopkg_flat", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 9 — created_at yok / kullanılamıyor: İstanbul takvim günü ile payment_date
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${LEGACY_PKG_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("payment_date", paymentDateBounds.fromKey)
+      .lte("payment_date", paymentDateBounds.toKeyInclusive)
+      .order("payment_date", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_legacy_payment_date_pkg_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 10
+  {
+    let q = adminClient
+      .from("payments")
+      .select(LEGACY_PKG_SELECT)
+      .eq("organization_id", organizationId)
+      .gte("payment_date", paymentDateBounds.fromKey)
+      .lte("payment_date", paymentDateBounds.toKeyInclusive)
+      .order("payment_date", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_legacy_payment_date_pkg_flat", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 11 — package_id + payment_date ile kombine edilemiyorsa
+  {
+    let q = adminClient
+      .from("payments")
+      .select(`${LEGACY_NOPKG_SELECT}, ${PAY_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("payment_date", paymentDateBounds.fromKey)
+      .lte("payment_date", paymentDateBounds.toKeyInclusive)
+      .order("payment_date", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_legacy_payment_date_nopkg_embed", error);
+    if (!shouldFallbackPaymentsQuery(error.message)) return { error: USER_MSG };
+  }
+
+  // 12 — son düz liste
+  {
+    let q = adminClient
+      .from("payments")
+      .select(LEGACY_NOPKG_SELECT)
+      .eq("organization_id", organizationId)
+      .gte("payment_date", paymentDateBounds.fromKey)
+      .lte("payment_date", paymentDateBounds.toKeyInclusive)
+      .order("payment_date", { ascending: false });
+    if (paymentStatus !== "all") q = q.eq("status", paymentStatus);
+    const { data, error } = await q;
+    if (!error) return { rows: data || [], compatibilityMode: true };
+    logPaymentsQueryFailure("payments_legacy_payment_date_nopkg_flat", error);
+  }
+
+  console.error("[accountingFinance] payments query exhausted all fallbacks", {
+    organizationId,
+    paymentDateBounds,
+    createdAtRange: { from: range.from, toExclusive: range.toExclusive },
+  });
+  return { error: USER_MSG };
 }
 
 function resolveMonthNameTr(month: number) {
@@ -307,7 +529,20 @@ export async function loadAccountingFinanceDashboard(
   const dateFrom = (rawFilters.dateFrom || "").trim();
   const dateTo = (rawFilters.dateTo || "").trim();
   const rangeMode = dateFrom && dateTo ? "custom_range" : "month";
-  const range = rangeMode === "custom_range" ? { from: `${dateFrom}T00:00:00.000Z`, to: `${dateTo}T23:59:59.999Z` } : parseMonthRange(month);
+  const timeRange: UtcHalfOpenRange | null =
+    rangeMode === "custom_range"
+      ? istanbulDateWallRangeToHalfOpenUtc(dateFrom, dateTo)
+      : istanbulMonthWallToHalfOpenUtc(month);
+  if (!timeRange) {
+    return { error: "Geçersiz tarih filtresi." };
+  }
+  const payoutDateBounds =
+    rangeMode === "custom_range"
+      ? istanbulCustomRangeToPayoutDateInclusiveBounds(dateFrom, dateTo)
+      : istanbulMonthToPayoutDateInclusiveBounds(month);
+  if (!payoutDateBounds) {
+    return { error: "Geçersiz tarih filtresi." };
+  }
   const coachId = (rawFilters.coachId || "").trim() || null;
   const lessonType = rawFilters.lessonType || "all";
   const lessonStatus = rawFilters.lessonStatus || "all";
@@ -332,7 +567,8 @@ export async function loadAccountingFinanceDashboard(
 
   const paymentLoad = await loadPaymentsWithCompatibility({
     organizationId,
-    range,
+    range: timeRange,
+    paymentDateBounds: payoutDateBounds,
     paymentStatus,
     paymentKind,
   });
@@ -349,7 +585,7 @@ export async function loadAccountingFinanceDashboard(
       athleteId: (row.profile_id as string | null) || null,
       athleteName: toDisplayName(athlete?.full_name ?? null, athlete?.email ?? null, "Sporcu"),
       amount: Number(row.amount || 0),
-      paymentDate: (row.payment_date as string | null) || (row.paid_at as string | null) || null,
+      paymentDate: normalizePaymentDisplayDate(row),
       dueDate: (row.due_date as string | null) || null,
       status,
       paymentKind: normalizedKind,
@@ -369,8 +605,8 @@ export async function loadAccountingFinanceDashboard(
         "id, title, start_time, end_time, status, coach_id, location, coach_profile:profiles!training_schedule_coach_id_fkey(full_name, email), training_participants(id)"
       )
       .eq("organization_id", organizationId)
-      .gte("start_time", range.from)
-      .lte("start_time", range.to)
+      .gte("start_time", timeRange.from)
+      .lt("start_time", timeRange.toExclusive)
       .order("start_time", { ascending: false });
     if (safeCoachId) groupQuery = groupQuery.eq("coach_id", safeCoachId);
     if (lessonStatus !== "all") {
@@ -413,8 +649,8 @@ export async function loadAccountingFinanceDashboard(
         "id, starts_at, ends_at, status, coach_id, location, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name,total_price,total_lessons)"
       )
       .eq("organization_id", organizationId)
-      .gte("starts_at", range.from)
-      .lte("starts_at", range.to)
+      .gte("starts_at", timeRange.from)
+      .lt("starts_at", timeRange.toExclusive)
       .order("starts_at", { ascending: false });
     if (safeCoachId) privateQuery = privateQuery.eq("coach_id", safeCoachId);
     if (lessonStatus !== "all") privateQuery = privateQuery.eq("status", lessonStatus);
@@ -459,8 +695,8 @@ export async function loadAccountingFinanceDashboard(
     .from("coach_payout_items")
     .select("id, source_type, source_id, status, payout_amount, calculated_at")
     .eq("organization_id", organizationId)
-    .gte("lesson_date", range.from.slice(0, 10))
-    .lte("lesson_date", range.to.slice(0, 10)) as unknown as {
+    .gte("lesson_date", payoutDateBounds.fromKey)
+    .lte("lesson_date", payoutDateBounds.toKeyInclusive) as unknown as {
     data: Array<Record<string, unknown>> | null;
     error: { message?: string } | null;
   };
@@ -469,8 +705,8 @@ export async function loadAccountingFinanceDashboard(
       .from("coach_payout_items")
       .select("id, source_type, source_id, status")
       .eq("organization_id", organizationId)
-      .gte("lesson_date", range.from.slice(0, 10))
-      .lte("lesson_date", range.to.slice(0, 10))) as unknown as {
+      .gte("lesson_date", payoutDateBounds.fromKey)
+      .lte("lesson_date", payoutDateBounds.toKeyInclusive)) as unknown as {
       data: Array<Record<string, unknown>> | null;
       error: { message?: string } | null;
     };
@@ -557,8 +793,8 @@ export async function loadAccountingFinanceDashboard(
       compatibilityNotice: paymentLoad.compatibilityMode ? "Tahsilat kayıtları yüklenirken uyumluluk modu kullanıldı." : null,
       filtersApplied: {
         month,
-        dateFrom: range.from,
-        dateTo: range.to,
+        dateFrom: timeRange.from,
+        dateTo: inclusiveUtcEndIso(timeRange.toExclusive),
         coachId: safeCoachId,
         lessonType,
         lessonStatus,
@@ -615,10 +851,18 @@ export async function createAccountingPayment(formData: FormData) {
   const paymentDate = String(formData.get("paymentDate") || "").trim();
   const description = String(formData.get("description") || "").trim() || null;
   const packageId = String(formData.get("packageId") || "").trim();
-  const paidAt = paymentDate ? new Date(`${paymentDate}T00:00:00`).toISOString() : new Date().toISOString();
-  const paidDateObj = new Date(paidAt);
-  const monthName = resolveMonthNameTr(paidDateObj.getUTCMonth() + 1);
-  const yearInt = paidDateObj.getUTCFullYear();
+  const tz = SCHEDULE_APP_TIME_ZONE;
+  const paidAt =
+    paymentDate && /^\d{4}-\d{2}-\d{2}$/.test(paymentDate)
+      ? wallClockInZoneToUtcIso(paymentDate, "00:00:00", tz) ?? new Date().toISOString()
+      : new Date().toISOString();
+  const paidWallKey = isoToZonedDateKey(paidAt, tz);
+  const wallParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(paidWallKey);
+  const wallMonth = wallParts ? Number(wallParts[2]) : new Date().getMonth() + 1;
+  const wallYear = wallParts ? Number(wallParts[1]) : new Date().getFullYear();
+  const monthName = resolveMonthNameTr(Number.isFinite(wallMonth) ? wallMonth : 1);
+  const yearInt = Number.isFinite(wallYear) ? wallYear : new Date().getFullYear();
+  const dueDateKey = paidWallKey || paidAt.slice(0, 10);
 
   const paymentKind =
     paymentKindInput === "private_lesson_package" ||
@@ -660,7 +904,7 @@ export async function createAccountingPayment(formData: FormData) {
       payment_scope: paymentScope,
       payment_kind: paymentKind,
       display_name: null,
-      due_date: paidAt.slice(0, 10),
+      due_date: dueDateKey,
       month_name: monthName,
       year_int: yearInt,
       payment_date: paidAt,
@@ -680,7 +924,7 @@ export async function createAccountingPayment(formData: FormData) {
         organization_id: organizationId,
         amount,
         payment_type: paymentType,
-        due_date: paidAt.slice(0, 10),
+        due_date: dueDateKey,
         month_name: monthName,
         year_int: yearInt,
         payment_date: paidAt,

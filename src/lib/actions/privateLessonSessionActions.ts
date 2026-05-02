@@ -8,7 +8,7 @@ import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
-import { combineLocalDateAndTime } from "@/lib/forms/datetimeLocal";
+import { wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import type { PrivateLessonSessionListItem, PrivateLessonSessionStatus } from "@/lib/types";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
@@ -265,8 +265,9 @@ export async function createPrivateLessonSession(formData: FormData) {
       coachId = actor.id;
     }
 
-    const startIso = combineLocalDateAndTime(lessonDate, startClock);
-    const start = new Date(startIso);
+    const startUtcIso = wallClockInZoneToUtcIso(lessonDate, startClock);
+    if (!startUtcIso) return { error: "Geçersiz tarih veya saat." };
+    const start = new Date(startUtcIso);
     if (Number.isNaN(start.getTime())) return { error: "Geçersiz tarih veya saat." };
     const end = new Date(start.getTime() + durationMinutes * 60_000);
 

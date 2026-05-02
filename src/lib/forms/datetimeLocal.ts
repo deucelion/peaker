@@ -10,6 +10,11 @@ export function splitIsoToDateAndTime(iso: string): { date: string; time: string
   };
 }
 
+/**
+ * Sadece birleşik string üretir; anlam **timezone içermez**.
+ * Sunucuda `new Date(combineLocalDateAndTime(...))` UTC ortamında yanlış yorumlanır;
+ * kalıcı kayıt için `wallClockInZoneToUtcIso` / `parseLessonFormInstantToUtcIso` kullanın.
+ */
 export function combineLocalDateAndTime(date: string, time: string): string {
   return `${date}T${time}`;
 }

@@ -20,7 +20,15 @@ import { createPrivateLessonSession, cancelPrivateLessonSession } from "@/lib/ac
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import { listLessonsSnapshot, listWeeklyLessonScheduleSnapshot } from "@/lib/actions/snapshotActions";
-import { getWeekDayStarts, getWeekStartMondayIso, sameDayKey } from "@/lib/schedule/weeklySchedule";
+import { formatLessonDateTimeTr, formatLessonTimeTr } from "@/lib/forms/datetimeLocal";
+import {
+  SCHEDULE_APP_TIME_ZONE,
+  isoToZonedClockMinutesFromMidnight,
+  isoToZonedDateKey,
+  wallClockInZoneToUtcIso,
+  zonedNowClockMinutes,
+} from "@/lib/schedule/scheduleWallTime";
+import { getWeekDayStarts, getWeekStartMondayIso } from "@/lib/schedule/weeklySchedule";
 import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
 import type { PrivateLessonPackage } from "@/lib/types";
 
@@ -29,20 +37,22 @@ const GRID_END_HOUR = 23;
 const DAY_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
 const GRID_CONTAINER_HEIGHT_REM = (GRID_END_HOUR - GRID_START_HOUR + 1) * 4;
 
-function toInputDate(iso: string): string {
+/** Hafta başı (Pzt 00:00 UTC) seçicisi — hafta sınırı mevcut UTC-temelli yardımcılarla uyumlu kalsın. */
+function utcDateKeyFromIso(iso: string): string {
   const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function clockLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-}
-
 function dayTitle(iso: string) {
-  return new Date(iso).toLocaleDateString("tr-TR", { weekday: "short", day: "2-digit", month: "short" });
+  return new Date(iso).toLocaleDateString("tr-TR", {
+    timeZone: SCHEDULE_APP_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
 }
 
 function lessonStatusLabelTr(status: string) {
@@ -54,10 +64,8 @@ function lessonStatusLabelTr(status: string) {
 }
 
 function itemTopAndHeight(item: WeeklyLessonScheduleItem) {
-  const start = new Date(item.startsAt);
-  const end = new Date(item.endsAt);
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
-  const endMinutes = end.getHours() * 60 + end.getMinutes();
+  const startMinutes = isoToZonedClockMinutesFromMidnight(item.startsAt);
+  const endMinutes = isoToZonedClockMinutesFromMidnight(item.endsAt);
   const clampStart = Math.max(startMinutes, GRID_START_HOUR * 60);
   const clampEnd = Math.min(Math.max(endMinutes, clampStart + 20), GRID_END_HOUR * 60);
   const top = ((clampStart - GRID_START_HOUR * 60) / DAY_MINUTES) * 100;
@@ -75,9 +83,7 @@ type DayLayoutItem = {
 
 function computeDayOverlapLayout(items: WeeklyLessonScheduleItem[]): DayLayoutItem[] {
   if (items.length === 0) return [];
-  const sorted = [...items].sort(
-    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
-  );
+  const sorted = [...items].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
   const groups: WeeklyLessonScheduleItem[][] = [];
   let currentGroup: WeeklyLessonScheduleItem[] = [];
   let currentGroupMaxEnd = -1;
@@ -139,14 +145,9 @@ function computeDayOverlapLayout(items: WeeklyLessonScheduleItem[]): DayLayoutIt
 }
 
 function nowLineTopPercent(now: Date) {
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes < GRID_START_HOUR * 60 || minutes > GRID_END_HOUR * 60) return null;
-  return ((minutes - GRID_START_HOUR * 60) / DAY_MINUTES) * 100;
-}
-
-function localDateFromDayKeyAndHour(dayKey: string, hour: number) {
-  const [y, m, d] = dayKey.split("-").map((v) => Number(v));
-  return new Date(y, (m || 1) - 1, d || 1, hour, 0, 0, 0);
+  const { minutesFromDayStart } = zonedNowClockMinutes(now);
+  if (minutesFromDayStart < GRID_START_HOUR * 60 || minutesFromDayStart > GRID_END_HOUR * 60) return null;
+  return ((minutesFromDayStart - GRID_START_HOUR * 60) / DAY_MINUTES) * 100;
 }
 
 function parseClockToMinutes(clock: string) {
@@ -325,7 +326,7 @@ export default function WeeklyLessonSchedulePage() {
 
   const dayStarts = useMemo(() => getWeekDayStarts(weekStart), [weekStart]);
   const shownDayStarts = useMemo(
-    () => (focusedDayKey ? dayStarts.filter((d) => sameDayKey(d) === focusedDayKey) : dayStarts),
+    () => (focusedDayKey ? dayStarts.filter((d) => isoToZonedDateKey(d) === focusedDayKey) : dayStarts),
     [dayStarts, focusedDayKey]
   );
   useEffect(() => {
@@ -336,9 +337,9 @@ export default function WeeklyLessonSchedulePage() {
   }, [focusedDayKey, shownDayStarts]);
   const itemsByDay = useMemo(() => {
     const map = new Map<string, WeeklyLessonScheduleItem[]>();
-    for (const dayIso of dayStarts) map.set(sameDayKey(dayIso), []);
+    for (const dayIso of dayStarts) map.set(isoToZonedDateKey(dayIso), []);
     for (const item of snapshot?.items || []) {
-      const key = sameDayKey(item.startsAt);
+      const key = isoToZonedDateKey(item.startsAt);
       if (!map.has(key)) continue;
       map.get(key)!.push(item);
     }
@@ -359,12 +360,12 @@ export default function WeeklyLessonSchedulePage() {
     setWeekStart(getWeekStartMondayIso(start.toISOString()));
   }
 
-  const weekLabel = `${new Date(dayStarts[0]).toLocaleDateString("tr-TR")} - ${new Date(
+  const weekLabel = `${new Date(dayStarts[0]).toLocaleDateString("tr-TR", { timeZone: SCHEDULE_APP_TIME_ZONE })} - ${new Date(
     dayStarts[6]
-  ).toLocaleDateString("tr-TR")}`;
-  const todayKey = sameDayKey(now.toISOString());
+  ).toLocaleDateString("tr-TR", { timeZone: SCHEDULE_APP_TIME_ZONE })}`;
+  const todayKey = isoToZonedDateKey(now.toISOString());
   const nowTop = nowLineTopPercent(now);
-  const weekContainsToday = dayStarts.some((d) => sameDayKey(d) === todayKey);
+  const weekContainsToday = dayStarts.some((d) => isoToZonedDateKey(d) === todayKey);
   const summary = useMemo(() => {
     const items = snapshot?.items || [];
     const totalLessons = items.length;
@@ -400,11 +401,14 @@ export default function WeeklyLessonSchedulePage() {
   }, [snapshot?.items.length, hasOnlyCoachFilter, hasFilterBeyondWeek, selectedCoachName]);
 
   const quickCreateDateLabel = quickCreateAt
-    ? quickCreateAt.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })
+    ? quickCreateAt.toLocaleDateString("tr-TR", {
+        timeZone: SCHEDULE_APP_TIME_ZONE,
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })
     : "";
-  const quickCreateTimeLabel = quickCreateAt
-    ? quickCreateAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
-    : "";
+  const quickCreateTimeLabel = quickCreateAt ? formatLessonTimeTr(quickCreateAt.toISOString()) : "";
   const quickHasActivePackage = quickPackages.some((p) => p.isActive && p.remainingLessons > 0);
   const selectedLocationColor =
     locationOptions.find((loc) => loc.name === location)?.color || null;
@@ -481,7 +485,7 @@ export default function WeeklyLessonSchedulePage() {
     if (typeof window === "undefined") return;
     const id = setTimeout(() => {
       const lastCoach = window.localStorage.getItem("calendar.quick.groupCoachId") || "";
-      const slotClock = quickCreateAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", hour12: false });
+      const slotClock = formatLessonTimeTr(quickCreateAt.toISOString());
       const slotEnd = minutesToClock((parseClockToMinutes(slotClock) || 0) + 60);
       setGroupForm((prev) => ({
         ...prev,
@@ -516,24 +520,6 @@ export default function WeeklyLessonSchedulePage() {
     if (active.length !== 1) return false;
     return Boolean(active[0].coachId);
   }, [quickPackages]);
-
-  function localDateParts(d: Date) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` };
-  }
-
-  function dateWithClock(base: Date, clock: string) {
-    const [hRaw, mRaw] = clock.split(":");
-    const h = Number(hRaw);
-    const m = Number(mRaw);
-    const d = new Date(base);
-    d.setHours(Number.isFinite(h) ? h : d.getHours(), Number.isFinite(m) ? m : 0, 0, 0);
-    return d;
-  }
 
   function syncDurationFromRange(startClock: string, endClock: string) {
     const startMin = parseClockToMinutes(startClock);
@@ -607,14 +593,27 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError(groupTimeValidation.message);
       return;
     }
-    const start = dateWithClock(quickCreateAt, groupForm.startClock || quickCreateTimeLabel);
-    const end = dateWithClock(quickCreateAt, groupForm.endClock || minutesToClock((parseClockToMinutes(groupForm.startClock || "00:00") || 0) + duration));
+    const lessonDate = isoToZonedDateKey(quickCreateAt.toISOString());
+    const startClockEff = groupForm.startClock || quickCreateTimeLabel;
+    const endClockEff =
+      groupForm.endClock ||
+      minutesToClock((parseClockToMinutes(groupForm.startClock || startClockEff || "00:00") || 0) + duration);
+    const startIso = wallClockInZoneToUtcIso(lessonDate, startClockEff);
+    const endIso = wallClockInZoneToUtcIso(lessonDate, endClockEff);
+    if (!startIso || !endIso) {
+      setQuickError("Başlangıç veya bitiş saati çözümlenemedi.");
+      return;
+    }
+    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+      setQuickError("Bitiş saati başlangıçtan sonra olmalıdır.");
+      return;
+    }
     const fd = new FormData();
     fd.append("title", groupForm.title.trim());
     fd.append("description", "");
     fd.append("location", groupForm.location.trim() || "Ana Saha");
-    fd.append("startTime", start.toISOString());
-    fd.append("endTime", end.toISOString());
+    fd.append("startTime", startIso);
+    fd.append("endTime", endIso);
     fd.append("capacity", groupForm.capacity || "20");
     if (groupForm.coachId) fd.append("coachId", groupForm.coachId);
 
@@ -635,9 +634,9 @@ export default function WeeklyLessonSchedulePage() {
     setQuickInfo(null);
     setActionMessage("Grup dersi takvimden oluşturuldu.");
     setRecentCreatedRange({
-      dayKey: sameDayKey(start.toISOString()),
-      startMinutes: start.getHours() * 60 + start.getMinutes(),
-      endMinutes: end.getHours() * 60 + end.getMinutes(),
+      dayKey: isoToZonedDateKey(startIso),
+      startMinutes: isoToZonedClockMinutesFromMidnight(startIso),
+      endMinutes: isoToZonedClockMinutesFromMidnight(endIso),
       expiresAt: Date.now() + 3500,
     });
     if (typeof window !== "undefined") {
@@ -665,13 +664,16 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError(privateTimeValidation.message);
       return;
     }
-    const dt = localDateParts(quickCreateAt);
-    const startMin = parseClockToMinutes(privateForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
-    const endMin = parseClockToMinutes(privateForm.endClock || minutesToClock(startMin + duration)) || (startMin + duration);
+    const lessonDate = isoToZonedDateKey(quickCreateAt.toISOString());
+    const slotClock = formatLessonTimeTr(quickCreateAt.toISOString());
+    const startMin =
+      parseClockToMinutes(privateForm.startClock || slotClock) || parseClockToMinutes(slotClock) || 0;
+    const endMin =
+      parseClockToMinutes(privateForm.endClock || minutesToClock(startMin + duration)) || (startMin + duration);
     const effectiveDuration = Math.max(15, endMin - startMin);
     const fd = new FormData();
     fd.append("packageId", privateForm.packageId);
-    fd.append("lessonDate", dt.date);
+    fd.append("lessonDate", lessonDate);
     fd.append("startClock", minutesToClock(startMin));
     fd.append("durationMinutes", String(effectiveDuration));
     if (privateForm.location.trim()) fd.append("location", privateForm.location.trim());
@@ -694,7 +696,7 @@ export default function WeeklyLessonSchedulePage() {
     setQuickInfo(null);
     setActionMessage("Özel ders takvimden planlandı.");
     setRecentCreatedRange({
-      dayKey: sameDayKey(quickCreateAt.toISOString()),
+      dayKey: lessonDate,
       startMinutes: startMin,
       endMinutes: endMin,
       expiresAt: Date.now() + 3500,
@@ -712,14 +714,27 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError(groupTimeValidation.message);
       return;
     }
-    const start = dateWithClock(quickCreateAt, groupForm.startClock || quickCreateTimeLabel);
-    const end = dateWithClock(quickCreateAt, groupForm.endClock || minutesToClock((parseClockToMinutes(groupForm.startClock || "00:00") || 0) + (Number.isFinite(duration) ? duration : 60)));
+    const lessonDate = isoToZonedDateKey(quickCreateAt.toISOString());
+    const startClockEff = groupForm.startClock || quickCreateTimeLabel;
+    const endClockEff =
+      groupForm.endClock ||
+      minutesToClock((parseClockToMinutes(groupForm.startClock || startClockEff || "00:00") || 0) + (Number.isFinite(duration) ? duration : 60));
+    const startIso = wallClockInZoneToUtcIso(lessonDate, startClockEff);
+    const endIso = wallClockInZoneToUtcIso(lessonDate, endClockEff);
+    if (!startIso || !endIso) {
+      setQuickError("Başlangıç veya bitiş saati çözümlenemedi.");
+      return;
+    }
+    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+      setQuickError("Bitiş saati başlangıçtan sonra olmalıdır.");
+      return;
+    }
     const fd = new FormData();
     fd.append("title", quickGroupTitle.trim() || "Hızlı Grup Dersi");
     fd.append("description", "");
     fd.append("location", groupForm.location.trim() || "Ana Saha");
-    fd.append("startTime", start.toISOString());
-    fd.append("endTime", end.toISOString());
+    fd.append("startTime", startIso);
+    fd.append("endTime", endIso);
     fd.append("capacity", groupForm.capacity || "20");
     fd.append("coachId", groupForm.coachId);
 
@@ -740,9 +755,9 @@ export default function WeeklyLessonSchedulePage() {
     setQuickInfo(null);
     setActionMessage("Hızlı grup dersi oluşturuldu.");
     setRecentCreatedRange({
-      dayKey: sameDayKey(start.toISOString()),
-      startMinutes: start.getHours() * 60 + start.getMinutes(),
-      endMinutes: end.getHours() * 60 + end.getMinutes(),
+      dayKey: isoToZonedDateKey(startIso),
+      startMinutes: isoToZonedClockMinutesFromMidnight(startIso),
+      endMinutes: isoToZonedClockMinutesFromMidnight(endIso),
       expiresAt: Date.now() + 3500,
     });
     if (typeof window !== "undefined") {
@@ -762,13 +777,15 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError(privateTimeValidation.message);
       return;
     }
-    const dt = localDateParts(quickCreateAt);
-    const startMin = parseClockToMinutes(privateForm.startClock || dt.time) || parseClockToMinutes(dt.time) || 0;
+    const lessonDate = isoToZonedDateKey(quickCreateAt.toISOString());
+    const slotClock = formatLessonTimeTr(quickCreateAt.toISOString());
+    const startMin =
+      parseClockToMinutes(privateForm.startClock || slotClock) || parseClockToMinutes(slotClock) || 0;
     const endMin = parseClockToMinutes(privateForm.endClock || minutesToClock(startMin + 60)) || (startMin + 60);
     const duration = Math.max(15, endMin - startMin);
     const fd = new FormData();
     fd.append("packageId", active[0].id);
-    fd.append("lessonDate", dt.date);
+    fd.append("lessonDate", lessonDate);
     fd.append("startClock", minutesToClock(startMin));
     fd.append("durationMinutes", String(duration));
     fd.append("coachId", active[0].coachId);
@@ -790,7 +807,7 @@ export default function WeeklyLessonSchedulePage() {
     setQuickInfo(null);
     setActionMessage("Hızlı özel ders planlandı.");
     setRecentCreatedRange({
-      dayKey: sameDayKey(quickCreateAt.toISOString()),
+      dayKey: lessonDate,
       startMinutes: startMin,
       endMinutes: endMin,
       expiresAt: Date.now() + 3500,
@@ -888,7 +905,7 @@ export default function WeeklyLessonSchedulePage() {
               </button>
               <input
                 type="date"
-                value={toInputDate(weekStart)}
+                value={utcDateKeyFromIso(weekStart)}
                 onChange={(e) => setWeekStart(getWeekStartMondayIso(e.target.value))}
                 className="ui-input min-h-10"
               />
@@ -1026,11 +1043,11 @@ export default function WeeklyLessonSchedulePage() {
                   Saat
                 </div>
                 {shownDayStarts.map((dayIso) => {
-                  const isToday = sameDayKey(dayIso) === todayKey;
+                  const isToday = isoToZonedDateKey(dayIso) === todayKey;
                   return (
                     <div
                       key={dayIso}
-                      onClick={() => setFocusedDayKey(sameDayKey(dayIso))}
+                      onClick={() => setFocusedDayKey(isoToZonedDateKey(dayIso))}
                       className={`border-l px-3 py-3 text-[11px] font-black uppercase tracking-wide ${
                         isToday
                           ? "border-[#7c3aed]/45 bg-gradient-to-b from-[#7c3aed]/18 to-[#7c3aed]/6 text-[#f0e9ff]"
@@ -1077,7 +1094,7 @@ export default function WeeklyLessonSchedulePage() {
                 </div>
 
                 {shownDayStarts.map((dayIso) => {
-                  const dayKey = sameDayKey(dayIso);
+                  const dayKey = isoToZonedDateKey(dayIso);
                   const rows = itemsByDay.get(dayKey) || [];
                   const laidOutRows = computeDayOverlapLayout(rows);
                   const showRecentPulse =
@@ -1094,7 +1111,7 @@ export default function WeeklyLessonSchedulePage() {
                     <div
                       key={dayIso}
                       className={`relative border-r last:border-r-0 ${
-                        sameDayKey(dayIso) === todayKey
+                        isoToZonedDateKey(dayIso) === todayKey
                           ? "border-[#7c3aed]/35 bg-[#7c3aed]/[0.06]"
                           : "border-white/10 bg-white/[0.01]"
                       }`}
@@ -1108,8 +1125,8 @@ export default function WeeklyLessonSchedulePage() {
                         const rowHeight = rect.height / totalRows;
                         const rowIndex = Math.max(0, Math.min(totalRows - 1, Math.floor(y / rowHeight)));
                         const selectedHour = GRID_START_HOUR + rowIndex;
-                        const dt = localDateFromDayKeyAndHour(dayKey, selectedHour);
-                        setQuickCreateAt(dt);
+                        const anchorIso = wallClockInZoneToUtcIso(dayKey, `${String(selectedHour).padStart(2, "0")}:00`);
+                        if (anchorIso) setQuickCreateAt(new Date(anchorIso));
                       }}
                     >
                       {showRecentPulse ? (
@@ -1160,7 +1177,7 @@ export default function WeeklyLessonSchedulePage() {
                                 onClick={() => {
                                   setOverlapListItems(entry.rows.map((r) => r.item));
                                   setOverlapListTitle(
-                                    `${dayTitle(dayIso)} · ${clockLabel(anchor.item.startsAt)} - ${clockLabel(anchor.item.endsAt)}`
+                                    `${dayTitle(dayIso)} · ${formatLessonTimeTr(anchor.item.startsAt)} - ${formatLessonTimeTr(anchor.item.endsAt)}`
                                   );
                                   setOverlapListOpen(true);
                                 }}
@@ -1178,7 +1195,6 @@ export default function WeeklyLessonSchedulePage() {
                           }
 
                           const { item, laneIndex, laneCount } = entry.row;
-                        console.log("CARD DATA", item);
                         const { top, height } = itemTopAndHeight(item);
                         const isGroup = item.sourceType === "group";
                         const coachLabel = item.coachName || "Koç atanmadı";
@@ -1200,7 +1216,7 @@ export default function WeeklyLessonSchedulePage() {
                                 setSelected(item);
                               }
                             }}
-                          title={`${item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} | ${item.title} | ${clockLabel(item.startsAt)} - ${clockLabel(item.endsAt)} | Koç: ${coachLabel}${item.location ? ` | Lokasyon: ${item.location}` : ""}`}
+                          title={`${item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} | ${item.title} | ${formatLessonTimeTr(item.startsAt)} - ${formatLessonTimeTr(item.endsAt)} | Koç: ${coachLabel}${item.location ? ` | Lokasyon: ${item.location}` : ""}`}
                           className={`group absolute min-h-[60px] overflow-hidden rounded-2xl border px-2 py-2 text-left shadow-[0_12px_28px_-16px_rgba(0,0,0,0.95)] transition-all duration-150 sm:hover:-translate-y-0.5 ${
                               locationStyle
                                 ? "text-white"
@@ -1237,7 +1253,7 @@ export default function WeeklyLessonSchedulePage() {
                               {item.title}
                             </p>
                             <p className="mt-1 line-clamp-1 overflow-hidden text-[10px] font-bold text-white/85">
-                              {clockLabel(item.startsAt)} - {clockLabel(item.endsAt)}
+                              {formatLessonTimeTr(item.startsAt)} - {formatLessonTimeTr(item.endsAt)}
                             </p>
                             <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-white/90" title={`Koç: ${coachLabel}`}>
                               <User2 size={11} aria-hidden className="shrink-0 text-white/70" />
@@ -1312,7 +1328,7 @@ export default function WeeklyLessonSchedulePage() {
 
           <div className="mt-5 grid gap-3 md:hidden">
             {shownDayStarts.map((dayIso) => {
-              const rows = itemsByDay.get(sameDayKey(dayIso)) || [];
+              const rows = itemsByDay.get(isoToZonedDateKey(dayIso)) || [];
               return (
                 <section key={dayIso} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
                   <h2 className="text-xs font-black uppercase tracking-wide text-white">{dayTitle(dayIso)}</h2>
@@ -1320,9 +1336,7 @@ export default function WeeklyLessonSchedulePage() {
                     <p className="mt-2 text-[11px] font-bold text-gray-500">Ders yok.</p>
                   ) : (
                     <div className="mt-3 space-y-2">
-                      {rows.map((item) => {
-                        console.log("CARD DATA", item);
-                        return (
+                      {rows.map((item) => (
                           <button
                             key={`${item.sourceType}-${item.id}`}
                             type="button"
@@ -1330,14 +1344,13 @@ export default function WeeklyLessonSchedulePage() {
                             className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
                           >
                             <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
-                              {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {clockLabel(item.startsAt)}
+                              {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {formatLessonTimeTr(item.startsAt)}
                             </p>
                             <p className="mt-1 text-sm font-black text-white">{item.title}</p>
                             <p className="text-[11px] font-semibold text-gray-300">Koç: {item.coachName || "Koç atanmadı"}</p>
                             <p className="text-[11px] font-bold text-gray-500">Lokasyon: {item.location || "Lokasyon belirtilmedi"}</p>
                           </button>
-                        );
-                      })}
+                      ))}
                     </div>
                   )}
                 </section>
@@ -1378,7 +1391,7 @@ export default function WeeklyLessonSchedulePage() {
             <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-black/20 p-4 text-[12px] font-bold text-gray-300">
               <p className="flex items-center gap-2">
                 <Clock3 size={14} aria-hidden className="text-[#c4b5fd]" />
-                {new Date(selected.startsAt).toLocaleString("tr-TR")} - {clockLabel(selected.endsAt)}
+                {formatLessonDateTimeTr(selected.startsAt)} – {formatLessonDateTimeTr(selected.endsAt)}
               </p>
               <p className="flex items-center gap-2">
                 <User2 size={14} aria-hidden className="text-[#c4b5fd]" />
@@ -1460,9 +1473,7 @@ export default function WeeklyLessonSchedulePage() {
             <p className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">Çakışan dersler</p>
             <h3 className="mt-2 text-sm font-black text-white">{overlapListTitle}</h3>
             <div className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto">
-              {overlapListItems.map((item) => {
-                console.log("CARD DATA", item);
-                return (
+              {overlapListItems.map((item) => (
                   <button
                     key={`ov-${item.id}`}
                     type="button"
@@ -1474,7 +1485,7 @@ export default function WeeklyLessonSchedulePage() {
                     style={locationCardStyle(item.locationColor)}
                   >
                     <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
-                      {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {clockLabel(item.startsAt)} - {clockLabel(item.endsAt)}
+                      {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} · {formatLessonTimeTr(item.startsAt)} - {formatLessonTimeTr(item.endsAt)}
                     </p>
                     <p className="mt-1 line-clamp-1 text-sm font-black text-white">{item.title}</p>
                     <p className="line-clamp-1 text-[11px] font-semibold text-white/90" title={`Koç: ${item.coachName || "Koç atanmadı"}`}>
@@ -1482,8 +1493,7 @@ export default function WeeklyLessonSchedulePage() {
                     </p>
                     <p className="line-clamp-1 text-[11px] font-bold text-white/80">Lokasyon: {item.location || "Lokasyon belirtilmedi"}</p>
                   </button>
-                );
-              })}
+              ))}
             </div>
             <div className="mt-4 flex justify-end">
               <button type="button" onClick={() => setOverlapListOpen(false)} className="ui-btn-ghost min-h-11 px-4">

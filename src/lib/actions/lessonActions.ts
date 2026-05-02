@@ -8,6 +8,7 @@ import { isInactiveAthleteProfile, messageIfAthleteCannotOperate } from "@/lib/a
 import { isInactiveCoachProfile, messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { hasTimeOverlap, mapLesson } from "@/lib/mappers";
+import { parseLessonFormInstantToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
@@ -105,8 +106,10 @@ export async function createLesson(formData: FormData) {
   const title = formData.get("title")?.toString().trim() || "";
   const description = formData.get("description")?.toString().trim() || "";
   const location = formData.get("location")?.toString().trim() || "";
-  const startTime = formData.get("startTime")?.toString() || "";
-  const endTime = formData.get("endTime")?.toString() || "";
+  const startTimeRaw = formData.get("startTime")?.toString() || "";
+  const endTimeRaw = formData.get("endTime")?.toString() || "";
+  const startTime = parseLessonFormInstantToUtcIso(startTimeRaw);
+  const endTime = parseLessonFormInstantToUtcIso(endTimeRaw);
   const capacity = Number(formData.get("capacity")?.toString() || "20");
   const coachIdRaw = formData.get("coachId")?.toString() || "";
   const selectedAthletesRaw = formData.getAll("athleteIds").map((v) => v.toString());
@@ -396,8 +399,10 @@ export async function updateLesson(formData: FormData) {
   const title = formData.get("title")?.toString().trim() || "";
   const description = formData.get("description")?.toString().trim() || "";
   const location = formData.get("location")?.toString().trim() || "";
-  const startTime = formData.get("startTime")?.toString() || "";
-  const endTime = formData.get("endTime")?.toString() || "";
+  const startTimeRaw = formData.get("startTime")?.toString() || "";
+  const endTimeRaw = formData.get("endTime")?.toString() || "";
+  const startTime = parseLessonFormInstantToUtcIso(startTimeRaw);
+  const endTime = parseLessonFormInstantToUtcIso(endTimeRaw);
   const capacity = Number(formData.get("capacity")?.toString() || "20");
 
   if (!lessonId) return { error: "Ders kimligi gerekli." };
