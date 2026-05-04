@@ -17,6 +17,7 @@ import { isUuid } from "@/lib/validation/uuid";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { captureServerActionSignal } from "@/lib/observability/serverActionError";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
+import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
 
 type PaymentScope = "membership" | "private_lesson" | "extra_charge";
 type PaymentKind =
@@ -96,16 +97,6 @@ function resolvePaymentDomain(input: {
     return { scope: "private_lesson", kind: "private_lesson_package", paymentType: "paket" };
   }
   return { scope: "membership", kind: "monthly_membership", paymentType: "aylik" };
-}
-
-function isPaymentsSchemaCompatibilityError(message?: string | null): boolean {
-  const m = (message || "").toLowerCase();
-  return (
-    m.includes("payments.payment_scope") ||
-    m.includes("payments.payment_kind") ||
-    m.includes("payments.display_name") ||
-    m.includes("payments.deleted_at")
-  );
 }
 
 async function resolveFinanceActorForReadWrite(requireWrite: boolean): Promise<
@@ -479,7 +470,10 @@ export async function createOrgPayment(formData: FormData) {
     return { error: "Sporcu bu organizasyonda bulunamadi." };
   }
 
-  const { data: paymentRow, error } = await adminClient
+  const descriptionWithLabel =
+    displayName && desc ? `${displayName} — ${desc}` : displayName || desc;
+
+  let insertRes = await adminClient
     .from("payments")
     .insert({
       profile_id: profileId,
@@ -488,19 +482,40 @@ export async function createOrgPayment(formData: FormData) {
       payment_type: paymentType,
       payment_scope: paymentScope,
       payment_kind: paymentKind,
-      display_name: displayName,
       due_date: dueDate,
       month_name: monthName,
       year_int: yearInt,
       status: "bekliyor",
       total_sessions: totalSessions,
       remaining_sessions: remainingSessions,
-      description: desc,
+      description: descriptionWithLabel,
     })
     .select("id")
     .single();
 
-  if (error || !paymentRow) return { error: `Odeme kaydedilemedi: ${error?.message || "unknown"}` };
+  if (insertRes.error && isPaymentsSchemaCompatibilityError(insertRes.error.message)) {
+    insertRes = await adminClient
+      .from("payments")
+      .insert({
+        profile_id: profileId,
+        organization_id: resolved.organizationId,
+        amount,
+        payment_type: paymentType,
+        due_date: dueDate,
+        month_name: monthName,
+        year_int: yearInt,
+        status: "bekliyor",
+        total_sessions: totalSessions,
+        remaining_sessions: remainingSessions,
+        description: descriptionWithLabel,
+      })
+      .select("id")
+      .single();
+  }
+
+  const { data: paymentRow, error } = insertRes;
+
+  if (error || !paymentRow) return { error: "Ödeme kaydedilemedi. Lütfen tekrar deneyin veya yöneticinize bildirin." };
 
   await logAuditEvent({
     actorUserId: resolved.actorUserId,

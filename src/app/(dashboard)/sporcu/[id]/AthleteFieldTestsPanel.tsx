@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 
 export type FieldTestResultRow = {
   value: number | null;
@@ -40,7 +41,7 @@ function inDateRange(iso: string, from: string, to: string): boolean {
 function aggregateAvgByTest(rows: FieldTestResultRow[]) {
   const m = new Map<string, { sum: number; count: number; unit: string }>();
   for (const r of rows) {
-    if ((r.test_definitions?.value_type || "number") !== "number") continue;
+    if (isTextMetricValueType(r.test_definitions?.value_type)) continue;
     if (typeof r.value !== "number" || !Number.isFinite(r.value)) continue;
     const n = testName(r);
     const cur = m.get(n) || { sum: 0, count: 0, unit: r.test_definitions?.unit || "" };
@@ -111,7 +112,7 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
 
   const chartData = useMemo(() => {
     const numericRows = filteredByTests.filter(
-      (r) => (r.test_definitions?.value_type || "number") === "number" && typeof r.value === "number" && Number.isFinite(r.value)
+      (r) => !isTextMetricValueType(r.test_definitions?.value_type) && typeof r.value === "number" && Number.isFinite(r.value)
     );
     const daySet = new Set<string>();
     for (const r of numericRows) {
@@ -371,10 +372,10 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
                     </span>
                   </div>
                   <div className="text-xl font-black italic text-white">
-                    {(m.test_definitions?.value_type || "number") === "text"
+                    {isTextMetricValueType(m.test_definitions?.value_type)
                       ? (m.value_text || "—")
                       : m.value}
-                    {(m.test_definitions?.value_type || "number") === "number" ? (
+                    {!isTextMetricValueType(m.test_definitions?.value_type) ? (
                       <span className="text-[10px] text-[#7c3aed] not-italic uppercase">{m.test_definitions?.unit}</span>
                     ) : null}
                   </div>

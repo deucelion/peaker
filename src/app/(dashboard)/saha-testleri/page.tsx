@@ -28,6 +28,12 @@ import type { AthleticResultRow, ProfileBasic, TestDefinitionRow } from "@/types
 import Notification from "@/components/Notification";
 import EmptyStateCard from "@/components/EmptyStateCard";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
+import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
+
+function metricIsText(m: TestDefinitionRow): boolean {
+  const ext = m as TestDefinitionRow & { valueType?: unknown };
+  return isTextMetricValueType(ext.value_type ?? ext.valueType);
+}
 
 export default function SahaTestleriFinal() {
   const performanceTabs = [
@@ -273,7 +279,7 @@ export default function SahaTestleriFinal() {
       name: (patch.name ?? metric.name ?? "").toString(),
       unit: (patch.unit ?? metric.unit ?? "").toString(),
       category: (patch.category ?? metric.category ?? "Genel").toString(),
-      valueType: ((patch.value_type ?? metric.value_type ?? "number") === "text" ? "text" : "number") as MetricValueType,
+      valueType: normalizeMetricValueType(patch.value_type ?? metric.value_type ?? (metric as TestDefinitionRow & { valueType?: unknown }).valueType) as MetricValueType,
     };
     const res = await updateFieldTestDefinition(payload);
     if ("error" in res) {
@@ -330,7 +336,7 @@ export default function SahaTestleriFinal() {
           const key = `${pId}-${m.id}`;
           const raw = testValues[key];
           const str = typeof raw === "string" ? raw.trim() : raw;
-          const valueType = (m.value_type || "number") === "text" ? "text" : "number";
+          const valueType = metricIsText(m) ? "text" : "number";
           if (valueType === "number") {
             const numeric = str === "" || str === null || str === undefined ? null : Number(str);
             if (numeric !== null && Number.isNaN(numeric)) {
@@ -594,7 +600,7 @@ export default function SahaTestleriFinal() {
                       <span className="text-white font-black italic text-xs uppercase tracking-tighter">{m.name}</span>
                       <div className="px-3 py-1 bg-[#7c3aed]/10 rounded-full">
                         <span className="text-[#7c3aed] font-bold text-[9px] uppercase tracking-widest">
-                          {(m.value_type || "number") === "text" ? "YAZILI NOT" : m.unit}
+                          {metricIsText(m) ? "YAZILI NOT" : m.unit}
                         </span>
                       </div>
                     </div>
@@ -649,14 +655,16 @@ export default function SahaTestleriFinal() {
                       <td key={metric.id} className={`p-3 border-l border-white/5 transition-colors ${isSelected ? "sm:hover:bg-[#7c3aed]/8" : ""}`}>
                         {isSelected ? (
                           <div className="relative group/input">
-                            {(metric.value_type || "number") === "text" ? (
-                              <textarea
+                            {metricIsText(metric) ? (
+                              <input
+                                type="text"
+                                inputMode="text"
+                                autoComplete="off"
                                 ref={(el) => {
-                                  cellRefs.current[`${player.id}-${metric.id}`] = el as unknown as HTMLInputElement;
+                                  cellRefs.current[`${player.id}-${metric.id}`] = el;
                                 }}
                                 className="w-full min-w-0 rounded-xl border border-white/12 bg-gradient-to-b from-[#1a1a23] to-[#14141c] px-2.5 py-2 text-left text-xs font-bold text-white outline-none transition-all duration-150 touch-manipulation placeholder:text-gray-600 sm:hover:-translate-y-[1px] sm:hover:border-[#7c3aed]/45 sm:hover:shadow-[0_6px_16px_-10px_rgba(124,58,237,0.55)] focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#7c3aed]/25 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.12)]"
-                                placeholder="Gözlem notu"
-                                rows={2}
+                                placeholder="Not / yorum gir"
                                 value={testValues[`${player.id}-${metric.id}`] || ""}
                                 onChange={(e) => handleValueChange(player.id, metric.id, e.target.value)}
                               />
@@ -772,7 +780,7 @@ export default function SahaTestleriFinal() {
                   <div className="flex flex-col min-w-0">
                     <span className="font-black text-sm uppercase tracking-tight break-words text-white">{m.name}</span>
                     <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-all">
-                      Tip: {(m.value_type || "number") === "text" ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
+                      Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 self-stretch">
@@ -802,7 +810,7 @@ export default function SahaTestleriFinal() {
                     </button>
                   </div>
                   <select
-                    value={(m.value_type || "number") === "text" ? "text" : "number"}
+                    value={metricIsText(m) ? "text" : "number"}
                     onChange={(e) => void handleMetricUpdate(m, { value_type: e.target.value as MetricValueType })}
                     className="ui-select min-h-10 w-36"
                   >

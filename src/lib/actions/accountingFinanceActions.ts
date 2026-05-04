@@ -15,6 +15,7 @@ import {
   istanbulMonthWallToHalfOpenUtc,
 } from "@/lib/accountingFinance/istanbulQueryRange";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
+import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
 
 type LessonTypeFilter = "all" | "group" | "private";
 type LessonStatusFilter = "all" | "planned" | "completed" | "cancelled";
@@ -378,21 +379,6 @@ function normalizeLessonStatus(status: string | null | undefined): "planned" | "
   if (s === "cancelled") return "cancelled";
   if (s === "completed") return "completed";
   return "planned";
-}
-
-function isPaymentsSchemaCompatibilityError(message?: string | null): boolean {
-  const m = String(message || "").toLowerCase();
-  return (
-    m.includes("payments.payment_kind") ||
-    m.includes("payments.payment_scope") ||
-    m.includes("payments.display_name") ||
-    m.includes("payments.metadata_json") ||
-    m.includes("payments.deleted_at") ||
-    m.includes("payments.due_date") ||
-    m.includes("payments.paid_at") ||
-    m.includes("payments.package_id") ||
-    m.includes("payments.created_at")
-  );
 }
 
 /** Yalnızca geliştirme ortamında; kalıcı üretim logu değil. */
@@ -1269,7 +1255,6 @@ export async function createAccountingPayment(formData: FormData) {
       payment_type: paymentType,
       payment_scope: paymentScope,
       payment_kind: paymentKind,
-      display_name: null,
       due_date: dueDateKey,
       month_name: monthName,
       year_int: yearInt,
@@ -1302,7 +1287,7 @@ export async function createAccountingPayment(formData: FormData) {
   }
 
   if (insertModern.error || !insertModern.data?.id) {
-    return { error: `Tahsilat kaydı oluşturulamadı: ${insertModern.error?.message || "unknown"}` };
+    return { error: "Tahsilat kaydı oluşturulamadı. Lütfen tekrar deneyin veya yöneticinize bildirin." };
   }
 
   revalidatePath("/muhasebe-finans");

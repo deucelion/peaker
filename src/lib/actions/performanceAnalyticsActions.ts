@@ -8,12 +8,30 @@ import { messageIfCoachCannotOperate, profileRowIsActive } from "@/lib/coach/lif
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { isUuid } from "@/lib/validation/uuid";
+import type { TrainingLoadRow } from "@/types/performance";
+import { aggregateTrainingLoadsByCalendarDay } from "@/lib/performance/loadSeries";
+import {
+  addCalendarDaysToYyyyMmDd,
+  isYyyyMmDd,
+  istanbulLastNDaysInclusive,
+  istanbulLoadFetchRangeForPerformance,
+  istanbulTodayKey,
+} from "@/lib/performance/performanceDateRange";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
 }
 
-export async function listPerformanceAnalyticsData(organizationId: string, athleteProfileId: string | null) {
+export type PerformanceAnalyticsDateRange = {
+  dateFrom: string;
+  dateTo: string;
+};
+
+export async function listPerformanceAnalyticsData(
+  organizationId: string,
+  athleteProfileId: string | null,
+  dateRange?: PerformanceAnalyticsDateRange | null
+) {
   if (!assertUuid(organizationId)) {
     return { error: "Gecersiz organizasyon kimligi." as const };
   }
@@ -60,9 +78,11 @@ export async function listPerformanceAnalyticsData(organizationId: string, athle
     if (athleteProfileId !== null) {
       return { error: "Tum sporculari goruntuleme yetkiniz yok." as const };
     }
+    const d = istanbulLastNDaysInclusive(28);
     return {
       loads: [] as Record<string, unknown>[],
       reports: [] as Record<string, unknown>[],
+      appliedRange: { dateFrom: d.from, dateTo: d.to },
     };
   }
 
@@ -83,6 +103,20 @@ export async function listPerformanceAnalyticsData(organizationId: string, athle
 
   const adminClient = createSupabaseAdminClient();
 
+  const todayKey = istanbulTodayKey();
+  const rawTo = dateRange?.dateTo?.trim() ?? "";
+  const rawFrom = dateRange?.dateFrom?.trim() ?? "";
+  const dateTo = isYyyyMmDd(rawTo) ? rawTo : todayKey;
+  const dateFrom = isYyyyMmDd(rawFrom) ? rawFrom : addCalendarDaysToYyyyMmDd(dateTo, -27);
+  if (dateFrom > dateTo) {
+    return { error: "Baslangic tarihi bitis tarihinden sonra olamaz." as const };
+  }
+
+  const loadUtcRange = istanbulLoadFetchRangeForPerformance(dateFrom, dateTo);
+  if (!loadUtcRange) {
+    return { error: "Antrenman yuku tarih araligi hesaplanamadi." as const };
+  }
+
   let profileIdsForLoads: string[] = [];
   if (athleteProfileId) {
     profileIdsForLoads = [athleteProfileId];
@@ -101,6 +135,8 @@ export async function listPerformanceAnalyticsData(organizationId: string, athle
       .from("training_loads")
       .select("profile_id, total_load, rpe_score, measurement_date, profiles(full_name, email)")
       .in("profile_id", profileIdsForLoads)
+      .gte("measurement_date", loadUtcRange.from)
+      .lt("measurement_date", loadUtcRange.toExclusive)
       .order("measurement_date", { ascending: true });
     if (loadError) {
       return { error: `Antrenman yuku verisi alinamadi: ${loadError.message}` as const };
@@ -119,14 +155,24 @@ export async function listPerformanceAnalyticsData(organizationId: string, athle
     });
   }
 
+  if (profileIdsForLoads.length > 1 && loads.length > 0) {
+    const aggregated = aggregateTrainingLoadsByCalendarDay(loads as unknown as TrainingLoadRow[]);
+    loads = aggregated.map((row) => ({
+      ...row,
+      profiles: null,
+    })) as Record<string, unknown>[];
+  }
+
   let wellnessQuery = adminClient
     .from("wellness_reports")
     .select(
       "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles(full_name, email, id, organization_id)"
     )
     .eq("profiles.organization_id", organizationId)
+    .gte("report_date", dateFrom)
+    .lte("report_date", dateTo)
     .order("report_date", { ascending: false })
-    .limit(60);
+    .limit(200);
 
   if (athleteProfileId) {
     wellnessQuery = wellnessQuery.eq("profile_id", athleteProfileId);
@@ -139,6 +185,7 @@ export async function listPerformanceAnalyticsData(organizationId: string, athle
 
   return {
     loads,
+    appliedRange: { dateFrom, dateTo },
     reports: (reports || []).map((row) => {
       const profile = (row as { profiles?: { full_name?: string | null; email?: string | null } }).profiles;
       return {

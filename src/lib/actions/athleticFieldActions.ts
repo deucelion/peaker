@@ -8,6 +8,7 @@ import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
 import type { AthleticResultRow } from "@/types/domain";
 import { isUuid } from "@/lib/validation/uuid";
+import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -89,8 +90,8 @@ export async function createFieldTestDefinition(formData: FormData) {
   const name = formData.get("name")?.toString().trim().slice(0, 200) || "";
   const unit = formData.get("unit")?.toString().trim().slice(0, 40) || "";
   const category = formData.get("category")?.toString().trim().slice(0, 80) || "Genel";
-  const valueTypeRaw = formData.get("valueType")?.toString().trim().toLowerCase() || "number";
-  const valueType: MetricValueType = valueTypeRaw === "text" ? "text" : "number";
+  const valueTypeRaw = formData.get("valueType")?.toString().trim() || "number";
+  const valueType: MetricValueType = normalizeMetricValueType(valueTypeRaw);
 
   if (name.length < 2) return { error: "Metrik adi en az 2 karakter olmalidir." };
   if (valueType === "number" && unit.length < 1) return { error: "Sayisal metrikte birim zorunludur." };
@@ -345,7 +346,7 @@ export async function saveAthleticFieldResults(input: {
 
   const validTestIds = new Set((defs || []).map((d) => d.id));
   const valueTypeByTestId = new Map<string, MetricValueType>(
-    (defs || []).map((d) => [String(d.id), (String(d.value_type || "number") === "text" ? "text" : "number") as MetricValueType])
+    (defs || []).map((d) => [String(d.id), normalizeMetricValueType(d.value_type) as MetricValueType])
   );
   for (const tid of testIds) {
     if (!validTestIds.has(tid)) return { error: "Gecersiz veya baska organizasyona ait metrik." };
@@ -558,7 +559,7 @@ export async function loadFieldTestTeamReportForActor() {
   };
 
   const chartRows: FieldTestTeamChartRow[] = ((data || []) as Joined[])
-    .filter((item) => (item.test_definitions?.value_type || "number") !== "text")
+    .filter((item) => !isTextMetricValueType(item.test_definitions?.value_type))
     .map((item) => ({
       name: item.profiles?.full_name?.split(" ")[0] || "Sporcu",
       deger: Number(item.value) || 0,

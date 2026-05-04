@@ -74,6 +74,7 @@ export async function createTeamAction(formData: FormData) {
 
     revalidatePath("/takimlar");
     revalidatePath("/oyuncular");
+    revalidatePath("/sporcular/yeni");
     return { success: true as const };
   });
 }
@@ -115,6 +116,7 @@ export async function loadTeamDetail(teamId: string) {
     const rows = (athletes ?? []).map((row) => ({
       id: row.id as string,
       fullName: toDisplayName(row.full_name as string | null, row.email as string | null, "Sporcu"),
+      email: String(row.email || "").trim() || "—",
       number: (row.number as string | null) || "-",
       position: (row.position as string | null) || "-",
       isActive: row.is_active !== false,
@@ -201,6 +203,7 @@ export async function assignAthleteToTeam(teamId: string, athleteId: string) {
     revalidatePath(`/takimlar/${id}`);
     revalidatePath("/takimlar");
     revalidatePath("/oyuncular");
+    revalidatePath("/sporcular/yeni");
     revalidatePath(`/sporcu/${athlete}`);
     return { success: true as const };
   });
@@ -249,6 +252,7 @@ export async function removeAthleteFromTeam(teamId: string, athleteId: string) {
     revalidatePath(`/takimlar/${id}`);
     revalidatePath("/takimlar");
     revalidatePath("/oyuncular");
+    revalidatePath("/sporcular/yeni");
     revalidatePath(`/sporcu/${athlete}`);
     return { success: true as const };
   });

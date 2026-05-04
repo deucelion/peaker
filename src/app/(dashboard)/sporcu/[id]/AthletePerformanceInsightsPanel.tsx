@@ -179,13 +179,55 @@ export function AthletePerformanceInsightsPanel({
 
       {vis.summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 sm:gap-3 min-w-0">
-          <MiniKpi icon={<AlertTriangle size={14} />} label="Kritik gün" value={riskStats.critical} sub="10g ACWR&gt;1.5" tone="red" />
-          <MiniKpi icon={<ShieldCheck size={14} />} label="Sweet spot" value={riskStats.sweetSpot} sub="10g 0.8–1.3" tone="green" />
-          <MiniKpi icon={<Activity size={14} />} label="Ort. RPE" value={riskStats.avgRpe} sub="/10" tone="purple" />
-          <MiniKpi icon={<Waves size={14} />} label="EWMA risk" value={riskStats.ewmaRisk} sub="10g &gt;1.5" tone="red" />
-          <MiniKpi icon={<Moon size={14} />} label="Readiness" value={riskStats.readiness} sub="/100" tone="purple" />
-          <MiniKpi icon={<TrendingUp size={14} />} label="Monotoni" value={riskStats.monotony} sub="Son 7g" tone="purple" />
-          <MiniKpi icon={<Zap size={14} />} label="Strain" value={riskStats.strain} sub="AU" tone="purple" />
+          <MiniKpi
+            icon={<AlertTriangle size={14} />}
+            label="Kritik gün"
+            value={normalizedLoads.length ? riskStats.critical : "—"}
+            sub="10g ACWR&gt;1.5"
+            tone="red"
+          />
+          <MiniKpi
+            icon={<ShieldCheck size={14} />}
+            label="Sweet spot"
+            value={normalizedLoads.length ? riskStats.sweetSpot : "—"}
+            sub="10g 0.8–1.3"
+            tone="green"
+          />
+          <MiniKpi
+            icon={<Activity size={14} />}
+            label="Ort. RPE"
+            value={normalizedLoads.length ? (riskStats.avgRpe ?? "—") : "—"}
+            sub="/10"
+            tone="purple"
+          />
+          <MiniKpi
+            icon={<Waves size={14} />}
+            label="EWMA risk"
+            value={normalizedLoads.length ? riskStats.ewmaRisk : "—"}
+            sub="10g &gt;1.5"
+            tone="red"
+          />
+          <MiniKpi
+            icon={<Moon size={14} />}
+            label="Readiness"
+            value={riskStats.readinessReportCount > 0 ? riskStats.readiness : "—"}
+            sub={riskStats.readinessReportCount > 0 ? `/100 · ${riskStats.readinessReportCount} kayıt` : "wellness yok"}
+            tone="purple"
+          />
+          <MiniKpi
+            icon={<TrendingUp size={14} />}
+            label="Monotoni"
+            value={normalizedLoads.length ? (riskStats.monotony ?? "—") : "—"}
+            sub="Son 7g"
+            tone="purple"
+          />
+          <MiniKpi
+            icon={<Zap size={14} />}
+            label="Strain"
+            value={normalizedLoads.length ? (riskStats.strain ?? "—") : "—"}
+            sub="AU"
+            tone="purple"
+          />
         </div>
       )}
 
@@ -483,8 +525,11 @@ function MiniKpi({
 
 function EmptyBlock() {
   return (
-    <div className="h-full flex items-center justify-center text-[9px] font-black uppercase tracking-widest text-gray-600 italic">
-      Veri yok
+    <div className="h-full min-h-[140px] flex flex-col items-center justify-center gap-2 px-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-600">
+      <span className="italic">Bu aralıkta yük verisi yok</span>
+      <span className="font-bold normal-case text-gray-500 tracking-normal max-w-xs leading-relaxed">
+        İdman anketi veya yük kaydı girildiğinde grafik ve ACWR/EWMA hesaplanır.
+      </span>
     </div>
   );
 }

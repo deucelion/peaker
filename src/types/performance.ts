@@ -21,6 +21,8 @@ export interface AcwrPoint {
 
 export interface EwmaPoint {
   date: string;
+  /** İstanbul takvim günü ile aralık süzmek için */
+  ts: number;
   acuteEwma: number;
   chronicEwma: number;
   ewmaRatio: number;

@@ -9,6 +9,8 @@ import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
 import type { PaymentRow } from "@/types/domain";
+import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE } from "@/lib/schedule/scheduleWallTime";
+import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
 
 type ManagementRole = "admin" | "coach";
 type DailyTrainingLoadReport = {
@@ -203,11 +205,16 @@ export async function listDailyTrainingLoadReports() {
   }
 
   const adminClient = createSupabaseAdminClient();
-  const today = new Date().toISOString().split("T")[0];
+  const todayKey = isoToZonedDateKey(new Date().toISOString(), SCHEDULE_APP_TIME_ZONE);
+  const dayRange = istanbulDateWallRangeToHalfOpenUtc(todayKey, todayKey);
+  if (!dayRange) {
+    return { error: "Gunluk rapor tarihi hesaplanamadi." as const };
+  }
   const { data: loadRows, error: loadError } = await adminClient
     .from("training_loads")
     .select("id, profile_id, rpe_score, duration_minutes, total_load, measurement_date")
-    .gte("measurement_date", `${today}T00:00:00`)
+    .gte("measurement_date", dayRange.from)
+    .lt("measurement_date", dayRange.toExclusive)
     .order("measurement_date", { ascending: false });
 
   if (loadError) return { error: `Raporlar alinamadi: ${loadError.message}` };

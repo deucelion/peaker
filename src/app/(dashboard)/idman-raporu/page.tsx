@@ -57,18 +57,20 @@ export default function GunlukIdmanRaporu() {
     return () => clearTimeout(id);
   }, [fetchDailyReports, checkUserRole]);
 
-  // İSTATİSTİK HESAPLAMALARI (Dinamik)
+  // İSTATİSTİK HESAPLAMALARI (Dinamik) — RPE ortalaması, ortalama seans süresi (dk), RPE≥8 sayısı
   const stats = useMemo(() => {
-    if (reports.length === 0) return { avgRpe: 0, totalDuration: 0, riskyCount: 0 };
-    
+    if (reports.length === 0) {
+      return { avgRpe: "—" as const, totalDuration: "—" as const, riskyCount: "—" as const };
+    }
+
     const avgRpe = reports.reduce((acc, curr) => acc + curr.rpe_score, 0) / reports.length;
-    const totalDuration = reports.reduce((acc, curr) => acc + curr.duration_minutes, 0) / reports.length;
-    const riskyCount = reports.filter(r => r.rpe_score >= 8).length;
+    const avgDurationMinutes = reports.reduce((acc, curr) => acc + curr.duration_minutes, 0) / reports.length;
+    const riskyCount = reports.filter((r) => r.rpe_score >= 8).length;
 
     return {
       avgRpe: avgRpe.toFixed(1),
-      totalDuration: Math.round(totalDuration),
-      riskyCount
+      totalDuration: String(Math.round(avgDurationMinutes)),
+      riskyCount: String(riskyCount),
     };
   }, [reports]);
 
@@ -136,17 +138,19 @@ export default function GunlukIdmanRaporu() {
 
       {/* ÖZET KARTLARI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5 min-w-0">
-        <SummaryCard label="KATILIM" value={`${reports.length}`} sub="Rapor Gönderildi" icon={<Users className="text-blue-500" />} />
-        <SummaryCard label="ORT. RPE" value={stats.avgRpe} sub="Yoğunluk Seviyesi" icon={<Zap className="text-yellow-500" />} />
-        <SummaryCard label="ORT. SÜRE" value={stats.totalDuration} sub="Dakika" icon={<Clock className="text-[#7c3aed]" />} />
-        <SummaryCard label="RİSKLİ" value={stats.riskyCount} sub="Yüksek Yüklenme" icon={<AlertCircle className="text-red-500" />} />
+        <SummaryCard label="KATILIM" value={`${reports.length}`} sub="Bugün (İstanbul) rapor" icon={<Users className="text-blue-500" />} />
+        <SummaryCard label="ORT. RPE" value={stats.avgRpe} sub="Yoğunluk (1–10)" icon={<Zap className="text-yellow-500" />} />
+        <SummaryCard label="ORT. SÜRE" value={stats.totalDuration} sub="Dakika / seans" icon={<Clock className="text-[#7c3aed]" />} />
+        <SummaryCard label="RİSKLİ" value={stats.riskyCount} sub="RPE ≥ 8" icon={<AlertCircle className="text-red-500" />} />
       </div>
 
       {/* RAPOR LİSTESİ */}
       <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-xl min-w-0">
         <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center min-w-0">
           <h3 className="text-xs sm:text-sm font-black italic text-white uppercase tracking-wide sm:tracking-widest break-words">SPORCU GERİ BİLDİRİMLERİ</h3>
-          <span className="bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] font-black px-4 py-1 rounded-full uppercase italic shrink-0 self-start sm:self-auto">Canlı Akış</span>
+          <span className="bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] font-black px-4 py-1 rounded-full uppercase italic shrink-0 self-start sm:self-auto">
+            Güncel kayıtlar
+          </span>
         </div>
 
         <div className="divide-y divide-white/5">
@@ -209,8 +213,17 @@ export default function GunlukIdmanRaporu() {
             </div>
           ))}
           {!loadError && reports.filter((r) => r.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-            <div className="p-12 sm:p-20 text-center text-gray-600 font-black italic uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm px-4 break-words">
-              {searchTerm ? "Arama kriterine uygun rapor bulunamadı." : "Bugün için henüz rapor girişi yapılmadı."}
+            <div className="p-12 sm:p-20 text-center text-gray-600 font-black italic uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm px-4 break-words space-y-3">
+              {searchTerm ? (
+                <p>Arama kriterine uygun rapor bulunamadı.</p>
+              ) : (
+                <>
+                  <p>Bugün (İstanbul takvimi) için rapor girişi yapılmadı.</p>
+                  <p className="text-[10px] font-bold text-gray-500 not-italic max-w-md mx-auto leading-relaxed">
+                    Sporcular idman anketini gönderdiğinde RPE, süre ve iş yükü burada listelenir; Performans Merkezi yük analizine düşer.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

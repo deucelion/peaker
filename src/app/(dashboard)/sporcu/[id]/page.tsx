@@ -33,6 +33,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProfileBasic } from "@/types/domain";
 import type { TrainingLoadRow, WellnessReportRow } from "@/types/performance";
+import { getLoadDate, processACWRData } from "@/lib/performance/loadSeries";
 import {
   listPositionOptionsForManagement,
   loadAthleteDetailForManagement,
@@ -184,9 +185,10 @@ export default function SporcuDetayDinamik() {
   }, [acwrStatus.label, activeInjuryCount, latestWellness, trainingLoads.length]);
 
   const calculateACWR = useCallback((loads: TrainingLoadRow[]) => {
-    const last7Days = loads.slice(-7).reduce((acc, curr) => acc + (curr.total_load || 0), 0) / 7;
-    const last28Days = loads.slice(-28).reduce((acc, curr) => acc + (curr.total_load || 0), 0) / 28;
-    const ratio = last28Days > 0 ? last7Days / last28Days : 0;
+    const sorted = [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
+    const points = processACWRData(sorted);
+    const latest = points[points.length - 1];
+    const ratio = latest && Number.isFinite(latest.ratio) ? latest.ratio : 0;
 
     let status = { ratio: parseFloat(ratio.toFixed(2)), label: "STABİL", color: "text-green-500" };
     if (ratio > 1.5) status = { ratio: parseFloat(ratio.toFixed(2)), label: "YÜKSEK RİSK", color: "text-red-500" };
