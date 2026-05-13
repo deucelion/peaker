@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createOrganizationWithAdmin } from "@/lib/actions/superAdminActions";
 import Notification from "@/components/Notification";
+import { listSupportedTimeZones } from "@/lib/organization/timeZoneOptions";
 
 export default function SuperAdminCreateOrgForm() {
   const [submitting, setSubmitting] = useState(false);
@@ -12,7 +13,9 @@ export default function SuperAdminCreateOrgForm() {
     adminFullName: "",
     adminEmail: "",
     tempPassword: "",
+    timeZone: "Europe/Istanbul",
   });
+  const tzOptions = useMemo(() => listSupportedTimeZones(), []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -23,10 +26,17 @@ export default function SuperAdminCreateOrgForm() {
     fd.append("adminFullName", form.adminFullName);
     fd.append("adminEmail", form.adminEmail);
     fd.append("tempPassword", form.tempPassword);
+    fd.append("timeZone", form.timeZone);
     const result = await createOrganizationWithAdmin(fd);
     if (result?.success) {
       setMessage("Organizasyon ve admin hesabi olusturuldu.");
-      setForm({ organizationName: "", adminFullName: "", adminEmail: "", tempPassword: "" });
+      setForm({
+        organizationName: "",
+        adminFullName: "",
+        adminEmail: "",
+        tempPassword: "",
+        timeZone: "Europe/Istanbul",
+      });
     } else {
       setMessage(result?.error || "Organizasyon olusturma basarisiz.");
     }
@@ -71,6 +81,26 @@ export default function SuperAdminCreateOrgForm() {
           placeholder="GECICI SIFRE (MIN 6)"
           className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
         />
+        <label className="block min-w-0">
+          <span className="mb-1 block text-[9px] font-black uppercase tracking-wider text-gray-500">
+            Saat dilimi (IANA)
+          </span>
+          <select
+            value={form.timeZone}
+            onChange={(e) => setForm((prev) => ({ ...prev, timeZone: e.target.value }))}
+            className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-base font-bold italic text-white outline-none sm:text-xs"
+            aria-label="Organizasyon saat dilimi"
+          >
+            {tzOptions.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[9px] font-bold leading-relaxed text-gray-600">
+            Performans, finans ve takvim ekranları bu saat dilimine göre hesaplar. Yurt dışı firma satışı için doğru bölgeyi seçin.
+          </span>
+        </label>
         <button
           disabled={submitting}
           type="submit"

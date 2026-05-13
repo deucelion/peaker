@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import { getMyFinanceDetailForAthlete } from "@/lib/actions/financeActions";
 import type { AthleteFinanceDetail } from "@/lib/types";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
+import {
+  buildUnifiedAthletePaymentTimeline,
+  filterUnifiedTimeline,
+  type UnifiedAthletePaymentFilter,
+} from "@/lib/finance/unifiedAthletePaymentTimeline";
 
-type FinanceTab = "timeline" | "hizmet" | "plan";
+type FinanceTab = "tumu" | "hizmet" | "plan";
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -41,7 +46,11 @@ export default function AthleteFinanceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState<AthleteFinanceDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<FinanceTab>("timeline");
+  const [messageKind, setMessageKind] = useState<
+    "permission_denied" | "auth_required" | "invalid_input" | "fetch_error" | null
+  >(null);
+  const [activeTab, setActiveTab] = useState<FinanceTab>("tumu");
+  const [unifiedFilter, setUnifiedFilter] = useState<UnifiedAthletePaymentFilter>("all");
 
   useEffect(() => {
     async function run() {
@@ -50,13 +59,44 @@ export default function AthleteFinanceDetailPage() {
       if ("error" in res) {
         setSnapshot(null);
         setMessage(res.error);
+        setMessageKind(
+          ("errorKind" in res && typeof res.errorKind === "string"
+            ? (res.errorKind as
+                | "permission_denied"
+                | "auth_required"
+                | "invalid_input"
+                | "fetch_error")
+            : "fetch_error")
+        );
       } else {
         setSnapshot(res);
+        setMessageKind(null);
       }
       setLoading(false);
     }
     void run();
   }, []);
+
+  const onboardingPrivatePayments = useMemo(
+    () => (snapshot?.privateLessonPayments || []).filter((row) => (row.note || "").toLowerCase().includes("onboarding")),
+    [snapshot]
+  );
+
+  const unifiedAllLines = useMemo(() => {
+    if (!snapshot) return [];
+    return buildUnifiedAthletePaymentTimeline({
+      aidatPayments: snapshot.aidatPayments,
+      legacyPackagePayments: snapshot.legacyPackagePayments,
+      privateLessonPayments: snapshot.privateLessonPayments,
+      privateLessonPackages: snapshot.privateLessonPackages,
+      timeZone: snapshot.timeZone,
+    });
+  }, [snapshot]);
+
+  const unifiedFilteredLines = useMemo(
+    () => filterUnifiedTimeline(unifiedAllLines, unifiedFilter),
+    [unifiedAllLines, unifiedFilter]
+  );
 
   if (loading) {
     return (
@@ -67,6 +107,21 @@ export default function AthleteFinanceDetailPage() {
   }
 
   if (!snapshot) {
+    if (messageKind === "permission_denied") {
+      return (
+        <div className="space-y-4">
+          <Link href="/sporcu" className="text-[10px] font-black uppercase text-[#7c3aed]">← Sporcu Paneli</Link>
+          <div
+            className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="text-[11px] font-black uppercase tracking-wide">Bu alanı görüntüleme yetkiniz yok.</p>
+            <p className="mt-1 text-[10px] font-semibold text-amber-200/80 normal-case">{message}</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4">
         <Link href="/sporcu" className="text-[10px] font-black uppercase text-[#7c3aed]">← Sporcu Paneli</Link>
@@ -78,7 +133,6 @@ export default function AthleteFinanceDetailPage() {
   const dueDateLabel = formatDate(snapshot.summary.nextDueDate);
   const dueAmountLabel = formatCurrency(snapshot.summary.nextAmount);
   const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
-  const aidatHistoryCount = snapshot.aidatPayments.length;
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
   const primaryActionLabel = snapshot.summary.tone === "overdue" ? "Ödemeyi Tamamla" : "Erken Ödeme Yap";
@@ -117,7 +171,7 @@ export default function AthleteFinanceDetailPage() {
         {showPrimaryAction ? (
           <button
             type="button"
-            onClick={() => setActiveTab("timeline")}
+            onClick={() => setActiveTab("tumu")}
             className="mt-4 min-h-11 w-full rounded-xl bg-white px-4 text-[11px] font-black uppercase tracking-wide text-black md:w-auto md:min-w-[220px]"
           >
             {primaryActionLabel}
@@ -135,12 +189,12 @@ export default function AthleteFinanceDetailPage() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => setActiveTab("timeline")}
+            onClick={() => setActiveTab("tumu")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "timeline" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
+              activeTab === "tumu" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Tahsilat Geçmişi
+            Tüm Tahsilatlar
           </button>
           <button
             type="button"
@@ -158,30 +212,91 @@ export default function AthleteFinanceDetailPage() {
               activeTab === "plan" ? "bg-[#7c3aed] text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Planlı Tahsilatlar
+            Planlı Aidat Tahsilatı
           </button>
         </div>
       </section>
 
-      {activeTab === "timeline" ? (
-        <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-          <h2 className="text-sm font-black uppercase text-white">Tahsilat Geçmişi</h2>
-          <p className="mt-1 text-[10px] font-semibold text-gray-500">Geçmiş ödemeleriniz ({aidatHistoryCount})</p>
-          <div className="mt-3 space-y-2 max-h-[420px] overflow-y-auto pr-1">
-            {snapshot.aidatPayments.length === 0 ? (
-              <p className="text-xs font-semibold text-gray-500">Henüz aidat kaydı yok.</p>
-            ) : (
-              snapshot.aidatPayments.map((row) => (
-                <div key={row.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black text-white">{formatCurrency(row.amount)}</p>
-                    <p className="text-[10px] font-bold text-gray-500">{formatDate(row.due_date)}</p>
-                  </div>
-                  <p className="mt-1 text-[10px] font-semibold text-gray-400 uppercase">
-                    {row.status === "odendi" ? "Ödendi" : "Bekliyor"}
+      {activeTab === "tumu" ? (
+        <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-sm font-black uppercase text-white">Tüm Tahsilatlar</h2>
+              <p className="mt-1 text-[10px] font-semibold text-gray-500">
+                Aidat, ek tahsilat ve paket ödemeleriniz ({unifiedFilteredLines.length}
+                {unifiedFilter !== "all" ? ` / ${unifiedAllLines.length}` : ""} kayıt).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["all", "Tümü"],
+                  ["membership", "Aidat"],
+                  ["package", "Paket"],
+                  ["extra", "Özel tahsilat"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setUnifiedFilter(key)}
+                  className={`min-h-9 rounded-lg px-3 text-[10px] font-black uppercase tracking-wide ${
+                    unifiedFilter === key ? "bg-[#7c3aed] text-white" : "border border-white/15 bg-black/30 text-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {unifiedFilteredLines.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500">Bu filtreye uygun kayıt yok.</p>
+                {unifiedFilter === "all" && onboardingPrivatePayments.length > 0 && snapshot.aidatPayments.length === 0 ? (
+                  <p className="text-xs font-semibold text-[#c4b5fd]">
+                    Onboarding ödemeleri paket defterindedir; Paket filtresi veya Paket ve Hizmetler sekmesine bakın.
                   </p>
-                </div>
-              ))
+                ) : null}
+              </div>
+            ) : (
+              unifiedFilteredLines.map((line) => {
+                const borderClass =
+                  line.statusTone === "paid" ? "border-white/10" : "border-amber-500/25 bg-amber-500/5";
+                return (
+                  <div key={line.id} className={`rounded-xl border bg-black/20 p-3 ${borderClass}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs font-black text-white">{line.title}</p>
+                        <p className="text-[10px] font-bold text-gray-500">{line.detail}</p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                            {line.scopeLabel}
+                          </span>
+                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                            {line.kindLabel}
+                          </span>
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase ${
+                              line.statusTone === "paid"
+                                ? "border border-emerald-500/30 text-emerald-300"
+                                : "border border-amber-500/30 text-amber-200"
+                            }`}
+                          >
+                            {line.statusLabel}
+                          </span>
+                          {line.sourceBadge ? (
+                            <span className="rounded-md border border-[#c4b5fd]/35 bg-[#c4b5fd]/10 px-2 py-0.5 text-[9px] font-black uppercase text-[#c4b5fd]">
+                              {line.sourceBadge}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="shrink-0 text-xs font-black tabular-nums text-white">{formatCurrency(line.amount)}</p>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </section>
@@ -202,6 +317,9 @@ export default function AthleteFinanceDetailPage() {
                       <p className="text-xs font-black text-white">{formatCurrency(row.amount)}</p>
                       <p className="text-[10px] font-bold text-gray-500">{new Date(row.paidAt).toLocaleDateString("tr-TR")}</p>
                     </div>
+                    {(row.note || "").toLowerCase().includes("onboarding") ? (
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd]">Kaynak: Onboarding</p>
+                    ) : null}
                     {row.note ? <p className="mt-1 text-[10px] font-bold text-gray-400">{row.note}</p> : null}
                   </div>
                 ))
@@ -230,7 +348,7 @@ export default function AthleteFinanceDetailPage() {
 
       {activeTab === "plan" ? (
         <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-            <h2 className="text-sm font-black uppercase text-white">Planlı Tahsilatlar</h2>
+            <h2 className="text-sm font-black uppercase text-white">Planlı Aidat Tahsilatı</h2>
           <p className="mt-1 text-[10px] font-semibold text-gray-500">
             Bir sonraki aidat planı yönetim tarafından belirlenir.
           </p>

@@ -13,6 +13,7 @@ import {
   applyPrivateLessonPackagePaymentWithPaymentRow,
   paymentBookkeepingFromPaidAtIso,
 } from "@/lib/privateLessons/packagePaymentSync";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -307,7 +308,8 @@ export async function createPrivateLessonPackage(formData: FormData) {
   try {
     await insertNotificationsForUsers(
       [athleteId],
-      `Ozel ders paketi: "${packageName}" (${totalLessons} ders). Odeme durumu: ${paymentStatus}.`
+      `Ozel ders paketi: "${packageName}" (${totalLessons} ders). Odeme durumu: ${paymentStatus}.`,
+      "package.created"
     );
   } catch {
     /* bildirim tablosu yoksa ana akisi bozma */
@@ -561,12 +563,14 @@ export async function addPrivateLessonUsage(formData: FormData) {
     if (nextRemaining === 0) {
       await insertNotificationsForUsers(
         [pkg.athlete_id],
-        `${label}: Son ders kullanimi islendi; paket tamamlandi. Yeni paket icin yoneticiyle iletisime gecebilirsiniz.`
+        `${label}: Son ders kullanimi islendi; paket tamamlandi. Yeni paket icin yoneticiyle iletisime gecebilirsiniz.`,
+        "private_lesson.updated"
       );
     } else if (nextRemaining > 0 && nextRemaining < 3) {
       await insertNotificationsForUsers(
         [pkg.athlete_id],
-        `${label}: Kalan ders sayisi dusuk (${nextRemaining}).`
+        `${label}: Kalan ders sayisi dusuk (${nextRemaining}).`,
+        "private_lesson.updated"
       );
     }
   } catch {
@@ -611,7 +615,8 @@ export async function updatePrivateLessonPayment(formData: FormData) {
   if (!pkgRow?.athlete_id) return { error: "Paket bulunamadi." };
 
   const paidAt = new Date().toISOString();
-  const { dueDateKey, monthName, yearInt } = paymentBookkeepingFromPaidAtIso(paidAt);
+  const orgTimeZone = await resolveOrganizationTimeZone(actor.organization_id!);
+  const { dueDateKey, monthName, yearInt } = paymentBookkeepingFromPaidAtIso(paidAt, orgTimeZone);
 
   const sync = await applyPrivateLessonPackagePaymentWithPaymentRow({
     organizationId: actor.organization_id!,
@@ -646,12 +651,14 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     if (paymentStatus !== "paid") {
       await insertNotificationsForUsers(
         [sync.athleteId],
-        `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(totalPrice)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`
+        `${pName}: Yeni tahsilat ₺${paymentAmount}. Toplam odenen ₺${nextAmountPaid} / Toplam ₺${normalizeMoney(totalPrice)}. Kalan ₺${remainingBalance}. Durum: ${paymentStatus}.`,
+        "package.payment_received"
       );
     } else {
       await insertNotificationsForUsers(
         [sync.athleteId],
-        `${pName}: Yeni tahsilat ₺${paymentAmount}. Odeme tamamlandi.`
+        `${pName}: Yeni tahsilat ₺${paymentAmount}. Odeme tamamlandi.`,
+        "package.payment_received"
       );
     }
   } catch {

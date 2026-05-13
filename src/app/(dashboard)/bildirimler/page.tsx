@@ -1,42 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Bell, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
-import { markNotificationRead } from "@/lib/actions/lessonActions";
-import { listMyNotificationsSnapshot } from "@/lib/actions/snapshotActions";
-import type { AppNotification } from "@/lib/types";
+import EmptyState from "@/components/ui/EmptyState";
+import { LoadMoreButton } from "@/components/ui/data-display";
+import { markAllNotificationsReadForCurrentUser, markNotificationRead } from "@/lib/actions/lessonActions";
+import { useNotificationsViewer } from "@/lib/hooks/useNotificationsViewer";
+import { NotificationPreferencesPanel } from "./_components/NotificationPreferencesPanel";
 
 export default function NotificationsPage() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<AppNotification[]>([]);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const snapshot = await listMyNotificationsSnapshot(1, 100);
-    if ("error" in snapshot) {
-      setError(snapshot.error || "Bildirimler alinamadi.");
-      setLoading(false);
-      return;
-    }
-    setItems(snapshot.items || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      void fetchData();
-    }, 0);
-    return () => clearTimeout(id);
-  }, [fetchData]);
+  const {
+    loading,
+    error,
+    items,
+    total,
+    loadingMore,
+    unreadCount,
+    loadMore,
+    setItems,
+  } = useNotificationsViewer();
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   async function handleMarkRead(id: string) {
     const result = await markNotificationRead(id);
     if (result?.success) {
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     }
+  }
+
+  async function handleMarkAllRead() {
+    if (unreadCount === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setFeedback(null);
+    const result = await markAllNotificationsReadForCurrentUser();
+    if (result && "error" in result) {
+      setFeedback(typeof result.error === "string" ? result.error : "Bildirimler güncellenemedi.");
+    } else if (result?.success) {
+      setItems((prev) => prev.map((n) => (n.read ? n : { ...n, read: true })));
+      setFeedback(`${result.updatedCount} bildirim okundu işaretlendi.`);
+      window.setTimeout(() => setFeedback(null), 3500);
+    }
+    setBulkBusy(false);
   }
 
   if (loading) {
@@ -50,19 +56,45 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
-      <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
+      <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
           BILDIRIM <span className="text-[#7c3aed]">MERKEZI</span>
         </h1>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <span className="rounded-full border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#c4b5fd]">
+              {unreadCount} okunmamış
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleMarkAllRead()}
+            disabled={unreadCount === 0 || bulkBusy}
+            className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-[#7c3aed]/40 hover:text-white touch-manipulation"
+            aria-label="Tüm bildirimleri okundu işaretle"
+          >
+            {bulkBusy ? (
+              <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+            ) : (
+              <CheckCheck className="size-3.5 text-[#7c3aed]" aria-hidden />
+            )}
+            Hepsini okundu işaretle
+          </button>
+        </div>
       </header>
 
       {error && <Notification message={error} variant="error" />}
+      {feedback && <Notification message={feedback} variant="success" />}
+
+      <NotificationPreferencesPanel />
 
       {!error && items.length === 0 && (
-        <div className="p-10 sm:p-16 text-center bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] min-w-0">
-          <Bell size={40} className="mx-auto text-gray-700 mb-4" />
-          <p className="text-gray-500 font-black italic uppercase tracking-widest text-xs">Bildirim bulunmuyor.</p>
-        </div>
+        <EmptyState
+          icon={Bell}
+          title="Bildirim bulunmuyor."
+          description="Yeni bir aktivite olduğunda burada görünür."
+          variant="no_data"
+        />
       )}
 
       {!error && items.length > 0 && (
@@ -86,6 +118,12 @@ export default function NotificationsPage() {
               </div>
             </div>
           ))}
+          <LoadMoreButton
+            loaded={items.length}
+            total={total}
+            loading={loadingMore}
+            onClick={() => void loadMore()}
+          />
         </div>
       )}
     </div>

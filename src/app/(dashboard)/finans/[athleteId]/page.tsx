@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import {
@@ -16,8 +16,18 @@ import {
 import type { AthleteFinanceDetail } from "@/lib/types";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import {
+  buildUnifiedAthletePaymentTimeline,
+  filterUnifiedTimeline,
+  type UnifiedAthletePaymentFilter,
+} from "@/lib/finance/unifiedAthletePaymentTimeline";
+import { hrefTahsilatMerkezi } from "@/lib/finance/tahsilatMerkeziLinks";
+import { PATHS } from "@/lib/navigation/routeRegistry";
+import { LoadMoreButton } from "@/components/ui/data-display";
 
-type FinanceTab = "timeline" | "hizmet" | "plan";
+const FINANCE_TIMELINE_PAGE_SIZE = 50;
+
+type FinanceTab = "tumu" | "hizmet" | "plan";
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -46,23 +56,13 @@ function summaryActionMessage(summary: AthleteFinanceDetail["summary"]) {
   return getFinanceStatusPresentation(summary).supportText;
 }
 
-function paymentDisplayTitle(row: AthleteFinanceDetail["aidatPayments"][number]) {
-  if (row.display_name?.trim()) return row.display_name.trim();
-  if (row.payment_scope === "extra_charge") {
-    if (row.payment_kind === "license") return "Lisans Bedeli";
-    if (row.payment_kind === "event") return "Etkinlik Ücreti";
-    if (row.payment_kind === "equipment") return "Ekipman / Forma Ücreti";
-    return "Ek Tahsilat";
-  }
-  if (row.payment_scope === "private_lesson" || row.payment_type === "paket") {
-    return "Paket Ödemesi";
-  }
-  return row.description || "Ödeme";
-}
-
 export default function FinanceAthleteDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const athleteId = typeof params.athleteId === "string" ? params.athleteId : params.athleteId?.[0] || "";
+  const fromWorkspace = searchParams.get("from") === "workspace";
+  const backHref = fromWorkspace ? `${PATHS.tahsilatMerkezi}?bolum=sporcu` : "/finans";
+  const backLabel = fromWorkspace ? "← Muhasebe & Finans" : "← Sporcu Ödemeleri";
 
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState<AthleteFinanceDetail | null>(null);
@@ -77,10 +77,12 @@ export default function FinanceAthleteDetailPage() {
     dueDate: "",
     description: "",
     scope: "extra_charge",
-    kind: "manual_other",
+    kind: "extra_charge",
+    customKind: "",
     displayName: "",
   });
-  const [activeTab, setActiveTab] = useState<FinanceTab>("timeline");
+  const [activeTab, setActiveTab] = useState<FinanceTab>("tumu");
+  const [unifiedFilter, setUnifiedFilter] = useState<UnifiedAthletePaymentFilter>("all");
   const [canOpenAccountingPanel, setCanOpenAccountingPanel] = useState(false);
 
   const load = useCallback(async () => {
@@ -127,6 +129,40 @@ export default function FinanceAthleteDetailPage() {
     () => (snapshot?.privateLessonPayments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
     [snapshot]
   );
+  const onboardingPrivatePayments = useMemo(
+    () => (snapshot?.privateLessonPayments || []).filter((row) => (row.note || "").toLowerCase().includes("onboarding")),
+    [snapshot]
+  );
+
+  const unifiedAllLines = useMemo(() => {
+    if (!snapshot) return [];
+    return buildUnifiedAthletePaymentTimeline({
+      aidatPayments: snapshot.aidatPayments,
+      legacyPackagePayments: snapshot.legacyPackagePayments,
+      privateLessonPayments: snapshot.privateLessonPayments,
+      privateLessonPackages: snapshot.privateLessonPackages,
+      timeZone: snapshot.timeZone,
+    });
+  }, [snapshot]);
+
+  const unifiedFilteredLines = useMemo(
+    () => filterUnifiedTimeline(unifiedAllLines, unifiedFilter),
+    [unifiedAllLines, unifiedFilter]
+  );
+
+  // Faz 9.5 — client-side incremental pagination over the unified timeline.
+  // Büyük org'larda tek sporcunun yüzlerce kaydı olabilir; ilk 50 + load-more.
+  const [timelinePageCount, setTimelinePageCount] = useState(1);
+  const visibleTimelineLines = useMemo(
+    () => unifiedFilteredLines.slice(0, timelinePageCount * FINANCE_TIMELINE_PAGE_SIZE),
+    [unifiedFilteredLines, timelinePageCount]
+  );
+  useEffect(() => {
+    // Filter değişince sayfa sıfırla. Effect içinde direkt setState'i
+    // engellemek için cascade önlemi: değer zaten 1 ise dokunma.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTimelinePageCount((p) => (p === 1 ? p : 1));
+  }, [unifiedFilter, unifiedAllLines]);
 
   async function handlePlanSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,10 +188,15 @@ export default function FinanceAthleteDetailPage() {
     if (!snapshot) return;
     setPaymentSaving(true);
     setMessage(null);
+    if (paymentForm.scope === "extra_charge" && !paymentForm.customKind.trim()) {
+      setMessage("Tahsilat adı zorunludur.");
+      setPaymentSaving(false);
+      return;
+    }
     const fd = new FormData();
     fd.append("profile_id", snapshot.athlete.id);
     fd.append("payment_scope", paymentForm.scope);
-    fd.append("payment_kind", paymentForm.kind);
+    fd.append("payment_kind", paymentForm.scope === "extra_charge" ? paymentForm.customKind : paymentForm.kind);
     fd.append("display_name", paymentForm.displayName);
     if (paymentForm.scope === "membership") fd.append("payment_type", "aylik");
     if (paymentForm.scope === "private_lesson") fd.append("payment_type", "paket");
@@ -167,7 +208,7 @@ export default function FinanceAthleteDetailPage() {
       setMessage(res.error || "Tahsilat kaydi olusturulamadi.");
     } else {
       setMessage("Tahsilat kaydi olusturuldu.");
-      setPaymentForm((prev) => ({ ...prev, amount: "", dueDate: "", description: "", displayName: "" }));
+      setPaymentForm((prev) => ({ ...prev, amount: "", dueDate: "", description: "", displayName: "", customKind: "" }));
       await load();
     }
     setPaymentSaving(false);
@@ -225,7 +266,7 @@ export default function FinanceAthleteDetailPage() {
   if (!snapshot) {
     return (
       <div className="space-y-4">
-        <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
+        <Link href={backHref} className="text-[10px] font-black uppercase text-green-400">{backLabel}</Link>
         <Notification message={message || "Finans detayi alinamadi."} variant="error" />
       </div>
     );
@@ -234,22 +275,29 @@ export default function FinanceAthleteDetailPage() {
   const dueDateLabel = formatDate(snapshot.summary.nextDueDate);
   const dueAmountLabel = formatCurrency(snapshot.summary.nextAmount);
   const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
-  const aidatHistoryCount = snapshot.aidatPayments.length;
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
   const primaryActionLabel = snapshot.summary.tone === "overdue" ? "Ödemeyi Tamamla" : "Erken Ödeme Yap";
+  const accountingOrgId =
+    snapshot.aidatPayments[0]?.organization_id ??
+    snapshot.privateLessonPackages[0]?.organizationId ??
+    null;
+  const tahsilatMerkeziHref = hrefTahsilatMerkezi({
+    profileId: snapshot.athlete.id,
+    organizationId: accountingOrgId,
+  });
 
   return (
     <div className="space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/finans" className="text-[10px] font-black uppercase text-green-400">← Sporcu Ödemeleri</Link>
-          {canOpenAccountingPanel ? (
+          <Link href={backHref} className="text-[10px] font-black uppercase text-green-400">{backLabel}</Link>
+          {canOpenAccountingPanel && !fromWorkspace ? (
             <Link
-              href="/muhasebe-finans"
-              className="inline-flex min-h-10 items-center rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/15"
+              href={PATHS.tahsilatMerkezi}
+              className="inline-flex min-h-10 items-center rounded-xl border border-emerald-500/45 bg-emerald-500/15 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/25"
             >
-              Genel muhasebe paneline git
+              Muhasebe &amp; Finans
             </Link>
           ) : null}
         </div>
@@ -294,8 +342,9 @@ export default function FinanceAthleteDetailPage() {
         <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
           <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Özet</p>
           <p className="mt-2 text-lg font-black text-emerald-400">{formatCurrency(snapshot.totals.aidatPaidTotal)}</p>
-          <p className="text-xs font-semibold text-red-300">Bekleyen ödeme: {formatCurrency(snapshot.totals.aidatPendingTotal)}</p>
-          <p className="mt-2 text-xs font-semibold text-[#c4b5fd]">Özel ders ödemeleri: {formatCurrency(combinedPrivatePaid)}</p>
+          <p className="text-[10px] font-semibold text-gray-500">Aidat tahsilatı toplamı</p>
+          <p className="text-xs font-semibold text-red-300">Aidat bekleyen: {formatCurrency(snapshot.totals.aidatPendingTotal)}</p>
+          <p className="mt-2 text-xs font-semibold text-[#c4b5fd]">Özel ders tahsilatı: {formatCurrency(combinedPrivatePaid)}</p>
           <p className="text-xs font-semibold text-gray-400">{snapshot.privateLessonPackages.length} paket • {ozelDersPaymentCount} ödeme</p>
         </div>
       </section>
@@ -304,12 +353,12 @@ export default function FinanceAthleteDetailPage() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => setActiveTab("timeline")}
+            onClick={() => setActiveTab("tumu")}
             className={`min-h-11 rounded-xl px-3 text-[10px] font-black uppercase tracking-wider ${
-              activeTab === "timeline" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
+              activeTab === "tumu" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Tahsilat Geçmişi
+            Tüm Tahsilatlar
           </button>
           <button
             type="button"
@@ -327,59 +376,140 @@ export default function FinanceAthleteDetailPage() {
               activeTab === "plan" ? "bg-green-600 text-white" : "bg-black/30 text-gray-300"
             }`}
           >
-            Planlı Tahsilatlar
+            Planlı Aidat Tahsilatı
           </button>
         </div>
       </section>
 
-      {activeTab === "timeline" ? (
+      {activeTab === "tumu" ? (
         <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
-          <h2 className="text-sm font-black uppercase text-white">Tahsilat Geçmişi</h2>
-            <p className="text-[10px] font-semibold text-gray-500">Geçmiş ödeme kayıtları ({aidatHistoryCount})</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-sm font-black uppercase text-white">Tüm Tahsilatlar</h2>
+              <p className="text-[10px] font-semibold text-gray-500">
+                Aidat, ek tahsilat ve özel ders paketi ödemeleri tek listede ({unifiedFilteredLines.length}
+                {unifiedFilter !== "all" ? ` / ${unifiedAllLines.length}` : ""} kayıt).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["all", "Tümü"],
+                  ["membership", "Aidat"],
+                  ["package", "Paket"],
+                  ["extra", "Özel tahsilat"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setUnifiedFilter(key)}
+                  className={`min-h-9 rounded-lg px-3 text-[10px] font-black uppercase tracking-wide ${
+                    unifiedFilter === key ? "bg-green-600 text-white" : "border border-white/15 bg-black/30 text-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-            {snapshot.aidatPayments.length === 0 ? (
-              <p className="text-xs font-semibold text-gray-500">Henüz ödeme kaydı yok. Planlı Tahsilatlar sekmesinden sonraki planı yönetebilirsiniz.</p>
+            {unifiedFilteredLines.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500">
+                  Bu filtreye uygun tahsilat yok. Farklı bir filtre deneyin veya yeni kayıt ekleyin.
+                </p>
+                {unifiedFilter === "all" && onboardingPrivatePayments.length > 0 && snapshot.aidatPayments.length === 0 ? (
+                  <p className="text-xs font-semibold text-[#c4b5fd]">
+                    Onboarding ödemeleri paket defterinde listelenir; yukarıda Paket filtresi veya Paket ve Hizmetler sekmesinden görebilirsiniz.
+                  </p>
+                ) : null}
+              </div>
             ) : (
-              snapshot.aidatPayments.map((row) => (
-                <div key={row.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-black text-white">{paymentDisplayTitle(row)}</p>
-                      <p className="text-[10px] font-bold text-gray-500">Vade: {row.due_date || "-"}</p>
+              visibleTimelineLines.map((line) => {
+                const paymentRow =
+                  line.refKind === "payment"
+                    ? snapshot.aidatPayments.find((r) => r.id === line.refId) ||
+                      snapshot.legacyPackagePayments.find((r) => r.id === line.refId) ||
+                      null
+                    : null;
+                const borderClass =
+                  line.statusTone === "paid" ? "border-white/10" : "border-amber-500/25 bg-amber-500/5";
+                return (
+                  <div key={line.id} className={`rounded-xl border bg-black/20 p-3 ${borderClass}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs font-black text-white">{line.title}</p>
+                        <p className="text-[10px] font-bold text-gray-500">{line.detail}</p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                            {line.scopeLabel}
+                          </span>
+                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                            {line.kindLabel}
+                          </span>
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase ${
+                              line.statusTone === "paid"
+                                ? "border border-emerald-500/30 text-emerald-300"
+                                : "border border-amber-500/30 text-amber-200"
+                            }`}
+                          >
+                            {line.statusLabel}
+                          </span>
+                          {line.sourceBadge ? (
+                            <span className="rounded-md border border-[#c4b5fd]/35 bg-[#c4b5fd]/10 px-2 py-0.5 text-[9px] font-black uppercase text-[#c4b5fd]">
+                              {line.sourceBadge}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-sm font-black tabular-nums text-white">{formatCurrency(line.amount)}</span>
                     </div>
-                    <span className="text-sm font-black text-white">{formatCurrency(row.amount)}</span>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    {row.status === "odendi" ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleStatusUpdate(row.id, "bekliyor")}
-                        disabled={statusSavingId === row.id}
-                        className="min-h-10 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-[10px] font-black uppercase text-amber-300"
-                      >
-                        {statusSavingId === row.id ? "..." : "Bekliyor Olarak İşaretle"}
-                      </button>
+                    {paymentRow ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {paymentRow.status === "odendi" ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleStatusUpdate(paymentRow.id, "bekliyor")}
+                            disabled={statusSavingId === paymentRow.id}
+                            className="min-h-10 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-[10px] font-black uppercase text-amber-300"
+                          >
+                            {statusSavingId === paymentRow.id ? "..." : "Bekliyor Olarak İşaretle"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleStatusUpdate(paymentRow.id, "odendi")}
+                            disabled={statusSavingId === paymentRow.id}
+                            className="min-h-10 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-[10px] font-black uppercase text-emerald-300"
+                          >
+                            {statusSavingId === paymentRow.id ? "..." : "Ödendi Olarak İşaretle"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePayment(paymentRow.id)}
+                          className="min-h-10 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300"
+                        >
+                          Kaydı Kaldır
+                        </button>
+                      </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => void handleStatusUpdate(row.id, "odendi")}
-                        disabled={statusSavingId === row.id}
-                        className="min-h-10 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-[10px] font-black uppercase text-emerald-300"
-                      >
-                        {statusSavingId === row.id ? "..." : "Ödendi Olarak İşaretle"}
-                      </button>
+                      <p className="mt-2 text-[10px] font-semibold text-gray-500">
+                        Paket defteri satırları bu ekrandan silinemez; paket sayfasından yönetilir.
+                      </p>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => void handleDeletePayment(row.id)}
-                      className="min-h-10 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300"
-                    >
-                      Kaydı Kaldır
-                    </button>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
+            <LoadMoreButton
+              loaded={visibleTimelineLines.length}
+              total={unifiedFilteredLines.length}
+              loading={false}
+              onClick={() => setTimelinePageCount((p) => p + 1)}
+            />
           </div>
         </section>
       ) : null}
@@ -417,6 +547,9 @@ export default function FinanceAthleteDetailPage() {
                       <p className="text-xs font-black text-white">{formatCurrency(pay.amount)}</p>
                       <p className="text-[10px] font-bold text-gray-500">{new Date(pay.paidAt).toLocaleDateString("tr-TR")}</p>
                     </div>
+                    {(pay.note || "").toLowerCase().includes("onboarding") ? (
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd]">Kaynak: Onboarding</p>
+                    ) : null}
                     {pay.note ? <p className="mt-1 text-[10px] font-bold text-gray-400">{pay.note}</p> : null}
                   </div>
                 ))
@@ -429,8 +562,8 @@ export default function FinanceAthleteDetailPage() {
       {activeTab === "plan" ? (
         <section className="grid gap-4 lg:grid-cols-2">
           <form onSubmit={handlePlanSubmit} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
-            <h2 className="text-sm font-black uppercase text-white">Planlı Tahsilatlar</h2>
-            <p className="text-[10px] font-semibold text-gray-500">Bir sonraki planlanan ödeme</p>
+            <h2 className="text-sm font-black uppercase text-white">Planlı Aidat Tahsilatı</h2>
+            <p className="text-[10px] font-semibold text-gray-500">Bu alan yalnızca aylık aidat planı içindir.</p>
             <input
               type="date"
               value={planForm.dueDate}
@@ -456,58 +589,84 @@ export default function FinanceAthleteDetailPage() {
               {markingPlannedPaid ? "İşleniyor..." : "Ödemeyi Tamamlandı Olarak İşle"}
             </button>
           </form>
-          <form onSubmit={handleCreatePayment} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
-            <h2 className="text-sm font-black uppercase text-white">Manuel Tahsilat Ekle</h2>
-            <p className="text-[10px] font-semibold text-gray-500">Plan dışı ödeme/düzeltme kaydı</p>
-            <input
-              value={paymentForm.displayName}
-              onChange={(e) => setPaymentForm((p) => ({ ...p, displayName: e.target.value }))}
-              placeholder="Ödeme adı (Lisans Bedeli, Yaz Kampı...)"
-              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-            />
-            <select
-              value={paymentForm.kind}
-              onChange={(e) =>
-                setPaymentForm((p) => ({
-                  ...p,
-                  kind: e.target.value,
-                  scope: e.target.value === "monthly_membership" ? "membership" : e.target.value === "private_lesson_package" ? "private_lesson" : "extra_charge",
-                }))
-              }
-              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-            >
-              <option value="manual_other">Manuel Ek Tahsilat</option>
-              <option value="license">Lisans</option>
-              <option value="event">Etkinlik</option>
-              <option value="equipment">Ekipman</option>
-              <option value="monthly_membership">Aylik Uyelik</option>
-              <option value="private_lesson_package">Ozel Ders Paketi</option>
-            </select>
-            <input
-              type="number"
-              required
-              value={paymentForm.amount}
-              onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
-              placeholder="Tutar (₺)"
-              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-            />
-            <input
-              type="date"
-              required
-              value={paymentForm.dueDate}
-              onChange={(e) => setPaymentForm((p) => ({ ...p, dueDate: e.target.value }))}
-              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-            />
-            <input
-              value={paymentForm.description}
-              onChange={(e) => setPaymentForm((p) => ({ ...p, description: e.target.value }))}
-              placeholder="Açıklama"
-              className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-            />
-            <button disabled={paymentSaving} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-[10px] font-black uppercase text-white">
-              {paymentSaving ? "İşleniyor..." : "Tahsilat Ekle"}
-            </button>
-          </form>
+          {canOpenAccountingPanel ? (
+            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-5 space-y-3">
+              <h2 className="text-sm font-black uppercase text-white">Manuel tahsilat</h2>
+              <p className="text-[10px] font-semibold text-gray-400">
+                Yönetici tahsilatları tek yerden girilir; bu kayıtlar Muhasebe &amp; Finans tahsilat listesi ve özel ders
+                paketi defteri ile aynı kalır.
+              </p>
+              <Link
+                href={tahsilatMerkeziHref}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-[10px] font-black uppercase tracking-wide text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-400"
+              >
+                Tahsilat Merkezinde aç
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={handleCreatePayment} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
+              <h2 className="text-sm font-black uppercase text-white">Manuel Tahsilat Ekle</h2>
+              <p className="text-[10px] font-semibold text-gray-500">Plan dışı ödeme/düzeltme kaydı</p>
+              <input
+                value={paymentForm.displayName}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, displayName: e.target.value }))}
+                placeholder="Ödeme adı (örn: Yaz Kampı Katılım Bedeli)"
+                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              />
+              <select
+                value={paymentForm.kind}
+                onChange={(e) =>
+                  setPaymentForm((p) => ({
+                    ...p,
+                    kind: e.target.value,
+                    scope:
+                      e.target.value === "monthly_membership"
+                        ? "membership"
+                        : e.target.value === "private_lesson_package"
+                          ? "private_lesson"
+                          : "extra_charge",
+                  }))
+                }
+                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              >
+                <option value="monthly_membership">Aylik Uyelik</option>
+                <option value="private_lesson_package">Ozel Ders Paketi</option>
+                <option value="extra_charge">Özelleştirilebilir tahsilat</option>
+              </select>
+              {paymentForm.scope === "extra_charge" ? (
+                <input
+                  value={paymentForm.customKind}
+                  onChange={(e) => setPaymentForm((p) => ({ ...p, customKind: e.target.value }))}
+                  placeholder="Tahsilat adı (örn: etkinlik kampı, lisans yenileme)"
+                  className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+                />
+              ) : null}
+              <input
+                type="number"
+                required
+                value={paymentForm.amount}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
+                placeholder="Tutar (₺)"
+                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              />
+              <input
+                type="date"
+                required
+                value={paymentForm.dueDate}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, dueDate: e.target.value }))}
+                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              />
+              <input
+                value={paymentForm.description}
+                onChange={(e) => setPaymentForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="Açıklama"
+                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              />
+              <button disabled={paymentSaving} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-[10px] font-black uppercase text-white">
+                {paymentSaving ? "İşleniyor..." : "Tahsilat Ekle"}
+              </button>
+            </form>
+          )}
         </section>
       ) : null}
     </div>

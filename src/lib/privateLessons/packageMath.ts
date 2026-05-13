@@ -6,6 +6,45 @@ export function normalizeMoney(value: number | string | null | undefined): numbe
   return Math.round(n * 100) / 100;
 }
 
+// Parses human-entered money safely for both tr-TR and en-US styles.
+export function parseMoneyInput(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) return null;
+    return normalizeMoney(value);
+  }
+  const raw = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[₺$€£]/g, "");
+  if (!raw) return null;
+
+  const hasDot = raw.includes(".");
+  const hasComma = raw.includes(",");
+  let normalized = raw;
+
+  if (hasDot && hasComma) {
+    const lastDot = raw.lastIndexOf(".");
+    const lastComma = raw.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      normalized = raw.replace(/\./g, "").replace(",", ".");
+    } else {
+      normalized = raw.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    const parts = raw.split(",");
+    const maybeDecimal = parts.length === 2 && parts[1].length > 0 && parts[1].length <= 2;
+    normalized = maybeDecimal ? raw.replace(",", ".") : raw.replace(/,/g, "");
+  } else if (hasDot) {
+    const parts = raw.split(".");
+    const maybeDecimal = parts.length === 2 && parts[1].length > 0 && parts[1].length <= 2;
+    normalized = maybeDecimal ? raw : raw.replace(/\./g, "");
+  }
+
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return normalizeMoney(n);
+}
+
 export function computePaymentStatus(totalPriceInput: number, amountPaidInput: number): PrivateLessonPaymentStatus {
   const totalPrice = normalizeMoney(totalPriceInput);
   const amountPaid = normalizeMoney(amountPaidInput);

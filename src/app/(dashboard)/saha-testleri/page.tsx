@@ -9,12 +9,14 @@ import {
   ChevronRight,
   Loader2,
   CheckCircle2,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
 import {
   createFieldTestDefinition,
   deleteFieldTestDefinition,
+  exportFieldTestResultsCSV,
   listAthleticResultsForActorByDate,
   listAthleticResultNotesByDate,
   listFieldTestDefinitionsForActor,
@@ -26,7 +28,7 @@ import {
 } from "@/lib/actions/athleticFieldActions";
 import type { AthleticResultRow, ProfileBasic, TestDefinitionRow } from "@/types/domain";
 import Notification from "@/components/Notification";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
 
@@ -47,6 +49,8 @@ export default function SahaTestleriFinal() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [contextPulse, setContextPulse] = useState(false);
   
   const [metrics, setMetrics] = useState<TestDefinitionRow[]>([]); 
@@ -55,11 +59,18 @@ export default function SahaTestleriFinal() {
   const [generalNotes, setGeneralNotes] = useState<Record<string, string>>({});
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [globalDate, setGlobalDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newMetric, setNewMetric] = useState<{ name: string; unit: string; category: string; valueType: MetricValueType }>({
+  const [newMetric, setNewMetric] = useState<{
+    name: string;
+    unit: string;
+    category: string;
+    valueType: MetricValueType;
+    improvementDirection: "higher_better" | "lower_better" | "unknown";
+  }>({
     name: "",
     unit: "",
     category: "Genel",
     valueType: "number",
+    improvementDirection: "unknown",
   });
   const [orderingBusyMetricId, setOrderingBusyMetricId] = useState<string | null>(null);
   const [orderHighlightMetricId, setOrderHighlightMetricId] = useState<string | null>(null);
@@ -191,6 +202,7 @@ export default function SahaTestleriFinal() {
     fd.append("unit", newMetric.unit);
     fd.append("category", newMetric.category || "Genel");
     fd.append("valueType", newMetric.valueType);
+    fd.append("improvementDirection", newMetric.improvementDirection);
     const result = await createFieldTestDefinition(fd);
     if ("error" in result && result.error) {
       setSaveMessage(result.error);
@@ -208,7 +220,7 @@ export default function SahaTestleriFinal() {
       });
     }
     setSaveMessage("Metrik başarıyla eklendi.");
-    setNewMetric({ name: "", unit: "", category: "Genel", valueType: "number" });
+    setNewMetric({ name: "", unit: "", category: "Genel", valueType: "number", improvementDirection: "unknown" });
     void fetchData();
   };
 
@@ -274,12 +286,18 @@ export default function SahaTestleriFinal() {
   };
 
   const handleMetricUpdate = async (metric: TestDefinitionRow, patch: Partial<TestDefinitionRow>) => {
+    const nextDirection =
+      (patch.improvement_direction ?? metric.improvement_direction ?? "unknown") as
+        | "higher_better"
+        | "lower_better"
+        | "unknown";
     const payload = {
       testDefinitionId: metric.id,
       name: (patch.name ?? metric.name ?? "").toString(),
       unit: (patch.unit ?? metric.unit ?? "").toString(),
       category: (patch.category ?? metric.category ?? "Genel").toString(),
       valueType: normalizeMetricValueType(patch.value_type ?? metric.value_type ?? (metric as TestDefinitionRow & { valueType?: unknown }).valueType) as MetricValueType,
+      improvementDirection: nextDirection,
     };
     const res = await updateFieldTestDefinition(payload);
     if ("error" in res) {
@@ -459,22 +477,71 @@ export default function SahaTestleriFinal() {
             Sporcu seçin, tarih belirleyin, test verisi girin ve kaydedin.
           </p>
         </div>
-        <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-          {performanceTabs.map((tab) => (
-            <Link
-              key={tab.key}
-              href={tab.href}
-              className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                tab.href === "/saha-testleri"
-                  ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                  : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-              }`}
-              aria-current={tab.href === "/saha-testleri" ? "page" : undefined}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+          <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
+            {performanceTabs.map((tab) => (
+              <Link
+                key={tab.key}
+                href={tab.href}
+                className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                  tab.href === "/saha-testleri"
+                    ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
+                    : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
+                }`}
+                aria-current={tab.href === "/saha-testleri" ? "page" : undefined}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+          <button
+            type="button"
+            disabled={exportBusy}
+            onClick={async () => {
+              setExportBusy(true);
+              setExportMessage(null);
+              try {
+                const res = await exportFieldTestResultsCSV({});
+                if ("error" in res) {
+                  setExportMessage(typeof res.error === "string" ? res.error : "CSV indirilemedi.");
+                } else {
+                  const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = res.filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  setExportMessage(
+                    res.truncated
+                      ? `İlk ${res.cap} sonuç indirildi. Tarih filtresiyle daraltabilirsiniz.`
+                      : `${res.rowCount} sonuç indirildi.`
+                  );
+                }
+              } catch {
+                setExportMessage("CSV indirilemedi.");
+              } finally {
+                setExportBusy(false);
+              }
+            }}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
+            aria-label="Saha testi sonuçlarını CSV olarak indir"
+          >
+            {exportBusy ? (
+              <Loader2 className="size-3.5 animate-spin text-emerald-400" aria-hidden />
+            ) : (
+              <Download size={12} className="opacity-80" aria-hidden />
+            )}
+            CSV indir
+          </button>
+        </div>
+        {exportMessage ? (
+          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300" role="status">
+            {exportMessage}
+          </p>
+        ) : null}
 
         <div className="grid gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
@@ -618,10 +685,11 @@ export default function SahaTestleriFinal() {
               {players.length === 0 && (
                 <tr>
                   <td colSpan={metrics.length + 4} className="px-6 py-10 text-center">
-                    <EmptyStateCard
-                      title="Kayıt bulunamadı"
-                      description="Saha testi girişi için uygun sporcu bulunamadı."
-                      reason="Aktif sporcu listesi boş olabilir veya organizasyona henüz sporcu eklenmemiş olabilir."
+                    <EmptyState
+                      variant="onboarding"
+                      title="İlk sporcunu ekle"
+                      description="Saha testi girişi için aktif sporcu listesi boş görünüyor."
+                      reason="Sporcu eklendikten sonra metriklerin satır satır girişi açılır."
                       primaryAction={{ label: "Sporcu ekle", href: "/sporcular/yeni" }}
                       secondaryAction={{ label: "Sporculara git", href: "/oyuncular" }}
                       compact
@@ -755,10 +823,13 @@ export default function SahaTestleriFinal() {
 
             <div className="space-y-2 mb-6 max-h-[34vh] overflow-y-auto pr-1 custom-scrollbar min-w-0 [-webkit-overflow-scrolling:touch]">
               {metrics.length === 0 && (
-                <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-4 text-center">
-                  <p className="text-[11px] font-bold text-gray-500">Henüz metrik tanımlanmadı.</p>
-                  <p className="mt-1 text-[10px] font-bold text-gray-600">İlk metriği aşağıdaki formdan ekleyin.</p>
-                </div>
+                <EmptyState
+                  variant="onboarding"
+                  title="İlk saha testi metriğini tanımla"
+                  description="Henüz metrik yok. Aşağıdaki formdan ilk metriği oluşturun."
+                  reason="Hız, dayanıklılık veya ağırlık gibi sayısal/metin metrikleri tanımlayarak veri toplamaya başlayabilirsiniz."
+                  compact
+                />
               )}
               {metrics.map((m, index) => {
                 const isFirst = index === 0;
@@ -817,6 +888,22 @@ export default function SahaTestleriFinal() {
                     <option value="number">Sayısal Değer</option>
                     <option value="text">Yazılı Not</option>
                   </select>
+                  {!metricIsText(m) ? (
+                    <select
+                      value={(m.improvement_direction ?? "unknown") as string}
+                      onChange={(e) =>
+                        void handleMetricUpdate(m, {
+                          improvement_direction: e.target.value as "higher_better" | "lower_better" | "unknown",
+                        })
+                      }
+                      className="ui-select min-h-10 w-44"
+                      title="Bu metrikte iyileşme hangi yönde? (yüksek değer iyi vs. düşük değer iyi)"
+                    >
+                      <option value="unknown">Yön: belirsiz</option>
+                      <option value="higher_better">↑ Yüksek daha iyi</option>
+                      <option value="lower_better">↓ Düşük daha iyi</option>
+                    </select>
+                  ) : null}
                   <button 
                     type="button"
                     onClick={() => handleDeleteMetric(m.id)} 
@@ -849,6 +936,27 @@ export default function SahaTestleriFinal() {
                   <option value="number">Sayısal Değer</option>
                   <option value="text">Yazılı Not / Gözlem</option>
                 </select>
+                {newMetric.valueType === "number" ? (
+                  <select
+                    className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                    value={newMetric.improvementDirection}
+                    onChange={(e) =>
+                      setNewMetric({
+                        ...newMetric,
+                        improvementDirection: e.target.value as "higher_better" | "lower_better" | "unknown",
+                      })
+                    }
+                    title="Bu metrikte iyileşme hangi yönde?"
+                  >
+                    <option value="unknown">Gelişim yönü: belirsiz</option>
+                    <option value="higher_better">↑ Yüksek değer daha iyi</option>
+                    <option value="lower_better">↓ Düşük değer daha iyi</option>
+                  </select>
+                ) : (
+                  <div className="min-h-11 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-[11px] font-medium text-gray-500">
+                    Yazılı metrikler trend analizine girmez.
+                  </div>
+                )}
                 <button 
                   type="button"
                   onClick={handleAddMetric} 

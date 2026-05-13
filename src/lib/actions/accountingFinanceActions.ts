@@ -6,7 +6,7 @@ import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
-import { normalizeMoney } from "@/lib/privateLessons/packageMath";
+import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMath";
 import { applyPrivateLessonPackagePaymentWithPaymentRow } from "@/lib/privateLessons/packagePaymentSync";
 import {
   istanbulCustomRangeToPayoutDateInclusiveBounds,
@@ -16,18 +16,22 @@ import {
 } from "@/lib/accountingFinance/istanbulQueryRange";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
+import { csvFilename } from "@/lib/export/csv";
+import { buildCsvFromRows } from "@/lib/export/csvStream";
+import { logger } from "@/lib/monitoring";
+import { lookupMonthlyFinanceMv } from "@/lib/finance/monthlyFinanceMv";
+import { checkExportRateLimit } from "@/lib/rateLimit";
+import {
+  getAccountingPaymentKindLabel,
+  getAccountingPaymentScopeLabel,
+  getAccountingPaymentStatusLabel,
+} from "@/lib/accountingFinance/labels";
 
 type LessonTypeFilter = "all" | "group" | "private";
 type LessonStatusFilter = "all" | "planned" | "completed" | "cancelled";
 type PaymentStatusFilter = "all" | "bekliyor" | "odendi";
-type PaymentKindNormalized =
-  | "monthly_membership"
-  | "private_lesson_package"
-  | "license"
-  | "event"
-  | "equipment"
-  | "manual_other"
-  | "other";
+type PaymentKindNormalized = string;
 type PaymentScopeNormalized = "membership" | "private_lesson" | "extra_charge" | "other";
 
 export type AccountingFinanceFilters = {
@@ -133,6 +137,18 @@ export type AccountingFinanceSnapshot = {
     paymentKinds: string[];
     lessonStatuses: LessonStatusFilter[];
     paymentStatuses: PaymentStatusFilter[];
+  };
+  /**
+   * Faz 11.2 — MV read-path durumu.
+   *   - mv:    KPI MV'den geldi.
+   *   - live:  KPI live aggregation'dan geldi (MV stale/missing/error).
+   * UI bu alanı badge için kullanabilir.
+   */
+  mvFreshness?: {
+    source: "mv" | "live";
+    refreshedAt: string | null;
+    stale: boolean;
+    reason?: string;
   };
 };
 
@@ -261,11 +277,12 @@ function buildPaymentChannelLabel(row: Record<string, unknown>, normalizedKind: 
 
 function ledgerRowCoveredByPaymentRows(
   ledger: { package_id: string; amount: unknown; paid_at: string },
-  paymentRows: Record<string, unknown>[]
+  paymentRows: Record<string, unknown>[],
+  tz: string = SCHEDULE_APP_TIME_ZONE
 ): boolean {
   const lAmt = normalizeMoney(Number(ledger.amount));
   const lMs = new Date(ledger.paid_at).getTime();
-  const lDay = Number.isFinite(lMs) ? isoToZonedDateKey(ledger.paid_at, SCHEDULE_APP_TIME_ZONE) : "";
+  const lDay = Number.isFinite(lMs) ? isoToZonedDateKey(ledger.paid_at, tz) : "";
   for (const p of paymentRows) {
     const pkg = String(p.package_id || "").trim();
     if (!pkg || pkg !== ledger.package_id) continue;
@@ -273,7 +290,7 @@ function ledgerRowCoveredByPaymentRows(
     const eff = paymentRowEffectiveInstantMs(p);
     if (eff != null && Number.isFinite(lMs) && Math.abs(eff - lMs) <= 120_000) return true;
     if (lDay && eff != null) {
-      const pDay = isoToZonedDateKey(new Date(eff).toISOString(), SCHEDULE_APP_TIME_ZONE);
+      const pDay = isoToZonedDateKey(new Date(eff).toISOString(), tz);
       if (pDay === lDay) return true;
     }
   }
@@ -287,8 +304,9 @@ async function loadSupplementalPrivateLessonLedgerRows(args: {
   existingPaymentRows: Record<string, unknown>[];
   paymentStatus: PaymentStatusFilter;
   paymentKind: string | null;
+  timeZone?: string;
 }): Promise<Record<string, unknown>[]> {
-  const { adminClient, organizationId, range, existingPaymentRows, paymentStatus, paymentKind } = args;
+  const { adminClient, organizationId, range, existingPaymentRows, paymentStatus, paymentKind, timeZone } = args;
   if (paymentStatus === "bekliyor") return [];
   if (paymentKind && paymentKind !== "private_lesson_package") return [];
 
@@ -317,7 +335,8 @@ async function loadSupplementalPrivateLessonLedgerRows(args: {
           amount: raw.amount,
           paid_at: String(raw.paid_at || ""),
         },
-        existingPaymentRows
+        existingPaymentRows,
+        timeZone
       )
     ) {
       continue;
@@ -366,6 +385,32 @@ async function enrichPaymentRowsWithPackageBalance(
     const rem = normalizeMoney(Number(p.total_price) || 0) - normalizeMoney(Number(p.amount_paid) || 0);
     row.remainingBalance = rem > 0.001 ? rem : 0;
   }
+}
+
+/**
+ * Bekleyen tahsilat: klasik `bekliyor` satırları + paketlerde kalan bakiye (kısmi ödeme).
+ * Paket kalanı satır başına değil, packageId başına bir kez sayılır (aynı paket için birden fazla ledger satırı olabilir).
+ */
+function computeAccountingPendingCollection(rows: AccountingFinancePaymentRow[]): number {
+  const packageRemainderById = new Map<string, number>();
+  for (const p of rows) {
+    if (!p.packageId) continue;
+    if (p.remainingBalance == null || p.remainingBalance <= 0.001) continue;
+    const amt = normalizeMoney(p.remainingBalance);
+    const prev = packageRemainderById.get(p.packageId) ?? 0;
+    packageRemainderById.set(p.packageId, Math.max(prev, amt));
+  }
+  let pending = 0;
+  for (const v of packageRemainderById.values()) pending += v;
+
+  for (const p of rows) {
+    if (p.status !== "bekliyor") continue;
+    if (p.packageId && packageRemainderById.has(p.packageId)) {
+      continue;
+    }
+    pending += normalizeMoney(p.amount);
+  }
+  return pending;
 }
 
 function currentMonthKey() {
@@ -431,20 +476,26 @@ function shouldFallbackPaymentsQuery(message?: string | null): boolean {
   );
 }
 
+function normalizePaymentKindKey(input: string | null | undefined, fallback = "other"): string {
+  const raw = String(input || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return fallback;
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  return normalized || fallback;
+}
+
 function inferPaymentKindFromLegacyRow(row: Record<string, unknown>): PaymentKindNormalized {
   const rawKind = String(row.payment_kind || "")
     .trim()
     .toLowerCase();
-  if (
-    rawKind === "monthly_membership" ||
-    rawKind === "private_lesson_package" ||
-    rawKind === "license" ||
-    rawKind === "event" ||
-    rawKind === "equipment" ||
-    rawKind === "manual_other" ||
-    rawKind === "other"
-  ) {
-    return rawKind;
+  if (rawKind) {
+    return normalizePaymentKindKey(rawKind, "other");
   }
 
   const packageId = String(row.package_id || "").trim();
@@ -470,7 +521,7 @@ function inferPaymentScopeFromLegacyRow(row: Record<string, unknown>): PaymentSc
   const kind = inferPaymentKindFromLegacyRow(row);
   if (kind === "private_lesson_package") return "private_lesson";
   if (kind === "monthly_membership") return "membership";
-  if (kind === "license" || kind === "event" || kind === "equipment" || kind === "manual_other" || kind === "other") return "extra_charge";
+  if (kind !== "monthly_membership" && kind !== "private_lesson_package") return "extra_charge";
   return "other";
 }
 
@@ -796,14 +847,16 @@ export async function loadAccountingFinanceDashboard(
     return { error: "Organizasyon bilgisi alınamadı." };
   }
 
+  const orgTimeZone = await resolveOrganizationTimeZone(organizationId);
+
   const month = (rawFilters.month || currentMonthKey()).trim();
   const dateFrom = (rawFilters.dateFrom || "").trim();
   const dateTo = (rawFilters.dateTo || "").trim();
   const rangeMode = dateFrom && dateTo ? "custom_range" : "month";
   const timeRange: UtcHalfOpenRange | null =
     rangeMode === "custom_range"
-      ? istanbulDateWallRangeToHalfOpenUtc(dateFrom, dateTo)
-      : istanbulMonthWallToHalfOpenUtc(month);
+      ? istanbulDateWallRangeToHalfOpenUtc(dateFrom, dateTo, orgTimeZone)
+      : istanbulMonthWallToHalfOpenUtc(month, orgTimeZone);
   if (!timeRange) {
     return { error: "Geçersiz tarih filtresi." };
   }
@@ -859,6 +912,7 @@ export async function loadAccountingFinanceDashboard(
       existingPaymentRows: mergedPaymentRows,
       paymentStatus,
       paymentKind,
+      timeZone: orgTimeZone,
     });
     mergedPaymentRows = [...mergedPaymentRows, ...supplemental].sort(
       (a, b) => (paymentRowEffectiveInstantMs(b) ?? 0) - (paymentRowEffectiveInstantMs(a) ?? 0)
@@ -987,12 +1041,81 @@ export async function loadAccountingFinanceDashboard(
   const cancelledLessons = lessons.filter((l) => l.status === "cancelled").length;
   const activeCoachCount = new Set(lessons.map((l) => l.coachId).filter(Boolean)).size;
 
-  const totalCollected = lessonsOnly
+  const liveTotalCollected = lessonsOnly
     ? 0
     : mappedPaymentsFiltered.filter((p) => p.status === "odendi").reduce((sum, p) => sum + p.paidAmount, 0);
-  const pendingCollection = lessonsOnly
-    ? 0
-    : mappedPaymentsFiltered.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + normalizeMoney(p.amount), 0);
+  const livePendingCollection = lessonsOnly ? 0 : computeAccountingPendingCollection(mappedPaymentsFiltered);
+
+  // Faz 11.2 — MV read path. Yalnızca filtreler MV ile uyumluyken KPI'yı MV'den
+  // okuruz. Filter daraltma (coach/kind/status/range custom) durumunda MV
+  // kullanılmaz çünkü MV sadece org × month bazında aggregate eder.
+  let totalCollected = liveTotalCollected;
+  let pendingCollection = livePendingCollection;
+  let mvFreshness: AccountingFinanceSnapshot["mvFreshness"] = {
+    source: "live",
+    refreshedAt: null,
+    stale: false,
+  };
+  const mvEligible =
+    !lessonsOnly &&
+    rangeMode === "month" &&
+    !safeCoachId &&
+    !paymentKind &&
+    paymentStatus === "all";
+  if (mvEligible) {
+    const lookup = await lookupMonthlyFinanceMv(adminClient, {
+      organizationId,
+      monthKey: month,
+    });
+    if (lookup.status === "ok") {
+      totalCollected = lookup.kpi.totalCollected;
+      pendingCollection = lookup.kpi.pendingCollection;
+      mvFreshness = {
+        source: "mv",
+        refreshedAt: lookup.kpi.refreshedAt,
+        stale: lookup.kpi.stale,
+      };
+      logger.info("finance.mv", "MV KPI kullanıldı", {
+        organizationId,
+        monthKey: month,
+        refreshedAt: lookup.kpi.refreshedAt,
+      });
+    } else if (lookup.status === "stale") {
+      mvFreshness = {
+        source: "live",
+        refreshedAt: lookup.refreshedAt,
+        stale: true,
+        reason: "stale_threshold_exceeded",
+      };
+      logger.warn("finance.mv", "MV stale, live aggregation kullanıldı", {
+        organizationId,
+        monthKey: month,
+        refreshedAt: lookup.refreshedAt,
+      });
+    } else if (lookup.status === "error") {
+      mvFreshness = {
+        source: "live",
+        refreshedAt: null,
+        stale: false,
+        reason: `mv_lookup_failed:${lookup.reason}`,
+      };
+    } else {
+      mvFreshness = {
+        source: "live",
+        refreshedAt: null,
+        stale: false,
+        reason: "missing",
+      };
+    }
+  } else {
+    mvFreshness = {
+      source: "live",
+      refreshedAt: null,
+      stale: false,
+      reason: "filter_incompatible",
+    };
+  }
+
   const paymentKinds = lessonsOnly
     ? []
     : Array.from(new Set(mappedPaymentsAll.map((p) => p.paymentKind))).sort((a, b) => a.localeCompare(b, "tr"));
@@ -1048,6 +1171,7 @@ export async function loadAccountingFinanceDashboard(
         lessonStatuses: ["all", "planned", "completed", "cancelled"],
         paymentStatuses: ["all", "bekliyor", "odendi"],
       },
+      mvFreshness,
     },
   };
 }
@@ -1159,14 +1283,14 @@ export async function createAccountingPayment(formData: FormData) {
 
   const profileId = formData.get("profileId")?.toString().trim() || "";
   if (!isUuid(profileId)) return { error: "Geçersiz sporcu seçimi." };
-  const amount = Number(formData.get("amount")?.toString() || "");
-  if (!Number.isFinite(amount) || amount <= 0) return { error: "Geçersiz tahsilat tutarı." };
+  const amount = parseMoneyInput(formData.get("amount")?.toString());
+  if (amount == null || amount <= 0) return { error: "Geçersiz tahsilat tutarı." };
 
   const paymentKindInput = String(formData.get("paymentKind") || "monthly_membership");
   const paymentDate = String(formData.get("paymentDate") || "").trim();
   const description = String(formData.get("description") || "").trim() || null;
   const packageId = String(formData.get("packageId") || "").trim();
-  const tz = SCHEDULE_APP_TIME_ZONE;
+  const tz = await resolveOrganizationTimeZone(organizationId);
   const paidAt =
     paymentDate && /^\d{4}-\d{2}-\d{2}$/.test(paymentDate)
       ? wallClockInZoneToUtcIso(paymentDate, "00:00:00", tz) ?? new Date().toISOString()
@@ -1180,14 +1304,9 @@ export async function createAccountingPayment(formData: FormData) {
   const dueDateKey = paidWallKey || paidAt.slice(0, 10);
 
   const paymentKind =
-    paymentKindInput === "private_lesson_package" ||
-    paymentKindInput === "license" ||
-    paymentKindInput === "event" ||
-    paymentKindInput === "equipment" ||
-    paymentKindInput === "manual_other" ||
-    paymentKindInput === "other"
+    paymentKindInput === "private_lesson_package" || paymentKindInput === "monthly_membership"
       ? paymentKindInput
-      : "monthly_membership";
+      : normalizePaymentKindKey(paymentKindInput, "extra_charge");
   const paymentScope =
     paymentKind === "private_lesson_package"
       ? "private_lesson"
@@ -1291,6 +1410,126 @@ export async function createAccountingPayment(formData: FormData) {
   }
 
   revalidatePath("/muhasebe-finans");
+  revalidatePath("/tahsilat-merkezi");
   revalidatePath("/finans");
   return { success: true as const };
+}
+
+/**
+ * Faz 4.6 — Muhasebe tahsilat CSV export.
+ *
+ * Filtreyle uyumlu payments listesini sunucu tarafında CSV string'e çevirir.
+ * `loadAccountingFinanceDashboard` üzerinden çalışır → org scope ve RLS aynen korunur.
+ *
+ * Parametreler `AccountingFinanceFilters` ile aynı sözleşmedir; UI'da kullanıcının
+ * gördüğü filtreler aynen aktarılır. `lessonsOnly: true` desteklenmez (CSV
+ * tahsilat listesi içindir).
+ */
+/**
+ * Faz 8.10 — Hard cap (memory pressure safety).
+ * Server-side row limit; loadAccountingFinanceDashboard zaten paginasyonlu
+ * snapshot döner ama export tüm snapshot.payments'i alır. Burada ek bir
+ * guard koyarak büyük org'larda memory pressure riskini düşürürüz.
+ */
+const ACCOUNTING_EXPORT_HARD_CAP = 10000;
+
+export async function exportAccountingFinancePaymentsCSV(
+  rawFilters: AccountingFinanceFilters = {}
+): Promise<
+  | { csv: string; filename: string; rowCount: number; truncated?: boolean; cap?: number }
+  | { error: string }
+> {
+  // Faz 11.7 — Rate limit.
+  const resolvedForRl = await resolveSessionActor({ claimRequiresOrganization: false });
+  if (!("error" in resolvedForRl)) {
+    const orgIdForRl = resolvedForRl.actor.organizationId || (rawFilters.orgId || "global");
+    const rl = checkExportRateLimit({
+      userId: resolvedForRl.actor.id,
+      organizationId: orgIdForRl,
+      exportKind: "accounting",
+    });
+    if (!rl.allowed) {
+      return {
+        error: `Tahsilat dışa aktarımı için çok fazla istek yapıldı. Lütfen ${Math.ceil(rl.retryAfterMs / 1000)} saniye sonra tekrar deneyin.`,
+      };
+    }
+  }
+
+  const filters: AccountingFinanceFilters = { ...rawFilters, lessonsOnly: false };
+  const result = await loadAccountingFinanceDashboard(filters);
+  if ("error" in result) return { error: result.error };
+
+  const snapshot = result.snapshot;
+
+  /**
+   * Faz 5.4 — Polished CSV başlıkları.
+   * Kolon sırası operasyonel okuma için optimize:
+   *   1. Tarih → 2. Vade → 3. Sporcu → 4. Durum → 5. Tutarlar → 6. Tip/Kapsam → 7. Açıklama
+   * Tarihler `DD.MM.YYYY` formatında lokalize edilir; ham ISO bozulmaz.
+   * Ödeme türü/kapsam/durum kullanıcı dilinde (label fonksiyonları).
+   */
+  const headers = [
+    "Tahsilat Tarihi",
+    "Vade Tarihi",
+    "Sporcu",
+    "Durum",
+    "Tutar (TL)",
+    "Ödenen (TL)",
+    "Kalan (TL)",
+    "Ödeme Türü",
+    "Kapsam",
+    "Açıklama",
+    "Kanal",
+    "Kaynak",
+    "Paket ID",
+  ];
+
+  const formatTrDate = (iso: string | null) => {
+    if (!iso) return "";
+    // Yalnızca tarih kısmını alıp Istanbul TZ varsayımı ile tr-TR biçimine çeviriyoruz.
+    // ISO formatı çok değişkenli olduğundan ham fallback'i koru.
+    const dateOnly = iso.length >= 10 ? iso.slice(0, 10) : iso;
+    if (!/^\d{4}-\d{2}-\d{2}/.test(dateOnly)) return iso;
+    const [y, m, d] = dateOnly.split("-");
+    return `${d}.${m}.${y}`;
+  };
+
+  const rows = snapshot.payments.map((p) => [
+    formatTrDate(p.paymentDate),
+    formatTrDate(p.dueDate),
+    p.athleteName,
+    getAccountingPaymentStatusLabel(p.status),
+    p.amount,
+    p.paidAmount,
+    p.remainingBalance ?? "",
+    getAccountingPaymentKindLabel(p.paymentKind || p.paymentType),
+    getAccountingPaymentScopeLabel(p.paymentScope),
+    p.descriptionText,
+    p.channelLabel,
+    p.sourceLabel,
+    p.packageId ?? "",
+  ]);
+
+  const built = buildCsvFromRows(headers, rows, { maxRows: ACCOUNTING_EXPORT_HARD_CAP });
+  const filename = csvFilename("muhasebe", "tahsilat", {
+    month: snapshot.filtersApplied.month || null,
+    from: snapshot.filtersApplied.dateFrom || null,
+    to: snapshot.filtersApplied.dateTo || null,
+    coach: snapshot.filtersApplied.coachId || null,
+  });
+  logger.info("export.payments", "accounting payments csv built", {
+    rowCount: built.rowCount,
+    truncated: built.truncated,
+    cap: ACCOUNTING_EXPORT_HARD_CAP,
+    month: snapshot.filtersApplied.month,
+    dateFrom: snapshot.filtersApplied.dateFrom,
+    dateTo: snapshot.filtersApplied.dateTo,
+  });
+  return {
+    csv: built.csv,
+    filename,
+    rowCount: built.rowCount,
+    truncated: built.truncated || undefined,
+    cap: built.truncated ? ACCOUNTING_EXPORT_HARD_CAP : undefined,
+  };
 }

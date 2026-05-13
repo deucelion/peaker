@@ -26,6 +26,9 @@ export default function GunlukIdmanRaporu() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorKind, setLoadErrorKind] = useState<
+    "permission_denied" | "auth_required" | "fetch_error" | null
+  >(null);
 
   const checkUserRole = useCallback(async () => {
     const directory = await listManagementDirectory();
@@ -39,10 +42,16 @@ export default function GunlukIdmanRaporu() {
   const fetchDailyReports = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setLoadErrorKind(null);
     const result = await listDailyTrainingLoadReports();
     if ("error" in result) {
       setReports([]);
       setLoadError(result.error ?? "Raporlar alinamadi.");
+      setLoadErrorKind(
+        ("errorKind" in result && typeof result.errorKind === "string"
+          ? (result.errorKind as "permission_denied" | "auth_required" | "fetch_error")
+          : "fetch_error")
+      );
     } else {
       setReports((result.reports || []) as TrainingLoadReport[]);
     }
@@ -154,11 +163,24 @@ export default function GunlukIdmanRaporu() {
         </div>
 
         <div className="divide-y divide-white/5">
-          {loadError && (
+          {loadError && loadErrorKind === "permission_denied" ? (
+            <div
+              className="p-6 sm:p-8 text-amber-200 break-words px-4 space-y-1"
+              role="status"
+              aria-live="polite"
+            >
+              <p className="text-[10px] sm:text-xs font-black italic uppercase tracking-wide sm:tracking-widest text-amber-100">
+                Bu alanı görüntüleme yetkiniz yok.
+              </p>
+              <p className="text-[9px] sm:text-[10px] font-bold normal-case tracking-normal text-amber-200/80">
+                {loadError}
+              </p>
+            </div>
+          ) : loadError ? (
             <div className="p-6 sm:p-8 text-center text-red-400 font-black italic uppercase tracking-wide sm:tracking-widest text-xs break-words px-4">
               {loadError}
             </div>
-          )}
+          ) : null}
           {!loadError && reports
             .filter((r) => r.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()))
             .map((report) => (

@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, PlusCircle, UserRound, Package, CircleDollarSign, ChevronDown, Check, X } from "lucide-react";
 import Notification from "@/components/Notification";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import { createPrivateLessonPackage, listPrivateLessonFormOptions, listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import type { PrivateLessonPackage } from "@/lib/types";
 import { PackageCard } from "./_components/PackageCard";
@@ -528,16 +528,23 @@ function PackageList({
         {title}
       </h2>
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center sm:py-10">
-          <EmptyStateCard
-            title="Kayıt bulunamadı"
+        subdued ? (
+          <EmptyState
+            variant="no_data"
+            title="Geçmiş paket yok"
             description={emptyText}
-            reason="Seçili görünümde listelenecek paket kaydı henüz oluşmamış olabilir."
-            primaryAction={{ label: "Yeni paket oluştur", onClick: onCreate }}
-            secondaryAction={{ label: "Ders yönetimine git", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
             compact
           />
-        </div>
+        ) : (
+          <EmptyState
+            variant="onboarding"
+            title="İlk özel ders paketini oluştur"
+            description={emptyText}
+            reason="Paket oluşturduğunuzda otomatik ödeme planı, kalan ders takibi ve sporcu paneli senkronizasyonu devreye girer."
+            primaryAction={{ label: "Yeni paket oluştur", onClick: onCreate }}
+            secondaryAction={{ label: "Ders yönetimine git", href: "/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi" }}
+          />
+        )
       ) : (
         <div className="grid gap-4 sm:gap-5">
           {items.map((pkg) => (

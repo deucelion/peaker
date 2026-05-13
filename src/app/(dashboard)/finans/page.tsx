@@ -8,6 +8,7 @@ import Notification from "@/components/Notification";
 import EmptyStateCard from "@/components/EmptyStateCard";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 type FinanceListPlayer = {
   id: string;
   full_name: string;
@@ -15,7 +16,7 @@ type FinanceListPlayer = {
   position?: string | null;
   financeSummary: FinanceStatusSummary;
   nextAidatPlan: { dueDate: string | null; amount: number | null };
-  paymentModel: "Aylik" | "Paket" | "Hibrit" | "Ek Tahsilat";
+  paymentModel: "Aylik" | "Paket" | "Hibrit" | "Özel tahsilat";
   activeProductLabel: string | null;
   overdueAmount: number;
   pendingAmountTotal: number;
@@ -23,7 +24,12 @@ type FinanceListPlayer = {
   lastPaymentAmount: number | null;
 };
 
-export default function FinansYonetimi() {
+type FinansYonetimiProps = {
+  /** Birleşik Muhasebe & Finans sayfasında sekme olarak kullanıldığında true. */
+  embedded?: boolean;
+};
+
+export default function FinansYonetimi({ embedded = false }: FinansYonetimiProps = {}) {
   const [players, setPlayers] = useState<FinanceListPlayer[]>([]);
   const [pendingAmountTotal, setPendingAmountTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
@@ -104,34 +110,69 @@ export default function FinansYonetimi() {
   }
 
   return (
-    <div className="ui-page-loose space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="ui-h1">Sporcu <span className="text-green-500">Ödemeleri</span></h1>
-          <p className="ui-lead border-green-500">Sporcu bazlı borç, ödeme ve tahsilat durumlarını yönetin.</p>
-          <p className="mt-2 text-xs font-semibold text-gray-400">
-            Bu ekran sporcu finans takibi içindir; genel muhasebe ve koç ödemesi süreci ayrı panelde yönetilir.
-          </p>
-          {canOpenAccountingPanel ? (
-            <Link
-              href="/muhasebe-finans"
-              className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/15"
+    <div
+      className={
+        embedded
+          ? "space-y-6"
+          : "ui-page-loose space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]"
+      }
+    >
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span
+            className="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-200"
+            title="Sporcu kartlarındaki rakamlar tarihten bağımsız tüm zaman bakiyelerini ve son ödemeleri gösterir."
+          >
+            Tüm zaman
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right"
+              title="Tüm zaman: bekleyen aidat satırları + paketlerdeki kalan bakiye"
             >
-              Genel muhasebe paneline git
-            </Link>
-          ) : null}
-        </div>
-        <div className="flex gap-3">
-          <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
-            <p className="text-[8px] font-black uppercase text-gray-500">Bekleyen toplam</p>
-            <p className="text-xl font-black italic text-amber-300">₺{pendingAmountTotal.toLocaleString("tr-TR")}</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
-            <p className="text-[8px] font-black uppercase text-gray-500">Tahsilat gücü</p>
-            <p className="text-xl font-black italic text-emerald-400">%{collectionPower}</p>
+              <p className="text-[8px] font-black uppercase text-gray-500">Bekleyen toplam</p>
+              <p className="text-xl font-black italic text-amber-300">₺{pendingAmountTotal.toLocaleString("tr-TR")}</p>
+            </div>
+            <div
+              className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right"
+              title="Toplam tahsil edilen / (Tahsil edilen + Bekleyen)"
+            >
+              <p className="text-[8px] font-black uppercase text-gray-500">Tahsilat gücü</p>
+              <p className="text-xl font-black italic text-emerald-400">%{collectionPower}</p>
+            </div>
           </div>
         </div>
-      </header>
+      ) : (
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="ui-h1">Sporcu <span className="text-green-500">Ödemeleri</span></h1>
+            <p className="ui-lead border-green-500">Sporcu bazlı borç, ödeme ve tahsilat durumlarını yönetin.</p>
+            <p className="mt-2 text-xs font-semibold text-gray-400">
+              Bu ekran sporcu finans takibi içindir; genel muhasebe ve koç ödemesi süreci ayrı panelde yönetilir.
+            </p>
+            {canOpenAccountingPanel ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href={PATHS.tahsilatMerkezi}
+                  className="inline-flex min-h-10 items-center rounded-xl border border-emerald-500/45 bg-emerald-500/15 px-3 text-[10px] font-black uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/25"
+                >
+                  Muhasebe &amp; Finans
+                </Link>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex gap-3">
+            <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
+              <p className="text-[8px] font-black uppercase text-gray-500">Bekleyen toplam</p>
+              <p className="text-xl font-black italic text-amber-300">₺{pendingAmountTotal.toLocaleString("tr-TR")}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
+              <p className="text-[8px] font-black uppercase text-gray-500">Tahsilat gücü</p>
+              <p className="text-xl font-black italic text-emerald-400">%{collectionPower}</p>
+            </div>
+          </div>
+        </header>
+      )}
 
       {loadError ? <Notification message={loadError} variant="error" /> : null}
 
@@ -180,7 +221,7 @@ export default function FinansYonetimi() {
           return (
             <Link
               key={player.id}
-              href={`/finans/${player.id}`}
+              href={embedded ? `/finans/${player.id}?from=workspace` : `/finans/${player.id}`}
               className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#121215] p-4 transition-colors sm:flex-row sm:items-center sm:justify-between sm:hover:border-green-500/40"
             >
               <div className="min-w-0">
@@ -190,14 +231,27 @@ export default function FinansYonetimi() {
               </div>
               <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
                 <div className="text-left sm:text-right">
-                    <p className="text-[9px] font-black uppercase text-gray-500">Sonraki planli tahsilat</p>
+                    <p
+                      className="text-[9px] font-black uppercase text-gray-500"
+                      title="Yalnızca aidat planından gelir; özel ders paket bakiyesi aşağıda 'Açık bakiye' satırındadır."
+                    >
+                      Sonraki aidat
+                    </p>
                   <p className="text-xs font-black text-white">{player.financeSummary.nextDueDate || player.nextAidatPlan.dueDate || "-"}</p>
                   <p className="text-xs font-bold text-gray-400">₺{player.financeSummary.nextAmount ?? player.nextAidatPlan.amount ?? 0}</p>
                     <p className="text-[10px] font-semibold text-red-300">Vadesi geçmiş: ₺{player.overdueAmount.toLocaleString("tr-TR")}</p>
-                    <p className="text-[10px] font-semibold text-amber-300">Açık bakiye: ₺{player.pendingAmountTotal.toLocaleString("tr-TR")}</p>
-                    <p className="text-[10px] font-semibold text-gray-500">
-                      Son tahsilat: {player.lastPaymentDate ? new Date(player.lastPaymentDate).toLocaleDateString("tr-TR") : "-"} · ₺
-                      {(player.lastPaymentAmount ?? 0).toLocaleString("tr-TR")}
+                    <p
+                      className="text-[10px] font-semibold text-amber-300"
+                      title="Tüm zaman: bekleyen aidat + paketlerde kalan bakiye"
+                    >
+                      Açık bakiye: ₺{player.pendingAmountTotal.toLocaleString("tr-TR")}
+                    </p>
+                    <p className="text-xs font-semibold text-gray-400">
+                      Son tahsilat:{" "}
+                      {player.lastPaymentDate
+                        ? new Date(`${player.lastPaymentDate}T12:00:00`).toLocaleDateString("tr-TR")
+                        : "—"}{" "}
+                      · ₺{(player.lastPaymentAmount ?? 0).toLocaleString("tr-TR")}
                     </p>
                 </div>
                 <div className="text-[11px] font-black uppercase">{toneNode}</div>
@@ -219,7 +273,9 @@ export default function FinansYonetimi() {
               },
             }}
             secondaryAction={
-              canOpenAccountingPanel ? { label: "Muhasebe paneline git", href: "/muhasebe-finans" } : undefined
+              canOpenAccountingPanel
+                ? { label: "Tahsilat Merkezi", href: PATHS.tahsilatMerkezi }
+                : undefined
             }
           />
         ) : null}

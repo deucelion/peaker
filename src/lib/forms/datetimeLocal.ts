@@ -21,29 +21,46 @@ export function combineLocalDateAndTime(date: string, time: string): string {
 
 function formatWithTrLocale(
   iso: string,
-  options: Intl.DateTimeFormatOptions
+  options: Intl.DateTimeFormatOptions,
+  timeZone: string = "Europe/Istanbul"
 ): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
   return new Intl.DateTimeFormat("tr-TR", {
-    timeZone: "Europe/Istanbul",
+    timeZone,
     ...options,
   }).format(d);
 }
 
-export function formatLessonDateTimeTr(iso: string): string {
-  return formatWithTrLocale(iso, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/**
+ * Ders zamanı formatı (TR locale).
+ * @param timeZone Organizasyonun saat dilimi (IANA). Verilmezse global varsayılan kullanılır.
+ */
+export function formatLessonDateTimeTr(iso: string, timeZone: string = "Europe/Istanbul"): string {
+  return formatWithTrLocale(
+    iso,
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+    timeZone
+  );
 }
 
-export function formatLessonTimeTr(iso: string): string {
-  return formatWithTrLocale(iso, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/**
+ * Ders saati formatı (TR locale).
+ * @param timeZone Organizasyonun saat dilimi (IANA). Verilmezse global varsayılan kullanılır.
+ */
+export function formatLessonTimeTr(iso: string, timeZone: string = "Europe/Istanbul"): string {
+  return formatWithTrLocale(
+    iso,
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+    timeZone
+  );
 }

@@ -147,7 +147,8 @@ export async function createAthleteProgram(formData: FormData) {
   const dateText = new Date().toLocaleDateString("tr-TR");
   await insertNotificationsForUsers(
     validAthleteIds,
-    `${title} programi ${coachName} tarafindan ${dateText} tarihinde eklendi.`
+    `${title} programi ${coachName} tarafindan ${dateText} tarihinde eklendi.`,
+    "program.published"
   );
 
   revalidatePath("/notlar-haftalik-program");

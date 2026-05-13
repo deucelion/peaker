@@ -9,8 +9,9 @@ import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
 import type { PaymentRow } from "@/types/domain";
-import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE } from "@/lib/schedule/scheduleWallTime";
+import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 
 type ManagementRole = "admin" | "coach";
 type DailyTrainingLoadReport = {
@@ -27,18 +28,36 @@ type DailyTrainingLoadReport = {
   };
 };
 
+/**
+ * Yönetim aksiyonları için ortak hata sınıflandırması (Faz 2.4):
+ * - "permission_denied" → oturum var ama bu kapı kapalı (coach inactive, rol yanlış vb.)
+ * - "auth_required"     → oturum yok / claim çözülmedi
+ * - "fetch_error"       → DB / runtime hatası
+ *
+ * UI bu alana göre "Yetkiniz yok" / "Veri yok" / "Hata" ayrımını yapar.
+ */
+export type ManagementErrorKind = "permission_denied" | "auth_required" | "fetch_error";
+
 async function resolveManagementActor() {
   const resolved = await resolveSessionActor();
-  if ("error" in resolved) return { error: resolved.error };
+  if ("error" in resolved) return { error: resolved.error, errorKind: "auth_required" as const };
   const sa = resolved.actor;
   if (sa.role !== "admin" && sa.role !== "coach") {
-    return { error: "Bu islem icin yetkiniz yok." as const };
+    return {
+      error: "Bu islem icin yetkiniz yok." as const,
+      errorKind: "permission_denied" as const,
+    };
   }
   const organizationId = sa.organizationId;
-  if (!organizationId) return { error: "Organizasyon bilgisi alinamadi." as const };
+  if (!organizationId) {
+    return {
+      error: "Organizasyon bilgisi alinamadi." as const,
+      errorKind: "auth_required" as const,
+    };
+  }
   if (sa.role === "coach") {
     const coachBlock = messageIfCoachCannotOperate(sa.role, sa.isActive ?? true);
-    if (coachBlock) return { error: coachBlock };
+    if (coachBlock) return { error: coachBlock, errorKind: "permission_denied" as const };
   }
   return {
     actorId: sa.id,
@@ -181,10 +200,13 @@ export async function listManagementDirectory() {
       }),
     }));
 
+  const timeZone = await resolveOrganizationTimeZone(resolved.organizationId);
+
   return {
     role: resolved.role,
     actorUserId: resolved.actorId,
     organizationId: resolved.organizationId,
+    timeZone,
     permissions,
     coaches,
     athletes,
@@ -194,21 +216,33 @@ export async function listManagementDirectory() {
 
 export async function listDailyTrainingLoadReports() {
   const resolved = await resolveManagementActor();
-  if ("error" in resolved) return { error: resolved.error };
+  if ("error" in resolved) {
+    return {
+      error: resolved.error,
+      errorKind: resolved.errorKind ?? ("fetch_error" as ManagementErrorKind),
+    };
+  }
 
   const permissions =
     resolved.role === "coach"
       ? await getCoachPermissions(resolved.actorId, resolved.organizationId)
       : DEFAULT_COACH_PERMISSIONS;
   if (resolved.role === "coach" && !permissions.can_view_reports) {
-    return { error: "Rapor goruntuleme yetkiniz yok." as const };
+    return {
+      error: "Rapor goruntuleme yetkiniz yok." as const,
+      errorKind: "permission_denied" as const,
+    };
   }
 
   const adminClient = createSupabaseAdminClient();
-  const todayKey = isoToZonedDateKey(new Date().toISOString(), SCHEDULE_APP_TIME_ZONE);
-  const dayRange = istanbulDateWallRangeToHalfOpenUtc(todayKey, todayKey);
+  const orgTimeZone = await resolveOrganizationTimeZone(resolved.organizationId);
+  const todayKey = isoToZonedDateKey(new Date().toISOString(), orgTimeZone);
+  const dayRange = istanbulDateWallRangeToHalfOpenUtc(todayKey, todayKey, orgTimeZone);
   if (!dayRange) {
-    return { error: "Gunluk rapor tarihi hesaplanamadi." as const };
+    return {
+      error: "Gunluk rapor tarihi hesaplanamadi." as const,
+      errorKind: "fetch_error" as const,
+    };
   }
   const { data: loadRows, error: loadError } = await adminClient
     .from("training_loads")
@@ -217,7 +251,12 @@ export async function listDailyTrainingLoadReports() {
     .lt("measurement_date", dayRange.toExclusive)
     .order("measurement_date", { ascending: false });
 
-  if (loadError) return { error: `Raporlar alinamadi: ${loadError.message}` };
+  if (loadError) {
+    return {
+      error: `Raporlar alinamadi: ${loadError.message}`,
+      errorKind: "fetch_error" as const,
+    };
+  }
 
   const orgRows = (loadRows || []) as Array<{
     id: string;
@@ -236,7 +275,12 @@ export async function listDailyTrainingLoadReports() {
     .in("id", profileIds)
     .eq("organization_id", resolved.organizationId);
 
-  if (profileError) return { error: `Sporcu profilleri alinamadi: ${profileError.message}` };
+  if (profileError) {
+    return {
+      error: `Sporcu profilleri alinamadi: ${profileError.message}`,
+      errorKind: "fetch_error" as const,
+    };
+  }
 
   const profileMap = new Map((profileRows || []).map((p) => [p.id, p]));
   const reports: DailyTrainingLoadReport[] = orgRows

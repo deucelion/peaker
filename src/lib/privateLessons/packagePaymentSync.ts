@@ -7,6 +7,7 @@ import { isUuid } from "@/lib/validation/uuid";
 import { normalizeMoney } from "@/lib/privateLessons/packageMath";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE } from "@/lib/schedule/scheduleWallTime";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 
 function resolveMonthNameTr(month: number) {
   return (
@@ -27,9 +28,11 @@ function resolveMonthNameTr(month: number) {
   );
 }
 
-/** Ödeme anı ISO timestamptz → payments.due_date / month_name / year_int (uygulama saat dilimi duvarı). */
-export function paymentBookkeepingFromPaidAtIso(paidAtIso: string) {
-  const tz = SCHEDULE_APP_TIME_ZONE;
+/**
+ * Ödeme anı ISO timestamptz → payments.due_date / month_name / year_int (organizasyonun saat dilimi duvarı).
+ * @param tz Organizasyonun saat dilimi (IANA). Verilmezse global varsayılan kullanılır.
+ */
+export function paymentBookkeepingFromPaidAtIso(paidAtIso: string, tz: string = SCHEDULE_APP_TIME_ZONE) {
   const paidWallKey = isoToZonedDateKey(paidAtIso, tz);
   const wallParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(paidWallKey);
   const wallMonth = wallParts ? Number(wallParts[2]) : new Date().getMonth() + 1;
@@ -54,6 +57,7 @@ export type PackagePaymentSyncResult = PackagePaymentSyncOk | { ok: false; error
 
 export function revalidateAfterPrivateLessonPackagePayment(packageId: string) {
   revalidatePath("/muhasebe-finans");
+  revalidatePath("/tahsilat-merkezi");
   revalidatePath("/finans");
   revalidatePath("/ozel-ders-paketleri");
   revalidatePath(`/ozel-ders-paketleri/${packageId}`);
@@ -122,10 +126,11 @@ export async function applyPrivateLessonPackagePaymentWithPaymentRow(args: {
     };
   }
 
+  const orgTimeZone = await resolveOrganizationTimeZone(organizationId);
   const period =
     args.dueDateKey && args.monthName != null && args.yearInt != null
       ? { dueDateKey: args.dueDateKey, monthName: args.monthName, yearInt: args.yearInt }
-      : paymentBookkeepingFromPaidAtIso(args.paidAtIso);
+      : paymentBookkeepingFromPaidAtIso(args.paidAtIso, orgTimeZone);
 
   const paymentKind = "private_lesson_package";
   const paymentScope = "private_lesson";

@@ -13,6 +13,87 @@ export function toShortDateTr(date: Date): string {
 }
 
 /**
+ * Sentinel marker: fillCalendarDays tarafından üretilen "boş gün" satırlarını
+ * gerçek kayıtlardan ayırt etmek için. Risk istatistikleri (avg RPE, monotony,
+ * strain) gibi gerçek girilmiş veriye dayanması gereken hesaplar bu satırları
+ * filtreleyerek dışarıda bırakır.
+ */
+export const SYNTHETIC_EMPTY_DAY_PROFILE_ID = "__empty_day__";
+
+export function isSyntheticEmptyDay(row: TrainingLoadRow): boolean {
+  return row.profile_id === SYNTHETIC_EMPTY_DAY_PROFILE_ID;
+}
+
+/**
+ * Verilen `[fromKey, toKey]` aralığındaki HER takvim günü için bir nokta üretir.
+ *
+ * - Mevcut load satırları (org TZ takvim gününe göre) korunur.
+ * - Aynı güne birden fazla satır varsa `aggregateTrainingLoadsByCalendarDay`
+ *   sonrası verilmesi beklenir; o yüzden burada "ilk eşleşen" yeterli.
+ * - Ölçüm olmayan günler için `total_load = 0`, `rpe_score = null` synthetic satır.
+ * - Sıralı (artan) bir dizi döner; ACWR/EWMA penceresi gerçek 7g/28g takvim günü
+ *   olur, "son 7 kayıt" pseudo-pencere değil.
+ *
+ * Backward-compat: yeni helper. `processACWRData` / `processEWMAData` davranışı
+ * çağrıldıkları girişe göre değişmez; çağrı yerleri (Performans page,
+ * AthletePerformanceInsightsPanel) bu helper'ı opsiyonel olarak kullanır.
+ */
+export function fillCalendarDays(
+  loads: TrainingLoadRow[],
+  fromKey: string,
+  toKey: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+): TrainingLoadRow[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromKey) || !/^\d{4}-\d{2}-\d{2}$/.test(toKey)) {
+    return [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
+  }
+  if (fromKey > toKey) return [];
+
+  const byKey = new Map<string, TrainingLoadRow>();
+  for (const row of loads) {
+    const key = loadRowIstanbulDateKey(row, tz);
+    if (!key) continue;
+    if (key < fromKey || key > toKey) continue;
+    if (!byKey.has(key)) byKey.set(key, row);
+  }
+
+  const out: TrainingLoadRow[] = [];
+  for (const dayKey of enumerateCalendarDayKeys(fromKey, toKey)) {
+    const found = byKey.get(dayKey);
+    if (found) {
+      out.push(found);
+    } else {
+      out.push({
+        profile_id: SYNTHETIC_EMPTY_DAY_PROFILE_ID,
+        measurement_date: `${dayKey}T12:00:00.000Z`,
+        total_load: 0,
+        rpe_score: null,
+      });
+    }
+  }
+  return out;
+}
+
+function enumerateCalendarDayKeys(fromKey: string, toKey: string): string[] {
+  const out: string[] = [];
+  const [fy, fm, fd] = fromKey.split("-").map(Number);
+  const [ty, tm, td] = toKey.split("-").map(Number);
+  if ([fy, fm, fd, ty, tm, td].some((n) => !Number.isFinite(n))) return out;
+  // UTC tabanlı yürütüş; sadece takvim günü etiketi üretiriz, TZ'a duyarsız:
+  // her iki uç UTC öğlende temsil edilir, gün arası eşit aralık.
+  const cur = new Date(Date.UTC(fy, fm - 1, fd, 12, 0, 0));
+  const end = new Date(Date.UTC(ty, tm - 1, td, 12, 0, 0));
+  while (cur.getTime() <= end.getTime()) {
+    const y = cur.getUTCFullYear();
+    const m = String(cur.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(cur.getUTCDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${d}`);
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/**
  * Takım kapsamında aynı takvim gününe ait birden fazla sporcu kaydını tek günlük noktaya indirir.
  * Günlük ortalama toplam yük (AU) ve o gün RPE girenlerin ortalama RPE değeri — ACWR/EWMA tek zaman ekseninde tutarlı kalır.
  */
@@ -102,37 +183,51 @@ export function processEWMAData(loads: TrainingLoadRow[]): EwmaPoint[] {
   });
 }
 
-/** measurement_date anının İstanbul takvim günü (YYYY-MM-DD). */
-export function loadRowIstanbulDateKey(row: TrainingLoadRow): string {
+/**
+ * measurement_date anının takvim günü (YYYY-MM-DD).
+ * @param tz IANA tz; verilmezse global varsayılan.
+ */
+export function loadRowIstanbulDateKey(row: TrainingLoadRow, tz: string = SCHEDULE_APP_TIME_ZONE): string {
   const raw = row.measurement_date;
   if (!raw) return "";
-  return isoToZonedDateKey(new Date(raw).toISOString(), SCHEDULE_APP_TIME_ZONE);
+  return isoToZonedDateKey(new Date(raw).toISOString(), tz);
 }
 
 export function filterTrainingLoadsByIstanbulInclusiveRange(
   loads: TrainingLoadRow[],
   fromKey: string,
-  toKey: string
+  toKey: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
 ): TrainingLoadRow[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromKey) || !/^\d{4}-\d{2}-\d{2}$/.test(toKey)) return [];
   return loads.filter((row) => {
-    const k = loadRowIstanbulDateKey(row);
+    const k = loadRowIstanbulDateKey(row, tz);
     return k >= fromKey && k <= toKey;
   });
 }
 
-export function filterAcwrPointsByIstanbulInclusiveRange(points: AcwrPoint[], fromKey: string, toKey: string): AcwrPoint[] {
+export function filterAcwrPointsByIstanbulInclusiveRange(
+  points: AcwrPoint[],
+  fromKey: string,
+  toKey: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+): AcwrPoint[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromKey) || !/^\d{4}-\d{2}-\d{2}$/.test(toKey)) return [];
   return points.filter((p) => {
-    const k = isoToZonedDateKey(new Date(p.ts).toISOString(), SCHEDULE_APP_TIME_ZONE);
+    const k = isoToZonedDateKey(new Date(p.ts).toISOString(), tz);
     return k >= fromKey && k <= toKey;
   });
 }
 
-export function filterEwmaPointsByIstanbulInclusiveRange(points: EwmaPoint[], fromKey: string, toKey: string): EwmaPoint[] {
+export function filterEwmaPointsByIstanbulInclusiveRange(
+  points: EwmaPoint[],
+  fromKey: string,
+  toKey: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+): EwmaPoint[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromKey) || !/^\d{4}-\d{2}-\d{2}$/.test(toKey)) return [];
   return points.filter((p) => {
-    const k = isoToZonedDateKey(new Date(p.ts).toISOString(), SCHEDULE_APP_TIME_ZONE);
+    const k = isoToZonedDateKey(new Date(p.ts).toISOString(), tz);
     return k >= fromKey && k <= toKey;
   });
 }

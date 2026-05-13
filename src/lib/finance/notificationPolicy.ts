@@ -9,10 +9,7 @@ export type FinancialPaymentScope = "membership" | "private_lesson" | "extra_cha
 export type FinancialPaymentKind =
   | "monthly_membership"
   | "private_lesson_package"
-  | "license"
-  | "event"
-  | "equipment"
-  | "manual_other";
+  | string;
 
 export function shouldNotifyFinancialEvent(
   eventType: FinancialEventType,

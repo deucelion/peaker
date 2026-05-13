@@ -10,6 +10,11 @@ import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessi
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { toDisplayName } from "@/lib/profile/displayName";
 import type { WellnessReportRow } from "@/types/performance";
+import {
+  WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE,
+  WELLNESS_ARCHIVE_MAX_PAGE_SIZE,
+  type WellnessArchiveFilter,
+} from "@/lib/wellness/archiveConfig";
 
 /** Sabah raporu vb. formlar: sporcu organization_id sunucu doğrulamalı (RLS’e güvenilmez). */
 export async function getAthleteOrganizationIdForWellness() {
@@ -146,9 +151,33 @@ export async function submitWellnessReportToday(input: {
 }
 
 /** Koç / admin: organizasyon wellness arşivi (performans wellness-detay sayfası). */
-export async function listWellnessArchiveForManagement(): Promise<
-  { reports: WellnessReportRow[]; totalAthletes: number } | { error: string }
+/**
+ * Faz 8.9 — Wellness arşivi pagination + tarih filtresi.
+ *
+ * Varsayılan parametreler eski davranışla uyumludur:
+ *   page=1, pageSize=200 → mevcut UI tek seferde küçük org'lar için 200 raporu yükler.
+ * Büyük org'larda UI yeni `fromDate` / `toDate` / `page` parametrelerini gönderir.
+ *
+ * Pagination strategy: server-side `range(from, to)` ile stable; created_at değil
+ * report_date (DESC, id DESC) compound sıralama tutarlı sayfalama sağlar.
+ *
+ * Not: Sabitler ve filtre tipi `@/lib/wellness/archiveConfig` modülünde
+ * (use-server-uyumsuz olduğundan ayrı dosya).
+ */
+
+export async function listWellnessArchiveForManagement(
+  filter: WellnessArchiveFilter = {}
+): Promise<
+  | {
+      reports: WellnessReportRow[];
+      totalAthletes: number;
+      total: number;
+      page: number;
+      pageSize: number;
+    }
+  | { error: string }
 > {
+  const isYyyyMmDdLike = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
   if ("error" in resolved) return { error: resolved.error };
   const actor = toTenantProfileRow(resolved.actor);
@@ -171,14 +200,48 @@ export async function listWellnessArchiveForManagement(): Promise<
     return { error: "Wellness raporlarini goruntuleme yetkiniz yok." };
   }
 
-  const [{ data: reportRows, error: reportErr }, { count: athleteCount, error: countErr }] = await Promise.all([
-    adminClient
-      .from("wellness_reports")
-      .select(
-        "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles(full_name, organization_id, avatar_url)"
-      )
-      .eq("profiles.organization_id", orgId)
-      .order("report_date", { ascending: false }),
+  const fromDate = filter.fromDate?.trim();
+  const toDate = filter.toDate?.trim();
+  if (fromDate && !isYyyyMmDdLike(fromDate)) {
+    return { error: "Geçersiz başlangıç tarihi." };
+  }
+  if (toDate && !isYyyyMmDdLike(toDate)) {
+    return { error: "Geçersiz bitiş tarihi." };
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    return { error: "Başlangıç tarihi bitişten sonra olamaz." };
+  }
+
+  const requestedSize = Math.max(
+    1,
+    Math.min(
+      filter.pageSize ?? WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE,
+      WELLNESS_ARCHIVE_MAX_PAGE_SIZE
+    )
+  );
+  const page = Math.max(1, Math.floor(filter.page ?? 1));
+  const rangeFrom = (page - 1) * requestedSize;
+  const rangeTo = rangeFrom + requestedSize - 1;
+
+  let reportsQuery = adminClient
+    .from("wellness_reports")
+    .select(
+      "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles!inner(full_name, organization_id, avatar_url)",
+      { count: "exact" }
+    )
+    .eq("profiles.organization_id", orgId)
+    .order("report_date", { ascending: false })
+    .order("id", { ascending: false })
+    .range(rangeFrom, rangeTo);
+
+  if (fromDate) reportsQuery = reportsQuery.gte("report_date", fromDate);
+  if (toDate) reportsQuery = reportsQuery.lte("report_date", toDate);
+
+  const [
+    { data: reportRows, error: reportErr, count: totalReports },
+    { count: athleteCount, error: countErr },
+  ] = await Promise.all([
+    reportsQuery,
     adminClient
       .from("profiles")
       .select("id", { count: "exact", head: true })
@@ -209,7 +272,13 @@ export async function listWellnessArchiveForManagement(): Promise<
     };
   });
 
-  return { reports, totalAthletes: athleteCount ?? 0 };
+  return {
+    reports,
+    totalAthletes: athleteCount ?? 0,
+    total: totalReports ?? reports.length,
+    page,
+    pageSize: requestedSize,
+  };
 }
 
 export type WellnessRadarRow = {

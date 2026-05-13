@@ -9,31 +9,94 @@ import Link from "next/link";
 import type { WellnessReportRow } from "@/types/performance";
 import type { ReactNode, SVGProps } from "react";
 import { listWellnessArchiveForManagement } from "@/lib/actions/wellnessFormActions";
+import { WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE } from "@/lib/wellness/archiveConfig";
 import Notification from "@/components/Notification";
+import { LoadMoreButton } from "@/components/ui/data-display";
 
 export default function WellnessDetay() {
   const [reports, setReports] = useState<WellnessReportRow[]>([]);
   const [totalAthletes, setTotalAthletes] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  // Faz 9.5 — date filter UI; default empty (tüm arşiv).
+  const [draftFromDate, setDraftFromDate] = useState("");
+  const [draftToDate, setDraftToDate] = useState("");
+  const [appliedFromDate, setAppliedFromDate] = useState("");
+  const [appliedToDate, setAppliedToDate] = useState("");
+  const [filterFeedback, setFilterFeedback] = useState<string | null>(null);
+  const pageSize = WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE;
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setPage(1);
     try {
-      const res = await listWellnessArchiveForManagement();
+      const res = await listWellnessArchiveForManagement({
+        page: 1,
+        pageSize,
+        fromDate: appliedFromDate || undefined,
+        toDate: appliedToDate || undefined,
+      });
       if ("error" in res) {
         setLoadError(res.error);
         setReports([]);
         setTotalAthletes(0);
+        setTotal(0);
         return;
       }
       setReports(res.reports);
       setTotalAthletes(res.totalAthletes);
+      setTotal(res.total);
     } finally {
       setLoading(false);
     }
+  }, [pageSize, appliedFromDate, appliedToDate]);
+
+  const loadMore = useCallback(async () => {
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const res = await listWellnessArchiveForManagement({
+        page: nextPage,
+        pageSize,
+        fromDate: appliedFromDate || undefined,
+        toDate: appliedToDate || undefined,
+      });
+      if ("error" in res) {
+        setLoadError(res.error);
+        return;
+      }
+      setReports((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...res.reports.filter((r) => !seen.has(r.id))];
+      });
+      setPage(nextPage);
+      setTotal(res.total);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page, pageSize, appliedFromDate, appliedToDate]);
+
+  const applyDateFilter = useCallback(() => {
+    setFilterFeedback(null);
+    if (draftFromDate && draftToDate && draftFromDate > draftToDate) {
+      setFilterFeedback("Başlangıç tarihi bitişten sonra olamaz.");
+      return;
+    }
+    setAppliedFromDate(draftFromDate);
+    setAppliedToDate(draftToDate);
+  }, [draftFromDate, draftToDate]);
+
+  const resetDateFilter = useCallback(() => {
+    setDraftFromDate("");
+    setDraftToDate("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
+    setFilterFeedback(null);
   }, []);
 
   useEffect(() => {
@@ -143,6 +206,48 @@ export default function WellnessDetay() {
         </div>
       </header>
 
+      {/* TARİH FİLTRESİ — Faz 9.5 */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-[#121215] p-4 sm:flex-row sm:items-end sm:gap-4 sm:p-5 min-w-0">
+        <label className="flex flex-1 flex-col gap-1 min-w-0">
+          <span className="text-[9px] font-black uppercase tracking-[0.25em] text-gray-500">Başlangıç</span>
+          <input
+            type="date"
+            value={draftFromDate}
+            onChange={(e) => setDraftFromDate(e.target.value)}
+            className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-[12px] font-bold text-white outline-none focus:border-[#7c3aed]/50 touch-manipulation"
+          />
+        </label>
+        <label className="flex flex-1 flex-col gap-1 min-w-0">
+          <span className="text-[9px] font-black uppercase tracking-[0.25em] text-gray-500">Bitiş</span>
+          <input
+            type="date"
+            value={draftToDate}
+            onChange={(e) => setDraftToDate(e.target.value)}
+            className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-[12px] font-bold text-white outline-none focus:border-[#7c3aed]/50 touch-manipulation"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={applyDateFilter}
+            className="min-h-11 rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-widest text-white sm:hover:bg-[#6d28d9] transition-colors touch-manipulation"
+          >
+            Uygula
+          </button>
+          <button
+            type="button"
+            onClick={resetDateFilter}
+            disabled={!appliedFromDate && !appliedToDate && !draftFromDate && !draftToDate}
+            className="min-h-11 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-widest text-gray-300 disabled:cursor-not-allowed disabled:opacity-40 sm:hover:border-[#7c3aed]/40 sm:hover:text-white transition-colors touch-manipulation"
+          >
+            Sıfırla
+          </button>
+        </div>
+      </div>
+      {filterFeedback ? (
+        <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">{filterFeedback}</p>
+      ) : null}
+
       {/* ÖZET KARTLARI (Quick View) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 min-w-0">
         <StatsCard label="TOPLAM RAPOR" value={reports.length} icon={<Activity size={16}/>} />
@@ -226,6 +331,12 @@ export default function WellnessDetay() {
             </div>
           ))
         )}
+        <LoadMoreButton
+          loaded={reports.length}
+          total={total}
+          loading={loadingMore}
+          onClick={() => void loadMore()}
+        />
       </div>
     </div>
   );

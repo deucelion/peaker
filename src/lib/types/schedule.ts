@@ -34,4 +34,6 @@ export interface WeeklyLessonScheduleSnapshot {
   selectedCoachId: string | null;
   coachOptions: WeeklyLessonScheduleCoachOption[];
   items: WeeklyLessonScheduleItem[];
+  /** Organizasyonun saat dilimi (IANA). Tüm UI saat hesapları bu değere göre yapılır. */
+  timeZone?: string;
 }

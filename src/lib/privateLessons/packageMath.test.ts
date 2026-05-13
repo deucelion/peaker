@@ -4,6 +4,7 @@ import {
   computePaymentStatus,
   computeRemainingLessons,
   normalizeMoney,
+  parseMoneyInput,
 } from "@/lib/privateLessons/packageMath";
 
 describe("private lesson package math", () => {
@@ -11,6 +12,14 @@ describe("private lesson package math", () => {
     expect(normalizeMoney("10.235")).toBe(10.24);
     expect(normalizeMoney(-5)).toBe(0);
     expect(normalizeMoney(undefined)).toBe(0);
+  });
+
+  it("parses money inputs in locale-safe way", () => {
+    expect(parseMoneyInput("18.000")).toBe(18000);
+    expect(parseMoneyInput("18,000.50")).toBe(18000.5);
+    expect(parseMoneyInput("18.000,50")).toBe(18000.5);
+    expect(parseMoneyInput("1250,75")).toBe(1250.75);
+    expect(parseMoneyInput("abc")).toBeNull();
   });
 
   it("computes payment status correctly", () => {

@@ -316,12 +316,14 @@ export async function createPrivateLessonSession(formData: FormData) {
     try {
       await insertNotificationsForUsers(
         [pkg.athlete_id as string],
-        `Yeni özel ders planlandı: ${when}${locPart} (${label}).`
+        `Yeni özel ders planlandı: ${when}${locPart} (${label}).`,
+        "private_lesson.created"
       );
       if (coachId && coachId !== pkg.athlete_id) {
         await insertNotificationsForUsers(
           [coachId],
-          `Özel ders planı: ${when}${locPart} · ${label}.`
+          `Özel ders planı: ${when}${locPart} · ${label}.`,
+          "private_lesson.created"
         );
       }
     } catch {
@@ -400,7 +402,8 @@ export async function completePrivateLessonSession(sessionId: string) {
       if (pkgRow?.athlete_id) {
         await insertNotificationsForUsers(
           [pkgRow.athlete_id as string],
-          `${pName}: Planlanan özel ders tamamlandı; paketten 1 ders düşüldü.`
+          `${pName}: Planlanan özel ders tamamlandı; paketten 1 ders düşüldü.`,
+          "private_lesson.updated"
         );
       }
     } catch {
@@ -466,7 +469,8 @@ export async function cancelPrivateLessonSession(sessionId: string) {
       if (sess.athlete_id) {
         await insertNotificationsForUsers(
           [sess.athlete_id as string],
-          `Özel ders planı iptal edildi: ${when}.`
+          `Özel ders planı iptal edildi: ${when}.`,
+          "private_lesson.cancelled"
         );
       }
     } catch {

@@ -44,8 +44,36 @@ test("admin: dashboard + aidat + özel paket + sporcular + koçlar (ve varsa ko�
   await page.goto("/oyuncular");
   await expect(page.getByRole("heading", { name: /TAKIM/i })).toBeVisible();
 
+  // Faz 3.3 — Sporcu Yönetimi → Takım Yönetimi geçişi. Buton mevcutsa
+  // takımlar workspace'i açılır; tablo veya empty-state durumu doğrulanır.
+  const teamWorkspaceButton = page.getByRole("button", { name: /Takım yönetimi/i });
+  if ((await teamWorkspaceButton.count()) > 0) {
+    await teamWorkspaceButton.first().click();
+    await expect(page.getByRole("heading", { name: /Takım yönetimi/i })).toBeVisible();
+    // Tablo (ekipler varsa) veya "Henüz takım oluşturulmadı" empty-state.
+    const teamsTable = page.locator("table");
+    const teamsEmpty = page.getByText(/Henüz takım oluşturulmadı/i);
+    await expect(teamsTable.or(teamsEmpty)).toBeVisible();
+    // Kadro ekranına geri dön.
+    await page.getByRole("button", { name: /Sporcu yönetimi ekranına dön/i }).click();
+  }
+
   await page.goto("/koclar");
   await expect(page.getByRole("heading", { name: /KOÇ/i })).toBeVisible();
+
+  // Performans Merkezi: yalnızca route + h1 erişilebilirliği — veri girişi gerektirmez.
+  await page.goto("/performans");
+  await expect(page.getByRole("heading", { name: /PERFORMANS/i })).toBeVisible();
+
+  // Tahsilat Merkezi (Muhasebe & Finans birleşik workspace): route + h1.
+  await page.goto("/tahsilat-merkezi");
+  await expect(page.getByRole("heading", { name: /MUHASEBE|FİNANS|TAHSİLAT/i })).toBeVisible();
+
+  // Faz 3.3 — Audit log UI smoke (admin görür). H1 + sayfalama veya empty state.
+  await page.goto("/audit-log");
+  await expect(page.getByRole("heading", { name: /Audit/i })).toBeVisible();
+  const auditList = page.locator("section").filter({ hasText: /Kayıtlar/i });
+  await expect(auditList.first()).toBeVisible();
 
   const coachRowLinks = page.locator('.ui-page a[href^="/koclar/"]');
   if ((await coachRowLinks.count()) > 0) {
@@ -53,6 +81,64 @@ test("admin: dashboard + aidat + özel paket + sporcular + koçlar (ve varsa ko�
     await expect(page).toHaveURL(/\/koclar\/[0-9a-f-]{20,}/i);
     await expect(page.locator("h1").first()).toBeVisible();
   }
+});
+
+/**
+ * Faz 3.3 — Özel Ders Paketi ödeme akışı için skeleton.
+ *
+ * Tam ödeme akışını çalıştırmak side-effect doğurur (gerçek ödeme satırı yazar).
+ * Bu yüzden skeleton: sayfanın açılması, paket varsa detay açılması ve
+ * "Ödeme" CTA'sının/formunun erişilebilirliği. Form submit yapılmaz.
+ */
+test("admin: özel ders paketi ödeme formu skeleton (form-only)", async ({ page }) => {
+  test.skip(
+    !hasPair(process.env.E2E_ADMIN_EMAIL, process.env.E2E_ADMIN_PASSWORD),
+    "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD tanımlı değil"
+  );
+  await loginViaUi(page, process.env.E2E_ADMIN_EMAIL!, process.env.E2E_ADMIN_PASSWORD!);
+  await waitForDashboardShell(page);
+
+  await page.goto("/ozel-ders-paketleri");
+  await expect(page.getByRole("heading", { name: /ÖZEL DERS/i })).toBeVisible();
+
+  const packageLinks = page.locator('a[href^="/ozel-ders-paketleri/"]');
+  const count = await packageLinks.count();
+  test.skip(count === 0, "Paket bulunamadı; ödeme skeleton testi atlandı.");
+
+  await packageLinks.first().click();
+  await expect(page).toHaveURL(/\/ozel-ders-paketleri\/[0-9a-f-]{20,}/i);
+  await expect(page.locator("h1").first()).toBeVisible();
+
+  // Ödeme bölümü erişilebilir mi? "Ödeme" başlığı veya tutar input'u beklenir.
+  const paymentArea = page.getByText(/Ödeme|Tahsilat/i).first();
+  if ((await paymentArea.count()) > 0) {
+    await expect(paymentArea).toBeVisible();
+  }
+});
+
+/**
+ * Faz 3.3 — Sporcu RPE anketi → Performans Merkezi route doğrulaması.
+ *
+ * Sporcu olarak giriş yapılır; anket sayfası ve performans verisi izinleri varsa
+ * /performans yönlendirmesi de çalışmalı. RPE submit yapılmaz (yan etki olur).
+ */
+test("athlete: anket sayfası açılır, performans verisi izniyle uyumludur", async ({ page }) => {
+  test.skip(
+    !hasPair(process.env.E2E_ATHLETE_EMAIL, process.env.E2E_ATHLETE_PASSWORD),
+    "E2E_ATHLETE_EMAIL / E2E_ATHLETE_PASSWORD tanımlı değil"
+  );
+  await loginViaUi(page, process.env.E2E_ATHLETE_EMAIL!, process.env.E2E_ATHLETE_PASSWORD!);
+  await waitForDashboardShell(page);
+
+  // Sporcu paneli ana sayfası.
+  await expect(page).toHaveURL(/\/sporcu/);
+
+  // Anket sayfası: izin kapalıysa proxy başka sayfaya gönderir; bu durumda skip.
+  await page.goto("/anket");
+  if (!page.url().includes("/anket")) {
+    test.skip(true, "Anket erişimi izinle kapalı; smoke atlandı.");
+  }
+  await expect(page.locator("h1").first()).toBeVisible();
 });
 
 test("coach: giriş → günlük operasyon paneli", async ({ page }) => {

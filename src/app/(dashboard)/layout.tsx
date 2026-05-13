@@ -16,13 +16,15 @@ import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import { 
   LayoutDashboard, Users, Settings, User, Calendar,
   Activity, LogOut,   Trophy, Bell, Bolt, ClipboardCheck, 
-  TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText, Plus
+  TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText, Plus,
+  Shield,
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { getUnreadNotificationCount } from "@/lib/actions/notificationActions";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import type { CoachPermissions, AthletePermissions } from "@/lib/types";
+import { PeakerDebugInstaller } from "@/components/dev/PeakerDebugInstaller";
 
 const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
@@ -38,6 +40,7 @@ const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   User: <User size={18} />,
   TrendingUp: <TrendingUp size={16} />,
   Settings: <Settings size={16} />,
+  Shield: <Shield size={16} />,
 };
 
 export default function DashboardLayout({
@@ -412,6 +415,7 @@ export default function DashboardLayout({
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto animate-in fade-in duration-500">
             {children}
+            {process.env.NODE_ENV === "development" ? <PeakerDebugInstaller /> : null}
           </div>
         </div>
       </main>

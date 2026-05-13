@@ -5,13 +5,13 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Line,
   ReferenceLine,
   ReferenceArea,
   Area,
   ComposedChart,
 } from "recharts";
+import { ChartFrame } from "@/components/ui/charts";
 import {
   Activity,
   TrendingUp,
@@ -25,17 +25,31 @@ import {
   Siren,
   RotateCcw,
   CalendarRange,
-  Info,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
+import { SkeletonCard, SkeletonChart, SkeletonStatGrid } from "@/components/ui/skeletons";
 import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
-import { listPerformanceAnalyticsData } from "@/lib/actions/performanceAnalyticsActions";
+import {
+  exportPerformanceSummaryCSV,
+  listPerformanceAnalyticsData,
+} from "@/lib/actions/performanceAnalyticsActions";
+import { summarizeFieldTestSignalsForAthlete } from "@/lib/actions/athleticFieldActions";
 import type { AcwrPoint, AthleteOption, EwmaPoint, TrainingLoadRow, WellnessReportRow } from "@/types/performance";
-import type { ReactNode } from "react";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
+import {
+  AcwrChartTooltip,
+  ChartEmptyState,
+  CompactKpi,
+  EwmaChartTooltip,
+  OverallStatusBar,
+  type ChartTipPayload,
+} from "./_components/PerformancePresentational";
+import FieldTestSignalsCard from "./_components/FieldTestSignalsCard";
 import {
   computeRiskStats,
   emptyRiskStats,
+  fillCalendarDays,
   filterAcwrPointsByIstanbulInclusiveRange,
   filterEwmaPointsByIstanbulInclusiveRange,
   filterTrainingLoadsByIstanbulInclusiveRange,
@@ -44,18 +58,21 @@ import {
   processACWRData,
   processEWMAData,
 } from "@/lib/performance/loadSeries";
-import { istanbulLastNDaysInclusive } from "@/lib/performance/performanceDateRange";
 import {
   buildKpiNarratives,
   deriveOverallPerformanceDecision,
   derivePerformanceRecommendations,
-  type OverallPerformanceDecision,
 } from "@/lib/performance/performanceDecision";
+import {
+  usePerformanceDashboard,
+  type PerformancePresetKey,
+} from "@/lib/hooks/usePerformanceDashboard";
 
-const TEAM_VALUE = "";
+/** Sporcu seçilmediği başlangıç durumu için boş değer. Performans takibi sporcu bazlıdır; takım geneli görünümü kaldırıldı. */
+const NO_ATHLETE_VALUE = "";
 
-type RangeMode = "preset" | "custom";
-type PresetKey = "7" | "14" | "28" | "90";
+// Faz 9.1 — PresetKey alias'ı hook ile aynı tipte tutulur.
+type PresetKey = PerformancePresetKey;
 
 function formatTrRangeLabel(fromKey: string, toKey: string): string {
   const a = new Date(`${fromKey}T12:00:00Z`);
@@ -66,27 +83,66 @@ function formatTrRangeLabel(fromKey: string, toKey: string): string {
 
 export default function PerformanceAnalytics() {
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [orgTimeZone, setOrgTimeZone] = useState<string>("Europe/Istanbul");
   const [orgLoading, setOrgLoading] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [selectedAthleteId, setSelectedAthleteId] = useState<string>(TEAM_VALUE);
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [acwrData, setAcwrData] = useState<AcwrPoint[]>([]);
   const [ewmaData, setEwmaData] = useState<EwmaPoint[]>([]);
   const [wellnessReports, setWellnessReports] = useState<WellnessReportRow[]>([]);
   const [riskStats, setRiskStats] = useState(emptyRiskStats());
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [fieldTestSignal, setFieldTestSignal] = useState<{
+    totalMeasurements: number;
+    distinctMetricCount: number;
+    lastTestDate: string | null;
+    sinceDays: number;
+    trendCounts: { improved: number; regressed: number; stable: number; unknown: number; insufficient_data: number };
+    trendsTop: Array<{
+      metricId: string;
+      metricName: string;
+      unit: string;
+      status: "improved" | "regressed" | "stable" | "unknown" | "insufficient_data";
+      lastValue: number | null;
+      previousValue: number | null;
+      changePercent: number | null;
+    }>;
+  } | null>(null);
   const [filterFeedback, setFilterFeedback] = useState<string | null>(null);
-  const [filterError, setFilterError] = useState<string | null>(null);
+  // filterError artık usePerformanceDashboard hook'unda; lokal state kaldırıldı.
 
-  const default28 = useMemo(() => istanbulLastNDaysInclusive(28), []);
-
-  const [rangeMode, setRangeMode] = useState<RangeMode>("preset");
-  const [draftPreset, setDraftPreset] = useState<PresetKey>("28");
-  const [draftFrom, setDraftFrom] = useState(default28.from);
-  const [draftTo, setDraftTo] = useState(default28.to);
-  const [appliedFrom, setAppliedFrom] = useState(default28.from);
-  const [appliedTo, setAppliedTo] = useState(default28.to);
-  const [appliedPreset, setAppliedPreset] = useState<PresetKey | null>("28");
+  // Faz 9.1 + Faz 10.1a — Range, fetch lifecycle (loading/error), seçili sporcu
+  // ve filter state hook'a taşındı (usePerformanceDashboard).
+  // Davranış parity: aynı default (28 gün), preset semantik aynı, loadError
+  // ve selectedAthleteId aynı semantik.
+  const perfDashboard = usePerformanceDashboard({ timeZone: orgTimeZone, initialPreset: "28" });
+  const {
+    range: {
+      rangeMode,
+      draftPreset,
+      draftFrom,
+      draftTo,
+      appliedFrom,
+      appliedTo,
+      appliedPreset,
+    },
+    filterError,
+    loading,
+    loadError,
+    loadErrorKind,
+    selectedAthleteId,
+    setRangeMode,
+    setDraftPreset,
+    setDraftFrom,
+    setDraftTo,
+    applyFilters: applyFiltersHook,
+    resetToDefault,
+    setLoading,
+    setLoadError,
+    setLoadErrorKind,
+    setSelectedAthleteId,
+  } = perfDashboard;
+  // Page-only state: export ve feedback.
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,44 +152,65 @@ export default function PerformanceAnalytics() {
       if (cancelled) return;
       if ("error" in dir) {
         setLoadError(dir.error ?? "Organizasyon bilgisi alınamadı.");
+        setLoadErrorKind("fetch_error");
         setOrgId(null);
         setAthletes([]);
       } else {
         setOrgId(dir.organizationId);
+        const tzFromDir =
+          "timeZone" in dir && typeof dir.timeZone === "string" && dir.timeZone
+            ? dir.timeZone
+            : "Europe/Istanbul";
+        setOrgTimeZone(tzFromDir);
         setAthletes(
           dir.athletes
             .filter((a) => profileRowIsActive(a.is_active))
             .map((a) => ({ id: a.id, full_name: a.full_name }))
         );
         setLoadError(null);
-        const d = istanbulLastNDaysInclusive(28);
-        setDraftFrom(d.from);
-        setDraftTo(d.to);
-        setAppliedFrom(d.from);
-        setAppliedTo(d.to);
-        setAppliedPreset("28");
-        setDraftPreset("28");
-        setRangeMode("preset");
+        setLoadErrorKind(null);
+        // Faz 9.1 — Hook'a tz-aware 28 gün varsayılan uygulanır.
+        // Davranış parity: önceki sürümde draft/applied + preset birlikte set
+        // ediliyordu; resetToDefault aynı sonucu üretir.
+        resetToDefault(tzFromDir);
       }
       setOrgLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resetToDefault, setLoadError, setLoadErrorKind]);
 
   const fetchData = useCallback(async () => {
     if (!orgId || !appliedFrom || !appliedTo) return;
+    if (!selectedAthleteId) {
+      setAcwrData([]);
+      setEwmaData([]);
+      setWellnessReports([]);
+      setRiskStats(emptyRiskStats());
+      setFieldTestSignal(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(null);
+    setLoadErrorKind(null);
     try {
-      const athleteId = selectedAthleteId === TEAM_VALUE ? null : selectedAthleteId;
-      const result = await listPerformanceAnalyticsData(orgId, athleteId, {
+      const result = await listPerformanceAnalyticsData(orgId, selectedAthleteId, {
         dateFrom: appliedFrom,
         dateTo: appliedTo,
       });
       if ("error" in result) {
         setLoadError(result.error ?? "Performans verisi alınamadı.");
+        setLoadErrorKind(
+          ("errorKind" in result && typeof result.errorKind === "string"
+            ? (result.errorKind as
+                | "permission_denied"
+                | "auth_required"
+                | "invalid_input"
+                | "fetch_error")
+            : "fetch_error")
+        );
         setAcwrData([]);
         setEwmaData([]);
         setWellnessReports([]);
@@ -144,16 +221,25 @@ export default function PerformanceAnalytics() {
       const range = result.appliedRange ?? { dateFrom: appliedFrom, dateTo: appliedTo };
       const loads = (result.loads || []) as unknown as TrainingLoadRow[];
       const reports = (result.reports || []) as WellnessReportRow[];
+      const tz =
+        "timeZone" in result && typeof result.timeZone === "string" && result.timeZone
+          ? result.timeZone
+          : orgTimeZone;
+      if (tz !== orgTimeZone) setOrgTimeZone(tz);
 
-      const extended = [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
-      const displayLoads = filterTrainingLoadsByIstanbulInclusiveRange(extended, range.dateFrom, range.dateTo);
+      const sortedRaw = [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
+      // ACWR/EWMA penceresi gerçek 7g/28g takvim günü olmalı; ölçüm olmayan
+      // günler 0 yük ile doldurulur. computeRiskStats'in monotony/strain hesabı
+      // dinlenme günlerini doğal olarak yansıtır (Faz 2.6).
+      const filled = fillCalendarDays(sortedRaw, range.dateFrom, range.dateTo, tz);
+      const displayLoads = filterTrainingLoadsByIstanbulInclusiveRange(filled, range.dateFrom, range.dateTo, tz);
       setWellnessReports(reports);
 
-      if (extended.length > 0) {
-        const acwrFull = processACWRData(extended);
-        const ewmaFull = processEWMAData(extended);
-        const acwrDisplay = filterAcwrPointsByIstanbulInclusiveRange(acwrFull, range.dateFrom, range.dateTo);
-        const ewmaDisplay = filterEwmaPointsByIstanbulInclusiveRange(ewmaFull, range.dateFrom, range.dateTo);
+      if (filled.length > 0) {
+        const acwrFull = processACWRData(filled);
+        const ewmaFull = processEWMAData(filled);
+        const acwrDisplay = filterAcwrPointsByIstanbulInclusiveRange(acwrFull, range.dateFrom, range.dateTo, tz);
+        const ewmaDisplay = filterEwmaPointsByIstanbulInclusiveRange(ewmaFull, range.dateFrom, range.dateTo, tz);
         setAcwrData(acwrDisplay);
         setEwmaData(ewmaDisplay);
         setRiskStats(computeRiskStats(acwrDisplay, ewmaDisplay, displayLoads, reports));
@@ -162,61 +248,78 @@ export default function PerformanceAnalytics() {
         setEwmaData([]);
         setRiskStats(computeRiskStats([], [], [], reports));
       }
+
+      // Faz 2.1 — Saha test sinyali (yorumlama yok; salt veri varlığı/tarihi gösterilir).
+      try {
+        const signalRes = await summarizeFieldTestSignalsForAthlete({
+          athleteId: selectedAthleteId,
+          sinceDays: 90,
+        });
+        if (!("error" in signalRes)) {
+          const trendsAll = Array.isArray(signalRes.trends) ? signalRes.trends : [];
+          const trendsTop = trendsAll.slice(0, 4).map((t) => ({
+            metricId: t.metricId,
+            metricName: t.metricName,
+            unit: t.unit,
+            status: t.status,
+            lastValue: t.lastValue,
+            previousValue: t.previousValue,
+            changePercent: t.changePercent,
+          }));
+          const counts = signalRes.trendCounts || {
+            improved: 0,
+            regressed: 0,
+            stable: 0,
+            unknown: 0,
+            insufficient_data: 0,
+          };
+          setFieldTestSignal({
+            totalMeasurements: signalRes.totalMeasurements,
+            distinctMetricCount: signalRes.distinctMetricCount,
+            lastTestDate: signalRes.lastTestDate,
+            sinceDays: signalRes.sinceDays,
+            trendCounts: counts,
+            trendsTop,
+          });
+        } else {
+          setFieldTestSignal(null);
+        }
+      } catch {
+        setFieldTestSignal(null);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "";
       if (message) {
         console.warn("Performans verisi uyarisi:", message);
         setLoadError(`Performans verisi alınamadı: ${message}`);
+        setLoadErrorKind("fetch_error");
       }
     } finally {
       setLoading(false);
     }
-  }, [orgId, selectedAthleteId, appliedFrom, appliedTo]);
+  }, [orgId, selectedAthleteId, appliedFrom, appliedTo, orgTimeZone, setLoading, setLoadError, setLoadErrorKind]);
+
+  useEffect(() => {
+    if (!selectedAthleteId && athletes.length > 0) {
+      setSelectedAthleteId(athletes[0].id);
+    }
+  }, [athletes, selectedAthleteId, setSelectedAthleteId]);
 
   useEffect(() => {
     if (orgId) void fetchData();
   }, [orgId, fetchData]);
 
   const applyFilters = useCallback(() => {
-    setFilterError(null);
-    if (rangeMode === "custom") {
-      if (!draftFrom || !draftTo) {
-        setFilterError("Baslangic ve bitis tarihlerini secin.");
-        return;
-      }
-      if (draftFrom > draftTo) {
-        setFilterError("Baslangic, bitisten sonra olamaz.");
-        return;
-      }
-      setAppliedFrom(draftFrom);
-      setAppliedTo(draftTo);
-      setAppliedPreset(null);
-    } else {
-      const n =
-        draftPreset === "7" ? 7 : draftPreset === "14" ? 14 : draftPreset === "90" ? 90 : 28;
-      const { from, to } = istanbulLastNDaysInclusive(n);
-      setAppliedFrom(from);
-      setAppliedTo(to);
-      setDraftFrom(from);
-      setDraftTo(to);
-      setAppliedPreset(draftPreset);
-    }
+    const ok = applyFiltersHook();
+    if (!ok) return;
     setFilterFeedback("Filtreler uygulandı");
     window.setTimeout(() => setFilterFeedback(null), 2800);
-  }, [rangeMode, draftFrom, draftTo, draftPreset]);
+  }, [applyFiltersHook]);
 
   const resetFilters = useCallback(() => {
-    const { from, to } = istanbulLastNDaysInclusive(28);
-    setRangeMode("preset");
-    setDraftPreset("28");
-    setDraftFrom(from);
-    setDraftTo(to);
-    setAppliedFrom(from);
-    setAppliedTo(to);
-    setAppliedPreset("28");
-    setFilterError(null);
+    resetToDefault(orgTimeZone);
     setFilterFeedback(null);
-  }, []);
+  }, [orgTimeZone, resetToDefault]);
 
   const periodBadge = useMemo(() => {
     if (appliedPreset) {
@@ -291,9 +394,11 @@ export default function PerformanceAnalytics() {
 
   if (orgLoading || (loading && !orgId)) {
     return (
-      <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={48} aria-hidden />
-        <p className="text-center text-[10px] font-black uppercase italic tracking-[0.2em] text-gray-600 sm:tracking-[0.3em]">Analiz Motoru Hazırlanıyor...</p>
+      <div className="space-y-5 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]" role="status" aria-label="Performans Merkezi yükleniyor">
+        <SkeletonCard rows={2} />
+        <SkeletonStatGrid count={4} />
+        <SkeletonChart variant="line" height={260} />
+        <SkeletonChart variant="line" height={220} />
       </div>
     );
   }
@@ -323,11 +428,17 @@ export default function PerformanceAnalytics() {
             Performans <span className="text-[#7c3aed]">Merkezi</span>
           </h1>
           <p className="ui-lead break-words text-gray-400">
-            Karar desteği: risk, yük dengesi ve öneriler — Europe/Istanbul takvimine göre seçili dönem.
+            Karar desteği: risk, yük dengesi ve öneriler — organizasyon takvimine göre seçili dönem.
           </p>
           <p className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400">
             <CalendarRange size={12} className="text-[#7c3aed] shrink-0" aria-hidden />
             <span className="text-white/90">{periodBadge}</span>
+            <span
+              className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[8px] font-black tracking-wider text-gray-300"
+              title="Organizasyonun saat dilimi. Tüm dönem hesaplamaları bu takvime göre yapılır."
+            >
+              {orgTimeZone}
+            </span>
           </p>
         </div>
 
@@ -337,8 +448,11 @@ export default function PerformanceAnalytics() {
               className="ui-select w-full min-h-11 bg-[#121215] border-white/5 px-5 rounded-2xl italic text-base sm:text-[10px] uppercase appearance-none cursor-pointer tracking-wide sm:tracking-widest shadow-xl touch-manipulation"
               onChange={(e) => setSelectedAthleteId(e.target.value)}
               value={selectedAthleteId}
+              aria-label="Sporcu seçin"
             >
-              <option value={TEAM_VALUE}>Takım Geneli</option>
+              <option value={NO_ATHLETE_VALUE} disabled>
+                {athletes.length === 0 ? "Aktif sporcu yok" : "Sporcu seçin"}
+              </option>
               {athletes.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.full_name}
@@ -355,8 +469,66 @@ export default function PerformanceAnalytics() {
             <Loader2 className={`size-3.5 shrink-0 ${loading ? "animate-spin text-[#7c3aed]" : "opacity-60"}`} aria-hidden />
             Yenile
           </button>
+          <button
+            type="button"
+            disabled={!orgId || exportBusy}
+            onClick={async () => {
+              if (!orgId) return;
+              setExportBusy(true);
+              setExportFeedback(null);
+              try {
+                const res = await exportPerformanceSummaryCSV(orgId, { dateFrom: appliedFrom, dateTo: appliedTo });
+                if ("error" in res) {
+                  setExportFeedback({ tone: "err", text: typeof res.error === "string" ? res.error : "CSV indirilemedi." });
+                } else {
+                  const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = res.filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  setExportFeedback({
+                    tone: res.truncated ? "warn" : "ok",
+                    text: res.truncated
+                      ? `İlk ${res.cap} sporcu indirildi.`
+                      : `${res.rowCount} sporcu özet satırı indirildi.`,
+                  });
+                }
+              } catch {
+                setExportFeedback({ tone: "err", text: "CSV indirilemedi." });
+              } finally {
+                setExportBusy(false);
+              }
+            }}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 touch-manipulation"
+            aria-label="Performans özetini CSV olarak indir"
+          >
+            {exportBusy ? (
+              <Loader2 className="size-3.5 animate-spin text-emerald-400" aria-hidden />
+            ) : (
+              <Download size={12} className="opacity-80" aria-hidden />
+            )}
+            CSV indir
+          </button>
         </div>
       </header>
+      {exportFeedback ? (
+        <p
+          className={`mt-2 text-[10px] font-black uppercase tracking-widest ${
+            exportFeedback.tone === "err"
+              ? "text-red-300"
+              : exportFeedback.tone === "warn"
+                ? "text-amber-200"
+                : "text-emerald-300"
+          }`}
+          role="status"
+        >
+          {exportFeedback.text}
+        </p>
+      ) : null}
 
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Performans alt gezinim">
         {performanceTabs.map((tab) => (
@@ -477,6 +649,10 @@ export default function PerformanceAnalytics() {
         <OverallStatusBar decision={overallDecision} />
       </div>
 
+      {selectedAthleteId && fieldTestSignal && fieldTestSignal.totalMeasurements > 0 ? (
+        <FieldTestSignalsCard signal={fieldTestSignal} />
+      ) : null}
+
       {loading && (
         <div className="mt-4 flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500">
           <Loader2 className="animate-spin text-[#7c3aed]" size={16} aria-hidden />
@@ -576,11 +752,25 @@ export default function PerformanceAnalytics() {
         </div>
       )}
 
-      {loadError && (
+      {loadError && loadErrorKind === "permission_denied" ? (
+        <div
+          className="mt-4 flex flex-wrap items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-6 py-4 text-[10px] font-bold uppercase tracking-wide text-amber-200 break-words min-w-0"
+          role="status"
+          aria-live="polite"
+        >
+          <ShieldCheck size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <div className="min-w-0 space-y-1">
+            <p className="text-amber-100">Bu alanı görüntüleme yetkiniz yok.</p>
+            <p className="font-normal normal-case tracking-normal text-amber-200/80">
+              {loadError}
+            </p>
+          </div>
+        </div>
+      ) : loadError ? (
         <div className="ui-badge-danger !rounded-2xl !px-6 !py-4 !text-[10px] break-words min-w-0 mt-4">
           {loadError}
         </div>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
         <div className="lg:col-span-6 ui-card-chart group min-w-0 !p-5 sm:!p-8">
@@ -606,14 +796,13 @@ export default function PerformanceAnalytics() {
             </div>
           </div>
 
-          <div
-            className={`w-full min-w-0 ${acwrData.length === 0 ? "min-h-[140px] sm:min-h-[160px]" : "h-[220px] sm:h-[280px] lg:h-[320px]"}`}
-          >
-            {acwrData.length === 0 ? (
+          {acwrData.length === 0 ? (
+            <div className="w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
               <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={acwrData}>
+            </div>
+          ) : (
+            <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
+              <ComposedChart data={acwrData}>
                   <defs>
                     <linearGradient id="colorAkut" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
@@ -673,9 +862,8 @@ export default function PerformanceAnalytics() {
                   <Line yAxisId="load" type="monotone" dataKey="kronik" stroke="#374151" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                   <Line yAxisId="ratio" type="monotone" dataKey="ratio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+            </ChartFrame>
+          )}
         </div>
 
         <div className="lg:col-span-6 ui-card-chart group min-w-0 !p-5 sm:!p-8">
@@ -701,14 +889,13 @@ export default function PerformanceAnalytics() {
             </div>
           </div>
 
-          <div
-            className={`w-full min-w-0 ${ewmaData.length === 0 ? "min-h-[140px] sm:min-h-[160px]" : "h-[220px] sm:h-[280px] lg:h-[320px]"}`}
-          >
-            {ewmaData.length === 0 ? (
+          {ewmaData.length === 0 ? (
+            <div className="w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
               <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={ewmaData}>
+            </div>
+          ) : (
+            <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
+              <ComposedChart data={ewmaData}>
                   <ReferenceArea yAxisId="ratio" y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.08} />
                   <ReferenceArea yAxisId="ratio" y1={1.3} y2={1.5} fill="#eab308" fillOpacity={0.08} />
                   <ReferenceArea yAxisId="ratio" y1={1.5} y2={ewmaRatioDomainMax} fill="#ef4444" fillOpacity={0.14} />
@@ -754,9 +941,8 @@ export default function PerformanceAnalytics() {
                   <Line yAxisId="load" type="monotone" dataKey="chronicEwma" stroke="#374151" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                   <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+            </ChartFrame>
+          )}
         </div>
 
         <div className="lg:col-span-12 ui-card-chart flex flex-col min-w-0 !p-5 sm:!p-8">
@@ -832,169 +1018,3 @@ export default function PerformanceAnalytics() {
   );
 }
 
-function OverallStatusBar({ decision }: { decision: OverallPerformanceDecision }) {
-  const shell: Record<OverallPerformanceDecision["level"], string> = {
-    ok: "border-emerald-500/30 bg-emerald-500/[0.06]",
-    watch: "border-amber-400/35 bg-amber-500/[0.07]",
-    risk: "border-red-500/35 bg-red-500/[0.07]",
-    nodata: "border-white/10 bg-white/[0.03]",
-  };
-  const emoji: Record<OverallPerformanceDecision["level"], string> = {
-    ok: "🟢",
-    watch: "🟡",
-    risk: "🔴",
-    nodata: "⚪",
-  };
-  return (
-    <div className={`rounded-2xl border px-4 py-3 sm:px-5 sm:py-3.5 ${shell[decision.level]}`}>
-      <p className="text-[8px] font-black uppercase tracking-[0.2em] text-gray-500">Genel durum</p>
-      <p className="mt-1 flex flex-wrap items-center gap-2 text-sm font-black text-white sm:text-base">
-        <span aria-hidden>{emoji[decision.level]}</span>
-        <span>{decision.headline}</span>
-      </p>
-      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-400 sm:text-xs">{decision.detail}</p>
-    </div>
-  );
-}
-
-type ChartTipPayload = { dataKey?: string | number; value?: number | string; name?: string; color?: string };
-
-function bandLabelForRatio(ratio: number): string {
-  if (ratio > 1.5) return "Riskli";
-  if (ratio >= 0.8 && ratio <= 1.3) return "Optimal";
-  if (ratio > 0 && ratio < 0.8) return "Düşük yük";
-  return "Dikkat";
-}
-
-function AcwrChartTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: ChartTipPayload[];
-  label?: string | number;
-}) {
-  if (!active || !payload?.length) return null;
-  const ratioRaw = payload.find((p) => p.dataKey === "ratio")?.value;
-  const ratio = typeof ratioRaw === "number" ? ratioRaw : Number(ratioRaw);
-  const zone = Number.isFinite(ratio) ? bandLabelForRatio(ratio) : "—";
-  return (
-    <div className="max-w-[220px] rounded-xl border border-white/10 bg-[#1c1c21] px-3 py-2.5 text-[10px] shadow-xl">
-      {label != null && String(label) !== "" && (
-        <p className="mb-1 font-black uppercase tracking-widest text-gray-500">{String(label)}</p>
-      )}
-      {payload.map((p) => (
-        <p key={String(p.dataKey)} className="font-bold tabular-nums text-gray-200">
-          <span className="text-gray-500">{p.name ?? p.dataKey}: </span>
-          {p.value}
-        </p>
-      ))}
-      <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[9px] font-black uppercase tracking-wide text-[#c4b5fd]">
-        ACWR → {zone}
-      </p>
-    </div>
-  );
-}
-
-function EwmaChartTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: ChartTipPayload[];
-  label?: string | number;
-}) {
-  if (!active || !payload?.length) return null;
-  const rRaw = payload.find((p) => p.dataKey === "ewmaRatio")?.value;
-  const r = typeof rRaw === "number" ? rRaw : Number(rRaw);
-  const zone = Number.isFinite(r) ? bandLabelForRatio(r) : "—";
-  return (
-    <div className="max-w-[220px] rounded-xl border border-white/10 bg-[#1c1c21] px-3 py-2.5 text-[10px] shadow-xl">
-      {label != null && String(label) !== "" && (
-        <p className="mb-1 font-black uppercase tracking-widest text-gray-500">{String(label)}</p>
-      )}
-      {payload.map((p) => (
-        <p key={String(p.dataKey)} className="font-bold tabular-nums text-gray-200">
-          <span className="text-gray-500">{p.name ?? p.dataKey}: </span>
-          {p.value}
-        </p>
-      ))}
-      <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[9px] font-black uppercase tracking-wide text-[#c4b5fd]">
-        EWMA oran → {zone}
-      </p>
-    </div>
-  );
-}
-
-function ChartEmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex h-full min-h-[100px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/10 px-3 py-4 text-center">
-      <Activity className="text-gray-600" size={18} aria-hidden />
-      <p className="text-[8px] font-bold uppercase tracking-wide text-gray-600 leading-relaxed max-w-sm">{message}</p>
-    </div>
-  );
-}
-
-function CompactKpi({
-  label,
-  primary,
-  unit,
-  statusLine,
-  detail,
-  narrativeTone,
-  icon,
-  metricTooltip,
-}: {
-  label: string;
-  primary: string | number;
-  unit?: string;
-  statusLine?: string;
-  detail?: string;
-  narrativeTone: "red" | "green" | "purple" | "neutral" | "amber";
-  icon: ReactNode;
-  metricTooltip?: string;
-}) {
-  const ring: Record<typeof narrativeTone, string> = {
-    red: "border-red-500/30 bg-red-500/[0.05]",
-    green: "border-emerald-500/30 bg-emerald-500/[0.05]",
-    purple: "border-[#7c3aed]/28 bg-[#7c3aed]/[0.06]",
-    neutral: "border-white/10 bg-white/[0.02]",
-    amber: "border-amber-400/30 bg-amber-500/[0.06]",
-  };
-  return (
-    <div className={`flex min-h-[132px] flex-col rounded-xl border p-3 shadow-sm min-w-0 ${ring[narrativeTone]}`}>
-      <div className="flex items-start justify-between gap-1">
-        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-tight break-words pr-1">
-          {label}
-        </span>
-        <span className="flex shrink-0 items-center gap-1">
-          {metricTooltip ? (
-            <span title={metricTooltip} className="text-gray-500 hover:text-[#c4b5fd] cursor-help touch-manipulation p-0.5">
-              <Info size={13} aria-hidden />
-            </span>
-          ) : null}
-          <span className="text-gray-500 opacity-85">{icon}</span>
-        </span>
-      </div>
-      <div className="mt-auto flex flex-col gap-1 pt-2">
-        <div className="flex flex-wrap items-baseline gap-1">
-          <span className="text-2xl font-black italic tabular-nums tracking-tight text-white">{primary}</span>
-          {unit ? <span className="text-[9px] font-bold uppercase text-gray-500">{unit}</span> : null}
-        </div>
-        {statusLine ? (
-          <p className="text-[9px] font-black uppercase tracking-wide text-gray-300 line-clamp-1">
-            {narrativeTone === "red" ? "🔴 " : narrativeTone === "amber" ? "🟡 " : narrativeTone === "green" ? "🟢 " : ""}
-            {statusLine}
-          </p>
-        ) : null}
-        {detail ? (
-          <p className="text-[8px] font-semibold uppercase leading-snug tracking-wide text-gray-600 line-clamp-2">
-            {detail}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}

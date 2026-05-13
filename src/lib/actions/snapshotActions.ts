@@ -13,6 +13,7 @@ import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { getWeekEndExclusiveIso, getWeekStartMondayIso } from "@/lib/schedule/weeklySchedule";
 import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 
 type TrainingParticipantLite = { attendance_status?: string | null };
 type ScheduleSnippet = { title?: string | null; start_time?: string | null };
@@ -283,6 +284,8 @@ export async function listWeeklyLessonScheduleSnapshot(
 
   items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 
+  const orgTimeZone = await resolveOrganizationTimeZone(actor.organizationId);
+
   return {
     role: actor.role,
     permissions,
@@ -291,6 +294,7 @@ export async function listWeeklyLessonScheduleSnapshot(
     selectedCoachId,
     coachOptions,
     items,
+    timeZone: orgTimeZone,
   };
 }
 
@@ -696,8 +700,13 @@ export async function getDashboardSnapshot() {
   if (!actor.organizationId) return { role: actor.role };
   const adminClient = createSupabaseAdminClient();
 
-  const orgRes = await adminClient.from("organizations").select("name").eq("id", actor.organizationId).maybeSingle();
+  const orgRes = await adminClient
+    .from("organizations")
+    .select("name, time_zone")
+    .eq("id", actor.organizationId)
+    .maybeSingle();
   const orgName = orgRes.data?.name || `ORG-${actor.organizationId.slice(0, 8).toUpperCase()}`;
+  const orgTimeZone = (orgRes.data as { time_zone?: string | null } | null)?.time_zone || "Europe/Istanbul";
 
   if (actor.role === "coach") {
     const permissions = await getCoachPermissions(actor.id, actor.organizationId);
@@ -770,6 +779,7 @@ export async function getDashboardSnapshot() {
     return {
       role: actor.role,
       orgName,
+      orgTimeZone,
       organizationId: actor.organizationId,
       coach: {
         permissions,
@@ -788,14 +798,14 @@ export async function getDashboardSnapshot() {
     };
   }
 
-  if (actor.role !== "admin") return { role: actor.role, orgName, organizationId: actor.organizationId };
+  if (actor.role !== "admin") return { role: actor.role, orgName, orgTimeZone, organizationId: actor.organizationId };
 
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date();
   dayEnd.setHours(23, 59, 59, 999);
 
-  const [playersRes, trainingRes, recentRes, coachRes, participantsRes, paymentsRes, teamProfilesRes, todayLessonsRes, recentAttendanceRes] = await Promise.all([
+  const [playersRes, trainingRes, recentRes, coachRes, participantsRes, paymentsRes, teamProfilesRes, todayLessonsRes, recentAttendanceRes, fieldTestDefRes] = await Promise.all([
     adminClient.from("profiles").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId).eq("role", "sporcu"),
     adminClient.from("training_schedule").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId),
     adminClient.from("training_schedule").select("id, title, start_time, location").eq("organization_id", actor.organizationId).order("start_time", { ascending: false }).limit(4),
@@ -817,6 +827,9 @@ export async function getDashboardSnapshot() {
       .not("marked_at", "is", null)
       .order("marked_at", { ascending: false })
       .limit(5),
+    // Faz 5.3 — Onboarding checklist için saha testi metrik sayısı (count-only).
+    // organization_id kolonu eski kurulumda olmayabilir; basit count yeterli.
+    adminClient.from("test_definitions").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId),
   ]);
 
   const participantRows = (participantsRes.data || []) as Array<{ attendance_status?: string | null }>;
@@ -835,7 +848,8 @@ export async function getDashboardSnapshot() {
     (lesson.training_participants || []).some((p) => (p.attendance_status || "registered") === "registered")
   );
   const activeCoachCountToday = new Set(adminTodayLessons.map((lesson) => lesson.coach_id).filter(Boolean)).size;
-  const teamStats = mapTeamPaymentSummaries((teamProfilesRes.data || []) as RawTeamProfileForPayments[])
+  const allTeamSummaries = mapTeamPaymentSummaries((teamProfilesRes.data || []) as RawTeamProfileForPayments[]);
+  const teamStats = allTeamSummaries
     .map((item) => ({
       name: item.teamName,
       completionRate: item.completionRate,
@@ -844,6 +858,7 @@ export async function getDashboardSnapshot() {
     }))
     .sort((a, b) => b.completionRate - a.completionRate)
     .slice(0, 3);
+  const totalTeamCount = allTeamSummaries.length;
 
   const { data: programsData } = await adminClient
     .from("athlete_programs")
@@ -855,6 +870,7 @@ export async function getDashboardSnapshot() {
   return {
     role: actor.role,
     orgName,
+    orgTimeZone,
     organizationId: actor.organizationId,
     admin: {
       stats: {
@@ -881,6 +897,17 @@ export async function getDashboardSnapshot() {
           athlete_name: toDisplayName(athlete?.full_name, athlete?.email, "Sporcu"),
         };
       }),
+      /**
+       * Faz 5.3 — Onboarding checklist için minimum sinyaller.
+       * Yeni eklenen alanlar opsiyonel okunmalı; eski tüketiciler etkilenmez.
+       */
+      onboarding: {
+        totalAthletes: playersRes.count || 0,
+        totalTeams: totalTeamCount,
+        totalLessons: trainingRes.count || 0,
+        totalFieldTestMetrics: fieldTestDefRes.count || 0,
+        totalPayments: paymentRows.length,
+      },
     },
   };
 }

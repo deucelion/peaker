@@ -16,6 +16,16 @@ export const AUDIT_ACTIONS = [
   "organization.lifecycle.update",
   "organization.license.update",
   "organization.create",
+  "job.queue.retry_single",
+  "job.queue.retry_all",
+  "job.queue.dlq_requeue",
+  "job.queue.cancel",
+  "job.queue.purge_completed",
+  "operational.alert.acknowledge",
+  "operational.alert.resolve",
+  "operational.replay.evaluate_alerts",
+  "operational.replay.export_audit",
+  "operational.replay.retention_audit",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -31,6 +41,7 @@ export const AUDIT_ENTITY_TYPES = [
   "coach",
   "athlete",
   "organization",
+  "async_job",
 ] as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];

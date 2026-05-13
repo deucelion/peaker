@@ -24,6 +24,7 @@ export const PATHS = {
   athleteAccount: "/sporcu-hesap-durumu",
   superAdmin: "/super-admin",
   sistemSaglik: "/sistem-saglik",
+  sistemOperasyonlari: "/sistem-operasyonlari",
   home: "/",
   performans: "/performans",
   performansAyarlar: "/performans/ayarlar",
@@ -40,6 +41,8 @@ export const PATHS = {
   ozelDersPaketleri: "/ozel-ders-paketleri",
   finans: "/finans",
   muhasebeFinans: "/muhasebe-finans",
+  /** Tek tip tahsilat formu; `createAccountingPayment` ile Muhasebe listesiyle hizalı */
+  tahsilatMerkezi: "/tahsilat-merkezi",
   sporcuFinans: "/sporcu/finans",
   koclar: "/koclar",
   bildirimler: "/bildirimler",
@@ -49,6 +52,8 @@ export const PATHS = {
   ozelDersPaketlerim: "/ozel-ders-paketlerim",
   sporcu: "/sporcu",
   sporcuSabahRaporu: "/sporcu/sabah-raporu",
+  /** Audit kayıtları (admin kendi org, super_admin tüm org) — Faz 2.2 */
+  auditLog: "/audit-log",
 } as const;
 
 export type AppPath = (typeof PATHS)[keyof typeof PATHS];
@@ -64,8 +69,13 @@ export const SPORCU_ACCOUNT_INFO_ROUTE = PATHS.athleteAccount;
 /** super_admin dışındaki roller için kapalı (super_admin daha önce true döner) */
 export const SUPER_ADMIN_EXCLUSIVE_PREFIXES = [PATHS.superAdmin, PATHS.sistemSaglik] as const;
 
-/** Yalnızca organizasyon admini */
-export const ADMIN_ONLY_PREFIXES = [PATHS.koclar, PATHS.muhasebeFinans] as const;
+/** Yalnızca organizasyon admini (super_admin de erişir) */
+export const ADMIN_ONLY_PREFIXES = [
+  PATHS.koclar,
+  PATHS.muhasebeFinans,
+  PATHS.tahsilatMerkezi,
+  PATHS.auditLog,
+] as const;
 
 /** Yönetim & analiz: admin + coach (coach için proxy'de ek izin kontrolleri var) */
 export const MANAGEMENT_ROUTE_PREFIXES = [

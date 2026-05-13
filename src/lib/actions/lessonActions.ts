@@ -215,9 +215,9 @@ export async function createLesson(formData: FormData) {
     }
   }
 
-  await insertNotificationsForUsers([coachId], `${title} dersi olusturuldu.`);
+  await insertNotificationsForUsers([coachId], `${title} dersi olusturuldu.`, "lesson.created");
   if (athleteIds.length > 0) {
-    await insertNotificationsForUsers(athleteIds, `${title} dersine eklendiniz.`);
+    await insertNotificationsForUsers(athleteIds, `${title} dersine eklendiniz.`, "lesson.assigned");
   }
   await logAuditEvent({
     actorUserId: actor.id,
@@ -318,7 +318,7 @@ export async function addLessonParticipants(lessonId: string, participantIds: st
     );
     if (error) return { error: `Sporcu ekleme hatasi: ${error.message}` };
 
-    await insertNotificationsForUsers(newIds, `${lesson.title || "Ders"} dersine eklendiniz.`);
+    await insertNotificationsForUsers(newIds, `${lesson.title || "Ders"} dersine eklendiniz.`, "lesson.assigned");
     await logAuditEvent({
       actorUserId: actor.id,
       actorRole: actor.role,
@@ -563,7 +563,8 @@ export async function cancelLesson(lessonId: string) {
       lesson.title || "Ders",
       lesson.start_time,
       lesson.end_time
-    )
+    ),
+    "lesson.cancelled"
   );
 
   revalidatePath("/dersler");
@@ -629,7 +630,8 @@ export async function hardDeleteLesson(lessonId: string) {
       lesson.title || "Ders",
       lesson.start_time,
       lesson.end_time
-    )
+    ),
+    "lesson.cancelled"
   );
 
   revalidatePath("/dersler");
@@ -653,6 +655,37 @@ export async function markNotificationRead(notificationId: string) {
   if (error) return { error: `Bildirim guncellenemedi: ${error.message}` };
   revalidatePath("/bildirimler");
   return { success: true };
+}
+
+/**
+ * Geçerli kullanıcının okunmamış (read=false) tüm bildirimlerini tek atomik
+ * UPDATE ile okundu işaretler (Faz 2.3).
+ *
+ * Güvenlik:
+ *   - Sadece kendi `user_id`'sine ait satırlar güncellenir.
+ *   - RLS değişmeden çalışır (admin client kullanılıyor; tenant filtresi user_id).
+ *
+ * Veri bütünlüğü:
+ *   - `read=true` olan satırlar etkilenmez (re-write yok, audit/timeline gürültüsü olmaz).
+ *
+ * Dönüş:
+ *   - `success: true, updatedCount: N` (UI feedback için)
+ */
+export async function markAllNotificationsReadForCurrentUser() {
+  const resolved = await resolveActor();
+  if ("error" in resolved) return { error: resolved.error };
+  const { actor } = resolved;
+
+  const adminClient = createSupabaseAdminClient();
+  const { data, error } = await adminClient
+    .from("notifications")
+    .update({ read: true })
+    .eq("user_id", actor.id)
+    .eq("read", false)
+    .select("id");
+  if (error) return { error: `Bildirimler guncellenemedi: ${error.message}` };
+  revalidatePath("/bildirimler");
+  return { success: true as const, updatedCount: Array.isArray(data) ? data.length : 0 };
 }
 
 export type LessonManagementDetailAthlete = {

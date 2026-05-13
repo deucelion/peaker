@@ -9,6 +9,11 @@ import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessi
 import type { AthleticResultRow } from "@/types/domain";
 import { isUuid } from "@/lib/validation/uuid";
 import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
+import { toDisplayName } from "@/lib/profile/displayName";
+import { csvFilename } from "@/lib/export/csv";
+import { buildCsvFromRows } from "@/lib/export/csvStream";
+import { logger } from "@/lib/monitoring";
+import { chunkedInQuery } from "@/lib/db/chunkedIn";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -36,6 +41,33 @@ type TestDefinitionOrgShape = {
 };
 
 export type MetricValueType = "number" | "text";
+export type MetricImprovementDirection = "higher_better" | "lower_better" | "unknown";
+
+function normalizeImprovementDirection(raw: unknown): MetricImprovementDirection {
+  const s = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (s === "higher_better" || s === "lower_better" || s === "unknown") return s;
+  return "unknown";
+}
+
+/**
+ * test_definitions.improvement_direction kolonu eski kurulumlarda olmayabilir.
+ * Yazma sırasında 42703/column-not-exist hatası olursa kolon tek seferde
+ * düşürülür ve insert/update fallback olarak yeniden denenir.
+ */
+function dropDirectionFieldIfSchemaMissing(
+  payload: Record<string, unknown>,
+  err: { message?: string | null; code?: string | null } | null | undefined
+): boolean {
+  const code = (err?.code || "").toLowerCase();
+  const msg = (err?.message || "").toLowerCase();
+  if (code === "42703" || msg.includes("improvement_direction") || msg.includes("does not exist")) {
+    if ("improvement_direction" in payload) {
+      delete payload.improvement_direction;
+      return true;
+    }
+  }
+  return false;
+}
 
 async function resolveTestDefinitionsOrgShape(
   adminClient: ReturnType<typeof createSupabaseAdminClient>
@@ -92,6 +124,9 @@ export async function createFieldTestDefinition(formData: FormData) {
   const category = formData.get("category")?.toString().trim().slice(0, 80) || "Genel";
   const valueTypeRaw = formData.get("valueType")?.toString().trim() || "number";
   const valueType: MetricValueType = normalizeMetricValueType(valueTypeRaw);
+  const improvementDirectionRaw = formData.get("improvementDirection")?.toString();
+  const improvementDirection: MetricImprovementDirection =
+    valueType === "number" ? normalizeImprovementDirection(improvementDirectionRaw) : "unknown";
 
   if (name.length < 2) return { error: "Metrik adi en az 2 karakter olmalidir." };
   if (valueType === "number" && unit.length < 1) return { error: "Sayisal metrikte birim zorunludur." };
@@ -125,16 +160,33 @@ export async function createFieldTestDefinition(formData: FormData) {
     category,
     value_type: valueType,
     sort_order: nextSort,
+    improvement_direction: improvementDirection,
   };
   if (orgShape.hasOrganizationId) payload.organization_id = resolved.organizationId;
   if (orgShape.hasOrgId) payload.org_id = resolved.organizationId;
-  const { data: inserted, error } = await resolved.adminClient
-    .from("test_definitions")
-    .insert(payload)
-    .select("id, name, unit, category, value_type, sort_order, created_at")
-    .single();
+  let inserted: Record<string, unknown> | null = null;
+  let insertError: { message?: string | null; code?: string | null } | null = null;
+  {
+    const first = await resolved.adminClient
+      .from("test_definitions")
+      .insert(payload)
+      .select("id, name, unit, category, value_type, sort_order, created_at, improvement_direction")
+      .single();
+    inserted = (first.data as Record<string, unknown> | null) ?? null;
+    insertError = first.error;
+  }
 
-  if (error) return { error: `Metrik eklenemedi: ${error.message}` };
+  if (insertError && dropDirectionFieldIfSchemaMissing(payload, insertError)) {
+    const retry = await resolved.adminClient
+      .from("test_definitions")
+      .insert(payload)
+      .select("id, name, unit, category, value_type, sort_order, created_at")
+      .single();
+    inserted = (retry.data as Record<string, unknown> | null) ?? null;
+    insertError = retry.error;
+  }
+
+  if (insertError) return { error: `Metrik eklenemedi: ${insertError.message ?? "bilinmeyen hata"}` };
 
   revalidatePath("/saha-testleri");
   return { success: true as const, metric: inserted };
@@ -152,24 +204,43 @@ export async function listFieldTestDefinitionsForActor() {
     return { error: `Metrik tablo yapisi okunamadi: ${message}` as const };
   }
 
-  let query = resolved.adminClient
-    .from("test_definitions")
-    .select("id, name, unit, category, value_type, sort_order, created_at")
-    .order("sort_order", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false });
+  const buildQuery = (selectCols: string) => {
+    let q = resolved.adminClient
+      .from("test_definitions")
+      .select(selectCols)
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false });
+    if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
+      q = q.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
+    } else if (orgShape.hasOrganizationId) {
+      q = q.eq("organization_id", resolved.organizationId);
+    } else if (orgShape.hasOrgId) {
+      q = q.eq("org_id", resolved.organizationId);
+    }
+    return q;
+  };
 
-  if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
-    query = query.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
-  } else if (orgShape.hasOrganizationId) {
-    query = query.eq("organization_id", resolved.organizationId);
-  } else if (orgShape.hasOrgId) {
-    query = query.eq("org_id", resolved.organizationId);
+  let listData: unknown[] | null = null;
+  let listError: { message?: string | null; code?: string | null } | null = null;
+  {
+    const first = await buildQuery(
+      "id, name, unit, category, value_type, sort_order, created_at, improvement_direction"
+    );
+    listData = (first.data as unknown[] | null) ?? null;
+    listError = first.error;
+  }
+  if (listError) {
+    const code = (listError.code || "").toLowerCase();
+    const msg = (listError.message || "").toLowerCase();
+    if (code === "42703" || msg.includes("improvement_direction") || msg.includes("does not exist")) {
+      const retry = await buildQuery("id, name, unit, category, value_type, sort_order, created_at");
+      listData = (retry.data as unknown[] | null) ?? null;
+      listError = retry.error;
+    }
   }
 
-  const { data, error } = await query;
-
-  if (error) return { error: `Metrikler alinamadi: ${error.message}` as const };
-  return { metrics: (data || []) as Array<Record<string, unknown>> };
+  if (listError) return { error: `Metrikler alinamadi: ${listError.message ?? "bilinmeyen hata"}` as const };
+  return { metrics: (listData || []) as Array<Record<string, unknown>> };
 }
 
 export async function updateFieldTestDefinition(input: {
@@ -178,6 +249,7 @@ export async function updateFieldTestDefinition(input: {
   unit: string;
   category: string;
   valueType: MetricValueType;
+  improvementDirection?: MetricImprovementDirection;
 }) {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
@@ -208,17 +280,33 @@ export async function updateFieldTestDefinition(input: {
   if (safeName.length < 2) return { error: "Metrik adi en az 2 karakter olmalidir." as const };
   if (input.valueType === "number" && safeUnit.length < 1) return { error: "Sayisal metrikte birim zorunludur." as const };
 
-  const { error } = await resolved.adminClient
-    .from("test_definitions")
-    .update({
-      name: safeName,
-      unit: safeUnit || (input.valueType === "text" ? "not" : ""),
-      category: safeCategory,
-      value_type: input.valueType,
-    })
-    .eq("id", input.testDefinitionId);
+  const direction: MetricImprovementDirection =
+    input.valueType === "number" ? normalizeImprovementDirection(input.improvementDirection) : "unknown";
+  const updatePayload: Record<string, unknown> = {
+    name: safeName,
+    unit: safeUnit || (input.valueType === "text" ? "not" : ""),
+    category: safeCategory,
+    value_type: input.valueType,
+    improvement_direction: direction,
+  };
+  let updateError: { message?: string | null; code?: string | null } | null = null;
+  {
+    const first = await resolved.adminClient
+      .from("test_definitions")
+      .update(updatePayload)
+      .eq("id", input.testDefinitionId);
+    updateError = first.error;
+  }
 
-  if (error) return { error: `Metrik guncellenemedi: ${error.message}` as const };
+  if (updateError && dropDirectionFieldIfSchemaMissing(updatePayload, updateError)) {
+    const retry = await resolved.adminClient
+      .from("test_definitions")
+      .update(updatePayload)
+      .eq("id", input.testDefinitionId);
+    updateError = retry.error;
+  }
+
+  if (updateError) return { error: `Metrik guncellenemedi: ${updateError.message ?? "bilinmeyen hata"}` as const };
   revalidatePath("/saha-testleri");
   return { success: true as const };
 }
@@ -440,6 +528,262 @@ export async function saveAthleticFieldResults(input: {
   return { success: true as const };
 }
 
+/**
+ * Faz 2.1 — Performance Merkezi için saha testleri özet sinyali.
+ *
+ * Amaç:
+ *   Performans dashboard'unda sporcu için son N gün içinde alınan saha
+ *   testlerinin sayısı + son ölçüm tarihi gösterilebilsin. Karar sistemine
+ *   sinyal vermez (yorumlama "iyileşme/gerileme" yönü metric başına bilinmez);
+ *   sadece "veri var/yok ve ne zaman" işareti.
+ *
+ * Güvenlik:
+ *   - resolveFieldTestActor: admin veya yetkili koç (can_view_reports).
+ *   - athlete bu organizasyona ait olmalı; aksi halde 403.
+ *
+ * Performans:
+ *   - Tek count + tek aggregate query; yan etki yok.
+ *
+ * Geriye dönük:
+ *   - Yeni eylem; mevcut listeleme/yazma yollarını değiştirmez.
+ */
+export type FieldTestTrendStatus = "improved" | "regressed" | "stable" | "unknown" | "insufficient_data";
+
+export type FieldTestMetricTrend = {
+  metricId: string;
+  metricName: string;
+  unit: string;
+  improvementDirection: MetricImprovementDirection;
+  status: FieldTestTrendStatus;
+  /** En son ölçüm değeri (numeric only). */
+  lastValue: number | null;
+  /** Bir önceki ölçüm değeri (numeric only). */
+  previousValue: number | null;
+  /** previousValue → lastValue % değişim (signed). */
+  changePercent: number | null;
+  measurementCount: number;
+  lastTestDate: string | null;
+};
+
+export type FieldTestSignalSummary = {
+  totalMeasurements: number;
+  distinctMetricCount: number;
+  lastTestDate: string | null;
+  firstTestDate: string | null;
+  sinceDays: number;
+  /** v2: direction-aware trend (numeric metrikler için). text metrikler trend dışı. */
+  trends: FieldTestMetricTrend[];
+  trendCounts: Record<FieldTestTrendStatus, number>;
+};
+
+const TREND_STABLE_THRESHOLD_PCT = 2; // ±%2 stabil sayılır
+
+function classifyTrend(
+  direction: MetricImprovementDirection,
+  previous: number | null,
+  last: number | null
+): FieldTestTrendStatus {
+  if (previous === null || last === null) return "insufficient_data";
+  if (!Number.isFinite(previous) || !Number.isFinite(last)) return "insufficient_data";
+  if (previous === 0 && last === 0) return "stable";
+
+  const base = previous === 0 ? Math.abs(last) : Math.abs(previous);
+  const pct = base === 0 ? 0 : ((last - previous) / base) * 100;
+  if (Math.abs(pct) <= TREND_STABLE_THRESHOLD_PCT) return "stable";
+
+  if (direction === "higher_better") return last > previous ? "improved" : "regressed";
+  if (direction === "lower_better") return last < previous ? "improved" : "regressed";
+  return "unknown";
+}
+
+export async function summarizeFieldTestSignalsForAthlete(input: {
+  athleteId: string;
+  sinceDays?: number;
+}): Promise<{ error: string } | FieldTestSignalSummary> {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error ?? "Yetki kontrolu basarisiz." };
+
+  const athleteId = (input.athleteId || "").trim();
+  if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
+
+  const since = Math.max(7, Math.min(365, Number(input.sinceDays) || 90));
+
+  const { data: athleteRow } = await resolved.adminClient
+    .from("profiles")
+    .select("id, organization_id, role")
+    .eq("id", athleteId)
+    .maybeSingle();
+  if (
+    !athleteRow ||
+    athleteRow.organization_id !== resolved.organizationId ||
+    String(athleteRow.role) !== "sporcu"
+  ) {
+    return { error: "Sporcu bulunamadi veya bu organizasyona ait degil." as const };
+  }
+
+  const sinceDate = new Date();
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - since);
+  const sinceKey = sinceDate.toISOString().slice(0, 10);
+
+  const { data, error } = await resolved.adminClient
+    .from("athletic_results")
+    .select("test_id, value, value_text, test_date")
+    .eq("profile_id", athleteId)
+    .gte("test_date", sinceKey)
+    .order("test_date", { ascending: true });
+
+  if (error) return { error: `Saha test sinyali alinamadi: ${error.message}` as const };
+
+  const rows = (data || []) as Array<{
+    test_id: string;
+    value: number | null;
+    value_text: string | null;
+    test_date: string;
+  }>;
+
+  const distinctMetrics = new Set<string>();
+  let lastTestDate: string | null = null;
+  let firstTestDate: string | null = null;
+  for (const r of rows) {
+    if (r.test_id) distinctMetrics.add(r.test_id);
+    if (r.test_date) {
+      if (!lastTestDate || r.test_date > lastTestDate) lastTestDate = r.test_date;
+      if (!firstTestDate || r.test_date < firstTestDate) firstTestDate = r.test_date;
+    }
+  }
+
+  // Trend hesabı: numeric değerlere sahip metrikleri grupla, son 2 ölçümü karşılaştır.
+  const baseSummary = {
+    totalMeasurements: rows.length,
+    distinctMetricCount: distinctMetrics.size,
+    lastTestDate,
+    firstTestDate,
+    sinceDays: since,
+  };
+
+  if (rows.length === 0) {
+    return {
+      ...baseSummary,
+      trends: [],
+      trendCounts: { improved: 0, regressed: 0, stable: 0, unknown: 0, insufficient_data: 0 },
+    };
+  }
+
+  const metricIds = Array.from(distinctMetrics);
+
+  let metricMeta = new Map<
+    string,
+    { name: string; unit: string; valueType: MetricValueType; direction: MetricImprovementDirection }
+  >();
+  if (metricIds.length > 0) {
+    const fetchMeta = async (selectCols: string) =>
+      resolved.adminClient.from("test_definitions").select(selectCols).in("id", metricIds);
+    let { data: defs, error: defsErr } = await fetchMeta(
+      "id, name, unit, value_type, improvement_direction"
+    );
+    if (defsErr) {
+      const code = (defsErr.code || "").toLowerCase();
+      const msg = (defsErr.message || "").toLowerCase();
+      if (code === "42703" || msg.includes("improvement_direction") || msg.includes("does not exist")) {
+        const retry = await fetchMeta("id, name, unit, value_type");
+        defs = retry.data;
+        defsErr = retry.error;
+      }
+    }
+    if (!defsErr) {
+      type DefRow = {
+        id?: string | null;
+        name?: string | null;
+        unit?: string | null;
+        value_type?: string | null;
+        improvement_direction?: string | null;
+      };
+      metricMeta = new Map(
+        (defs as DefRow[] | null || []).map((d) => [
+          String(d?.id),
+          {
+            name: typeof d?.name === "string" && d.name ? d.name : "Metrik",
+            unit: typeof d?.unit === "string" ? d.unit : "",
+            valueType: normalizeMetricValueType(d?.value_type),
+            direction: normalizeImprovementDirection(d?.improvement_direction),
+          },
+        ])
+      );
+    }
+  }
+
+  const grouped = new Map<string, Array<{ value: number | null; date: string }>>();
+  for (const r of rows) {
+    if (!r.test_id) continue;
+    const list = grouped.get(r.test_id) || [];
+    list.push({ value: r.value, date: r.test_date });
+    grouped.set(r.test_id, list);
+  }
+
+  const trends: FieldTestMetricTrend[] = [];
+  const trendCounts = { improved: 0, regressed: 0, stable: 0, unknown: 0, insufficient_data: 0 };
+
+  for (const [metricId, list] of grouped) {
+    const meta = metricMeta.get(metricId);
+    if (!meta) continue;
+    if (meta.valueType !== "number") continue; // text metrikler trend dışı
+
+    const numericList = list
+      .filter((x) => typeof x.value === "number" && Number.isFinite(x.value))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (numericList.length === 0) continue;
+
+    const last = numericList[numericList.length - 1]!;
+    const previous = numericList.length >= 2 ? numericList[numericList.length - 2]! : null;
+    const status: FieldTestTrendStatus =
+      previous === null
+        ? "insufficient_data"
+        : meta.direction === "unknown"
+          ? "unknown"
+          : classifyTrend(meta.direction, previous.value, last.value);
+
+    const lastValue = typeof last.value === "number" ? last.value : null;
+    const prevValue = previous && typeof previous.value === "number" ? previous.value : null;
+    const changePercent =
+      lastValue !== null && prevValue !== null && prevValue !== 0
+        ? ((lastValue - prevValue) / Math.abs(prevValue)) * 100
+        : null;
+
+    trends.push({
+      metricId,
+      metricName: meta.name,
+      unit: meta.unit,
+      improvementDirection: meta.direction,
+      status,
+      lastValue,
+      previousValue: prevValue,
+      changePercent,
+      measurementCount: numericList.length,
+      lastTestDate: last.date || null,
+    });
+    trendCounts[status] += 1;
+  }
+
+  trends.sort((a, b) => {
+    const order: Record<FieldTestTrendStatus, number> = {
+      regressed: 0,
+      improved: 1,
+      stable: 2,
+      unknown: 3,
+      insufficient_data: 4,
+    };
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    return a.metricName.localeCompare(b.metricName, "tr");
+  });
+
+  return {
+    ...baseSummary,
+    trends,
+    trendCounts,
+  };
+}
+
 /** Saha testleri tablosu: seçili gün için org içi sporcu sonuçları (RLS yerine admin + tenant doğrulama). */
 export async function listAthleticResultsForActorByDate(input: {
   profileIds: string[];
@@ -471,17 +815,23 @@ export async function listAthleticResultsForActorByDate(input: {
     return { results: [] as AthleticResultRow[] };
   }
 
-  const { data, error } = await resolved.adminClient
-    .from("athletic_results")
-    .select("*")
-    .in("profile_id", filteredIds)
-    .eq("test_date", testDate);
+  // Faz 9.2 — chunked .in() for large team result fetch.
+  const chunkedRes = await chunkedInQuery(
+    filteredIds,
+    async (chunk) =>
+      await resolved.adminClient
+        .from("athletic_results")
+        .select("*")
+        .in("profile_id", chunk)
+        .eq("test_date", testDate),
+    { scope: "athleticFieldActions.listAthleticResultsByDate" }
+  );
 
-  if (error) {
-    return { error: `Sonuclar alinamadi: ${error.message}` as const };
+  if (chunkedRes.error) {
+    return { error: `Sonuclar alinamadi: ${chunkedRes.error.message}` as const };
   }
 
-  return { results: (data || []) as AthleticResultRow[] };
+  return { results: (chunkedRes.data || []) as AthleticResultRow[] };
 }
 
 export type AthleticResultNoteRow = {
@@ -499,15 +849,19 @@ export async function listAthleticResultNotesByDate(input: { profileIds: string[
   const ids = input.profileIds.filter(assertUuid);
   if (ids.length === 0) return { notes: [] as AthleticResultNoteRow[] };
 
-  const { data, error } = await resolved.adminClient
-    .from("athletic_result_notes")
-    .select("profile_id, test_date, note")
-    .eq("organization_id", resolved.organizationId)
-    .eq("test_date", testDate)
-    .in("profile_id", ids);
-
-  if (error) return { error: `Genel notlar alinamadi: ${error.message}` as const };
-  return { notes: (data || []) as AthleticResultNoteRow[] };
+  const chunkedNotes = await chunkedInQuery(
+    ids,
+    async (chunk) =>
+      await resolved.adminClient
+        .from("athletic_result_notes")
+        .select("profile_id, test_date, note")
+        .eq("organization_id", resolved.organizationId)
+        .eq("test_date", testDate)
+        .in("profile_id", chunk),
+    { scope: "athleticFieldActions.listAthleticResultNotesByDate" }
+  );
+  if (chunkedNotes.error) return { error: `Genel notlar alinamadi: ${chunkedNotes.error.message}` as const };
+  return { notes: (chunkedNotes.data || []) as AthleticResultNoteRow[] };
 }
 
 export type FieldTestTeamChartRow = {
@@ -570,5 +924,162 @@ export async function loadFieldTestTeamReportForActor() {
   return {
     totalPlayers: count ?? 0,
     chartRows,
+  };
+}
+
+/**
+ * Faz 5.4 — Saha testi sonuçları CSV export.
+ *
+ * Org içindeki tüm saha testi sonuçlarını (`athletic_results`) tek CSV'ye yazar.
+ * Aynı yetki çerçevesi (`resolveFieldTestActor`) ile org scope korunur.
+ *
+ * Filtreler:
+ *   - dateFrom / dateTo (YYYY-MM-DD), opsiyonel
+ *   - athleteProfileId, opsiyonel — verilmezse tüm aktif sporcular
+ *
+ * Cap: 10000 satır.
+ *
+ * Çıktı kolonları:
+ *   Tarih · Sporcu · Metrik · Kategori · Birim · Değer · Metin Değer · İyileşme Yönü
+ */
+const FIELD_TEST_EXPORT_HARD_CAP = 10000;
+
+export async function exportFieldTestResultsCSV(input: {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  athleteProfileId?: string | null;
+} = {}) {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error ?? "Yetki kontrolu başarısız." };
+
+  const dateFrom = input.dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(input.dateFrom) ? input.dateFrom : null;
+  const dateTo = input.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(input.dateTo) ? input.dateTo : null;
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    return { error: "Başlangıç tarihi bitiş tarihinden sonra olamaz." as const };
+  }
+  const wantAthlete = input.athleteProfileId && assertUuid(input.athleteProfileId) ? input.athleteProfileId : null;
+
+  // Önce org içindeki sporcu kimlikleri (org-scope güvenliği için).
+  let profileQuery = resolved.adminClient
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("organization_id", resolved.organizationId)
+    .eq("role", "sporcu");
+  if (wantAthlete) profileQuery = profileQuery.eq("id", wantAthlete);
+  const { data: athletes, error: athleteErr } = await profileQuery;
+  if (athleteErr) return { error: `Sporcu listesi alınamadı: ${athleteErr.message}` };
+  const athleteList = (athletes || []).map((a) => ({
+    id: a.id,
+    full_name: toDisplayName(a.full_name, a.email, "Sporcu"),
+  }));
+  if (athleteList.length === 0) {
+    const { csv } = buildCsvFromRows(
+      ["Tarih", "Sporcu", "Metrik", "Kategori", "Birim", "Değer", "Metin Değer", "İyileşme Yönü"],
+      []
+    );
+    return {
+      csv,
+      filename: csvFilename("saha-testleri", "sonuclar", { from: dateFrom, to: dateTo, athlete: wantAthlete }),
+      rowCount: 0,
+      truncated: false,
+    };
+  }
+  const profileIds = athleteList.map((a) => a.id);
+  const profileMap = new Map(athleteList.map((a) => [a.id, a.full_name]));
+
+  // Test definitions: org-scope (improvement_direction kolonu opsiyonel; yoksa fallback).
+  // Eski kurulumlarda kolon yoksa schema cache 42703 atar; tek seferde dönüp geniş seçim yaparız.
+  let metricsRaw: Record<string, unknown>[] | null = null;
+  let metricsErr: { message?: string | null } | null = null;
+  {
+    const primary = await resolved.adminClient
+      .from("test_definitions")
+      .select("id, name, unit, category, value_type, improvement_direction")
+      .eq("organization_id", resolved.organizationId);
+    metricsRaw = primary.data as Record<string, unknown>[] | null;
+    metricsErr = primary.error;
+    if (metricsErr && /improvement_direction/i.test(metricsErr.message || "")) {
+      const retry = await resolved.adminClient
+        .from("test_definitions")
+        .select("id, name, unit, category, value_type")
+        .eq("organization_id", resolved.organizationId);
+      metricsRaw = retry.data as Record<string, unknown>[] | null;
+      metricsErr = retry.error;
+    }
+  }
+  if (metricsErr) return { error: `Metrik tanımları alınamadı: ${metricsErr.message}` };
+  type MetricMeta = {
+    id: string;
+    name: string;
+    unit: string;
+    category: string;
+    value_type: string;
+    improvement_direction: string;
+  };
+  const metricMap = new Map<string, MetricMeta>(
+    (metricsRaw || []).map((m: Record<string, unknown>) => [
+      String(m.id),
+      {
+        id: String(m.id),
+        name: String(m.name || ""),
+        unit: String(m.unit || ""),
+        category: String(m.category || ""),
+        value_type: String(m.value_type || "number"),
+        improvement_direction: String(m.improvement_direction || "unknown"),
+      },
+    ])
+  );
+
+  let resultsQuery = resolved.adminClient
+    .from("athletic_results")
+    .select("profile_id, test_id, value, value_text, test_date")
+    .in("profile_id", profileIds)
+    .order("test_date", { ascending: false })
+    .limit(FIELD_TEST_EXPORT_HARD_CAP);
+  if (dateFrom) resultsQuery = resultsQuery.gte("test_date", dateFrom);
+  if (dateTo) resultsQuery = resultsQuery.lte("test_date", dateTo);
+  const { data: resultRows, error: resultErr } = await resultsQuery;
+  if (resultErr) return { error: `Saha testi sonuçları alınamadı: ${resultErr.message}` };
+
+  const headers = ["Tarih", "Sporcu", "Metrik", "Kategori", "Birim", "Değer", "Metin Değer", "İyileşme Yönü"];
+  const directionLabel: Record<string, string> = {
+    higher_better: "Yüksek iyi",
+    lower_better: "Düşük iyi",
+    unknown: "Belirsiz",
+  };
+  const rows = (resultRows || []).map((r: AthleticResultRow) => {
+    const meta = metricMap.get(String(r.test_id));
+    return [
+      String(r.test_date || ""),
+      profileMap.get(String(r.profile_id)) || "",
+      meta?.name || "",
+      meta?.category || "",
+      meta?.unit || "",
+      r.value != null && Number.isFinite(r.value) ? r.value : "",
+      r.value_text || "",
+      directionLabel[meta?.improvement_direction || "unknown"] || "Belirsiz",
+    ];
+  });
+
+  const built = buildCsvFromRows(headers, rows, { maxRows: FIELD_TEST_EXPORT_HARD_CAP });
+  const filename = csvFilename("saha-testleri", "sonuclar", {
+    from: dateFrom,
+    to: dateTo,
+    athlete: wantAthlete,
+  });
+  const truncated = built.truncated || rows.length >= FIELD_TEST_EXPORT_HARD_CAP;
+  logger.info("export.fieldTests", "field tests csv built", {
+    rowCount: built.rowCount,
+    truncated,
+    cap: FIELD_TEST_EXPORT_HARD_CAP,
+    dateFrom,
+    dateTo,
+  });
+  return {
+    csv: built.csv,
+    filename,
+    rowCount: built.rowCount,
+    truncated,
+    cap: FIELD_TEST_EXPORT_HARD_CAP,
   };
 }

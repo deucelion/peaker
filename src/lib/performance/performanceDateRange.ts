@@ -19,20 +19,36 @@ export function isYyyyMmDd(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
 }
 
-/** Europe/Istanbul bugünün takvim anahtarı. */
-export function istanbulTodayKey(): string {
-  return isoToZonedDateKey(new Date().toISOString(), SCHEDULE_APP_TIME_ZONE);
+/**
+ * Bugünün takvim anahtarı (organizasyon saat dilimine göre).
+ * @param tz IANA tz; verilmezse global varsayılan.
+ */
+export function istanbulTodayKey(tz: string = SCHEDULE_APP_TIME_ZONE): string {
+  return isoToZonedDateKey(new Date().toISOString(), tz);
 }
 
-/** Son N takvim günü (bugün dahil): [from, to]. N>=1 */
-export function istanbulLastNDaysInclusive(n: number): { from: string; to: string } {
-  const to = istanbulTodayKey();
+/**
+ * Son N takvim günü (bugün dahil): [from, to]. N>=1
+ * @param tz IANA tz; verilmezse global varsayılan.
+ */
+export function istanbulLastNDaysInclusive(
+  n: number,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+): { from: string; to: string } {
+  const to = istanbulTodayKey(tz);
   const from = addCalendarDaysToYyyyMmDd(to, -(Math.max(1, n) - 1));
   return { from, to };
 }
 
-/** ACWR/EWMA için: görünür aralığın başlangıcından 28 gün önceki güne kadar yarı-açık UTC aralığı. */
-export function istanbulLoadFetchRangeForPerformance(visibleFrom: string, visibleTo: string) {
+/**
+ * ACWR/EWMA için: görünür aralığın başlangıcından 28 gün önceki güne kadar yarı-açık UTC aralığı.
+ * @param tz IANA tz; verilmezse global varsayılan.
+ */
+export function istanbulLoadFetchRangeForPerformance(
+  visibleFrom: string,
+  visibleTo: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+) {
   const lookbackFrom = addCalendarDaysToYyyyMmDd(visibleFrom.trim(), -28);
-  return istanbulDateWallRangeToHalfOpenUtc(lookbackFrom, visibleTo.trim());
+  return istanbulDateWallRangeToHalfOpenUtc(lookbackFrom, visibleTo.trim(), tz);
 }

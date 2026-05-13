@@ -24,7 +24,8 @@ export type DashboardNavIcon =
   | "Bell"
   | "User"
   | "TrendingUp"
-  | "Settings";
+  | "Settings"
+  | "Shield";
 
 export type DashboardNavItem = {
   href: string;
@@ -95,19 +96,19 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "CreditCard",
     label: "Sporcu Ödemeleri",
     section: "management",
-    roles: ["admin", "coach"],
+    roles: ["coach"],
     coachNeedsAll: ["can_view_reports"],
     activeMatch: "prefix",
     activePrefixes: [PATHS.finans],
   },
   {
-    href: PATHS.muhasebeFinans,
+    href: PATHS.tahsilatMerkezi,
     icon: "CreditCard",
     label: "Muhasebe & Finans",
     section: "management",
     roles: ["admin"],
     activeMatch: "prefix",
-    activePrefixes: [PATHS.muhasebeFinans],
+    activePrefixes: [PATHS.tahsilatMerkezi, PATHS.muhasebeFinans, PATHS.finans],
   },
   {
     href: PATHS.koclar,
@@ -118,6 +119,25 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     adminOnly: true,
     activeMatch: "prefix",
     activePrefixes: [PATHS.koclar],
+  },
+  {
+    href: PATHS.auditLog,
+    icon: "Shield",
+    label: "Audit Kayıtları",
+    section: "management",
+    roles: ["admin"],
+    adminOnly: true,
+    activeMatch: "prefix",
+    activePrefixes: [PATHS.auditLog],
+  },
+  {
+    href: PATHS.auditLog,
+    icon: "Shield",
+    label: "Audit Kayıtları",
+    section: "super_admin",
+    roles: ["super_admin"],
+    activeMatch: "prefix",
+    activePrefixes: [PATHS.auditLog],
   },
 
   {

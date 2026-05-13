@@ -5,46 +5,61 @@
 
 import { SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 
-const TZ = SCHEDULE_APP_TIME_ZONE;
-
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-/** Türkiye'de DST olmadığı için gün sonuna +24h güvenli. */
-function addUtcMs(iso: string, ms: number): string {
-  return new Date(new Date(iso).getTime() + ms).toISOString();
+/** DST atlamalarına dayanıklı: ay sınırlarını duvar saati üzerinden hesaplar; sabit +24h yapmaz. */
+function nextDayWallClock(dateKey: string, tz: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const t = Date.UTC(y, mo - 1, d) + 86_400_000;
+  const nd = new Date(t);
+  const nextKey = `${nd.getUTCFullYear()}-${pad2(nd.getUTCMonth() + 1)}-${pad2(nd.getUTCDate())}`;
+  return wallClockInZoneToUtcIso(nextKey, "00:00:00", tz);
 }
 
 /**
  * İstanbul'da dateFrom … dateTo (dahil) günleri → [fromUtc, toExclusiveUtc).
  * dateFrom / dateTo: `YYYY-MM-DD`
+ *
+ * @param tz Organizasyon saat dilimi (IANA). Verilmezse global varsayılan kullanılır.
  */
 export function istanbulDateWallRangeToHalfOpenUtc(
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
 ): { from: string; toExclusive: string } | null {
   const a = dateFrom.trim();
   const b = dateTo.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b)) return null;
   if (a > b) return null;
-  const fromIso = wallClockInZoneToUtcIso(a, "00:00:00", TZ);
-  const endStartIso = wallClockInZoneToUtcIso(b, "00:00:00", TZ);
-  if (!fromIso || !endStartIso) return null;
-  const toExclusive = addUtcMs(endStartIso, 86_400_000);
+  const fromIso = wallClockInZoneToUtcIso(a, "00:00:00", tz);
+  const toExclusive = nextDayWallClock(b, tz);
+  if (!fromIso || !toExclusive) return null;
   if (new Date(toExclusive).getTime() <= new Date(fromIso).getTime()) return null;
   return { from: fromIso, toExclusive };
 }
 
-/** `YYYY-MM` ayı, İstanbul takvim ayı başlangıcı → bir sonraki ay başına kadar [from, toExclusive). */
-export function istanbulMonthWallToHalfOpenUtc(monthKey: string): { from: string; toExclusive: string } | null {
+/**
+ * `YYYY-MM` ayı, organizasyon takvim ayı başlangıcı → bir sonraki ay başına kadar [from, toExclusive).
+ *
+ * @param tz Organizasyon saat dilimi (IANA). Verilmezse global varsayılan kullanılır.
+ */
+export function istanbulMonthWallToHalfOpenUtc(
+  monthKey: string,
+  tz: string = SCHEDULE_APP_TIME_ZONE
+): { from: string; toExclusive: string } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(monthKey.trim());
   if (!m) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]);
   if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) return null;
   const fromKey = `${y}-${pad2(mo)}-01`;
-  const fromIso = wallClockInZoneToUtcIso(fromKey, "00:00:00", TZ);
+  const fromIso = wallClockInZoneToUtcIso(fromKey, "00:00:00", tz);
   if (!fromIso) return null;
   let ny = y;
   let nm = mo + 1;
@@ -53,7 +68,7 @@ export function istanbulMonthWallToHalfOpenUtc(monthKey: string): { from: string
     ny += 1;
   }
   const nextKey = `${ny}-${pad2(nm)}-01`;
-  const toExclusive = wallClockInZoneToUtcIso(nextKey, "00:00:00", TZ);
+  const toExclusive = wallClockInZoneToUtcIso(nextKey, "00:00:00", tz);
   if (!toExclusive) return null;
   return { from: fromIso, toExclusive };
 }

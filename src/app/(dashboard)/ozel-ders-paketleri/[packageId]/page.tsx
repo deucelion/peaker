@@ -34,6 +34,8 @@ import type {
   PrivateLessonSessionListItem,
 } from "@/lib/types";
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
+import { parseMoneyInput } from "@/lib/privateLessons/packageMath";
+import { hrefTahsilatMerkezi } from "@/lib/finance/tahsilatMerkeziLinks";
 
 const INPUT =
   "min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20";
@@ -233,13 +235,14 @@ export default function PrivateLessonPackageDetailPage() {
   const manualUnplannedUsageBlocked = usageBlocked;
   const manualUsageDisabledTitle = usageBlocked ? "Pasif paket veya kalan ders hakkı yok." : undefined;
 
-  const parsedPaymentAdd = Number(String(paymentAmount).replace(",", "."));
-  const paymentPreviewNewPaid = pkg && Number.isFinite(parsedPaymentAdd) ? pkg.amountPaid + Math.max(parsedPaymentAdd, 0) : null;
+  const parsedPaymentAdd = parseMoneyInput(paymentAmount);
+  const parsedPaymentAddValue = parsedPaymentAdd ?? Number.NaN;
+  const paymentPreviewNewPaid = pkg && Number.isFinite(parsedPaymentAddValue) ? pkg.amountPaid + Math.max(parsedPaymentAddValue, 0) : null;
   const paymentPreviewRemaining =
     pkg && paymentPreviewNewPaid != null ? Math.max(pkg.totalPrice - paymentPreviewNewPaid, 0) : null;
   const paymentOverTotal =
     pkg && paymentPreviewNewPaid != null ? paymentPreviewNewPaid > pkg.totalPrice + 0.0001 : false;
-  const paymentAmountValid = Number.isFinite(parsedPaymentAdd) && parsedPaymentAdd > 0 && !paymentOverTotal;
+  const paymentAmountValid = Number.isFinite(parsedPaymentAddValue) && parsedPaymentAddValue > 0 && !paymentOverTotal;
 
   const nextActionText = useMemo(() => {
     if (!pkg) return "";
@@ -296,7 +299,7 @@ export default function PrivateLessonPackageDetailPage() {
     try {
       const fd = new FormData();
       fd.append("packageId", packageId);
-      fd.append("paymentAmount", String(parsedPaymentAdd));
+      fd.append("paymentAmount", String(parsedPaymentAddValue));
       const n = paymentNote.trim();
       if (n) fd.append("note", n);
       const res = await updatePrivateLessonPayment(fd);
@@ -347,6 +350,8 @@ export default function PrivateLessonPackageDetailPage() {
     { id: "usage", label: "Ders kayıtları" },
     { id: "payments", label: "Tahsilatlar" },
   ];
+
+  const viewerIsCoach = snapshot.viewerRole === "coach";
 
   const planBlocked =
     !pkg ||
@@ -544,18 +549,33 @@ export default function PrivateLessonPackageDetailPage() {
                 <PlusCircle size={18} aria-hidden />
                 Plansız / geçmiş ders kaydı ekle
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentAmount("");
-                  setPaymentNote("");
-                  setPaymentModalOpen(true);
-                }}
-                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition sm:hover:bg-[#7c3aed]/25"
-              >
-                <CircleDollarSign size={18} aria-hidden />
-                Ödeme kaydı ekle
-              </button>
+              {viewerIsCoach ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentAmount("");
+                    setPaymentNote("");
+                    setPaymentModalOpen(true);
+                  }}
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition sm:hover:bg-[#7c3aed]/25"
+                >
+                  <CircleDollarSign size={18} aria-hidden />
+                  Ödeme kaydı ekle
+                </button>
+              ) : (
+                <Link
+                  href={hrefTahsilatMerkezi({
+                    profileId: pkg.athleteId,
+                    packageId: pkg.id,
+                    paymentKind: "private_lesson_package",
+                    organizationId: pkg.organizationId,
+                  })}
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition sm:hover:bg-[#7c3aed]/25"
+                >
+                  <CircleDollarSign size={18} aria-hidden />
+                  Tahsilat Merkezinde aç
+                </Link>
+              )}
             </div>
           </div>
         ) : null}
@@ -998,7 +1018,7 @@ export default function PrivateLessonPackageDetailPage() {
         </div>
       ) : null}
 
-      {paymentModalOpen ? (
+      {paymentModalOpen && viewerIsCoach ? (
         <div
           className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
           role="presentation"

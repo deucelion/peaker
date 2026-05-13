@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addCoach } from "@/lib/actions/coachActions";
 import { bootstrapTenantHomeDashboard } from "@/lib/actions/snapshotActions";
-import { updateOrganizationDisplayNameAction } from "@/lib/actions/organizationProfileActions";
+import {
+  updateOrganizationDisplayNameAction,
+  updateOrganizationTimeZoneAction,
+} from "@/lib/actions/organizationProfileActions";
+import { listSupportedTimeZones } from "@/lib/organization/timeZoneOptions";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import type { CoachPermissions } from "@/lib/types";
 import type { PrivateLessonSessionListItem } from "@/lib/types";
@@ -14,6 +18,9 @@ import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
 import EmptyStateCard from "@/components/EmptyStateCard";
+import OnboardingChecklist, {
+  type OnboardingProgress,
+} from "@/components/onboarding/OnboardingChecklist";
 
 // --- TYPESCRIPT INTERFACES ---
 interface StatCardProps {
@@ -103,6 +110,9 @@ export default function Dashboard() {
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [orgNameSaving, setOrgNameSaving] = useState(false);
   const [orgNameHint, setOrgNameHint] = useState<string | null>(null);
+  const [orgTimeZone, setOrgTimeZone] = useState<string>("Europe/Istanbul");
+  const [orgTimeZoneSaving, setOrgTimeZoneSaving] = useState(false);
+  const [orgTimeZoneHint, setOrgTimeZoneHint] = useState<string | null>(null);
   const [role, setRole] = useState<"super_admin" | "admin" | "coach" | "sporcu">("sporcu");
   const [coaches, setCoaches] = useState<CoachListItem[]>([]);
   const [teamPaymentRows, setTeamPaymentRows] = useState<TeamPaymentRow[]>([]);
@@ -131,6 +141,7 @@ export default function Dashboard() {
     activeAthletes: number;
   } | null>(null);
   const [coachPrivateSessions, setCoachPrivateSessions] = useState<PrivateLessonSessionListItem[]>([]);
+  const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
   const router = useRouter();
 
   const fetchDashboardData = useCallback(async () => {
@@ -153,6 +164,9 @@ export default function Dashboard() {
       setRole((snapshot.role || "sporcu") as "super_admin" | "admin" | "coach" | "sporcu");
       setOrgName(snapshot.orgName || "PEAKER LAB");
       setCurrentOrgId(snapshot.organizationId || null);
+      if ("orgTimeZone" in snapshot && typeof snapshot.orgTimeZone === "string" && snapshot.orgTimeZone) {
+        setOrgTimeZone(snapshot.orgTimeZone);
+      }
 
       if (snapshot.role === "coach" && snapshot.coach) {
         setCoachPermissions(snapshot.coach.permissions || DEFAULT_COACH_PERMISSIONS);
@@ -177,6 +191,22 @@ export default function Dashboard() {
       if (snapshot.role === "admin" && snapshot.admin) {
         setCoachPermissions(null);
         setStats(snapshot.admin.stats || { totalPlayers: 0, activeTrainings: 0, attendanceRate: "-", monthlyRevenue: "-" });
+        const onboardingMetrics =
+          (snapshot.admin as { onboarding?: { totalAthletes?: number; totalTeams?: number; totalLessons?: number; totalFieldTestMetrics?: number; totalPayments?: number } }).onboarding ??
+          null;
+        if (onboardingMetrics) {
+          setOnboardingProgress({
+            organizationId: snapshot.organizationId || null,
+            hasCustomOrgName: Boolean(snapshot.orgName) && snapshot.orgName !== "PEAKER LAB",
+            totalAthletes: onboardingMetrics.totalAthletes || 0,
+            totalTeams: onboardingMetrics.totalTeams || 0,
+            totalLessons: onboardingMetrics.totalLessons || 0,
+            totalFieldTestMetrics: onboardingMetrics.totalFieldTestMetrics || 0,
+            totalPayments: onboardingMetrics.totalPayments || 0,
+          });
+        } else {
+          setOnboardingProgress(null);
+        }
         const attendanceNumeric = Number(snapshot.admin.stats?.attendanceRate ?? "-");
         if (!Number.isNaN(attendanceNumeric) && attendanceNumeric > 0) {
           setAttendanceTarget(Math.max(75, Math.min(98, Math.round(attendanceNumeric + 5))));
@@ -243,6 +273,20 @@ export default function Dashboard() {
       setOrgNameHint(result?.error || "Ad guncellenemedi.");
     }
     setOrgNameSaving(false);
+  };
+
+  const handleOrgTimeZoneSave = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentOrgId) return;
+    setOrgTimeZoneSaving(true);
+    setOrgTimeZoneHint(null);
+    const result = await updateOrganizationTimeZoneAction(currentOrgId, orgTimeZone);
+    if (result && "success" in result && result.success) {
+      setOrgTimeZoneHint("Saat dilimi güncellendi. Performans/Finans ekranları yeni dilime göre hesaplanır.");
+    } else {
+      setOrgTimeZoneHint((result && "error" in result ? result.error : null) || "Saat dilimi güncellenemedi.");
+    }
+    setOrgTimeZoneSaving(false);
   };
 
   if (loading) return (
@@ -522,6 +566,8 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {onboardingProgress ? <OnboardingChecklist progress={onboardingProgress} /> : null}
+
       <section className="ui-card min-w-0">
         <h3 className="ui-h2-sm mb-3">Bugün Öncelik</h3>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -771,6 +817,39 @@ export default function Dashboard() {
                 </button>
               </form>
               {orgNameHint && <p className="mt-2 break-words text-[10px] font-bold text-gray-400">{orgNameHint}</p>}
+            </div>
+          )}
+          {role === "admin" && currentOrgId && (
+            <div className="bg-[#121215] border border-white/10 p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
+              <h3 className="ui-h2 !text-lg mb-4">Saat dilimi</h3>
+              <p className="text-[10px] text-gray-500 font-bold mb-3 leading-relaxed">
+                Performans, finans ve takvim ekranlarındaki dönem hesapları bu saat dilimine göre yapılır.
+                Yurt dışında veya farklı bir bölgedeki firmalar için bu değeri değiştirin.
+              </p>
+              <form onSubmit={handleOrgTimeZoneSave} className="space-y-3">
+                <select
+                  value={orgTimeZone}
+                  onChange={(e) => setOrgTimeZone(e.target.value)}
+                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  aria-label="Organizasyon saat dilimi"
+                >
+                  {listSupportedTimeZones().map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={orgTimeZoneSaving}
+                  className="w-full min-h-11 bg-white/10 sm:hover:bg-white/15 border border-white/15 text-white py-2.5 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation"
+                >
+                  {orgTimeZoneSaving ? "Kaydediliyor..." : "Saat dilimini kaydet"}
+                </button>
+              </form>
+              {orgTimeZoneHint && (
+                <p className="mt-2 break-words text-[10px] font-bold text-gray-400">{orgTimeZoneHint}</p>
+              )}
             </div>
           )}
           {role === "admin" && (

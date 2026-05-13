@@ -39,4 +39,6 @@ export interface AthleteFinanceDetail {
     dueDate: string | null;
     amount: number | null;
   };
+  /** Organizasyonun saat dilimi (IANA). Tarih/zaman formatlaması bu zaman dilimine göre yapılır. */
+  timeZone?: string;
 }

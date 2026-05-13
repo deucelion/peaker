@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  ResponsiveContainer,
   ComposedChart,
   Line,
   Area,
@@ -13,6 +12,7 @@ import {
   ReferenceLine,
   LineChart,
 } from "recharts";
+import { ChartFrame, chartTooltipStyle } from "@/components/ui/charts";
 import {
   Activity,
   AlertTriangle,
@@ -31,11 +31,13 @@ import {
 import type { TrainingLoadRow, WellnessReportRow } from "@/types/performance";
 import {
   computeRiskStats,
+  fillCalendarDays,
   getLoadDate,
   getReadinessScore,
   processACWRData,
   processEWMAData,
 } from "@/lib/performance/loadSeries";
+import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 
 export type BodyMetricRow = {
   measurement_date: string;
@@ -52,7 +54,22 @@ type Visibility = {
   body: boolean;
 };
 
+/**
+ * Faz 4 — progressive disclosure.
+ * İlk açılışta ekran sakin kalsın diye sadece özet KPI ve ACWR görünür;
+ * EWMA/yük/wellness/kilo blokları kullanıcı "Detayları aç" dediğinde gelir.
+ * Mevcut pill toggle UI'sı ile birlikte tek tek de açılabilir.
+ */
 const defaultVis: Visibility = {
+  summary: true,
+  acwr: true,
+  ewma: false,
+  loads: false,
+  wellness: false,
+  body: false,
+};
+
+const expandedVis: Visibility = {
   summary: true,
   acwr: true,
   ewma: true,
@@ -73,23 +90,42 @@ export function AthletePerformanceInsightsPanel({
   const [vis, setVis] = useState<Visibility>(defaultVis);
   const [view, setView] = useState<"grafik" | "tablo">("grafik");
 
+  const allDetailsOn = vis.ewma && vis.loads && vis.wellness && vis.body;
+  const toggleAllDetails = () => setVis(allDetailsOn ? defaultVis : expandedVis);
+
   const normalizedLoads = useMemo(
     () => [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime()),
     [loads]
   );
 
+  /**
+   * ACWR/EWMA penceresi gerçek 7g/28g takvim günü olmalı (Faz 2.6).
+   * Panel'e harici tarih aralığı geçilmediği için min/max ölçüm tarihinden
+   * türetilen gerçek gözlem aralığında boş takvim günleri 0 yük ile doldurulur.
+   * Bu monotony/strain ve EWMA kayışlarını dinlenme günlerine duyarlı hale getirir.
+   */
+  const filledLoads = useMemo(() => {
+    if (normalizedLoads.length === 0) return normalizedLoads;
+    const firstIso = normalizedLoads[0].measurement_date || "";
+    const lastIso = normalizedLoads[normalizedLoads.length - 1].measurement_date || "";
+    const fromKey = isoToZonedDateKey(firstIso);
+    const toKey = isoToZonedDateKey(lastIso);
+    if (!fromKey || !toKey) return normalizedLoads;
+    return fillCalendarDays(normalizedLoads, fromKey, toKey);
+  }, [normalizedLoads]);
+
   const acwrData = useMemo(
-    () => (normalizedLoads.length ? processACWRData(normalizedLoads) : []),
-    [normalizedLoads]
+    () => (filledLoads.length ? processACWRData(filledLoads) : []),
+    [filledLoads]
   );
   const ewmaData = useMemo(
-    () => (normalizedLoads.length ? processEWMAData(normalizedLoads) : []),
-    [normalizedLoads]
+    () => (filledLoads.length ? processEWMAData(filledLoads) : []),
+    [filledLoads]
   );
   const riskStats = useMemo(
     () =>
-      computeRiskStats(acwrData, ewmaData, normalizedLoads, wellnessReports),
-    [acwrData, ewmaData, normalizedLoads, wellnessReports]
+      computeRiskStats(acwrData, ewmaData, filledLoads, wellnessReports),
+    [acwrData, ewmaData, filledLoads, wellnessReports]
   );
 
   const toggle = (k: keyof Visibility) => setVis((v) => ({ ...v, [k]: !v[k] }));
@@ -155,9 +191,19 @@ export function AthletePerformanceInsightsPanel({
       </div>
 
       <div className="space-y-2">
-        <p className="text-[8px] font-black uppercase tracking-widest text-gray-600 flex items-center gap-2">
-          <LayoutGrid size={12} className="text-[#7c3aed]" aria-hidden /> Koç: gösterilecek bloklar
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[8px] font-black uppercase tracking-widest text-gray-600 flex items-center gap-2">
+            <LayoutGrid size={12} className="text-[#7c3aed]" aria-hidden /> Koç: gösterilecek bloklar
+          </p>
+          <button
+            type="button"
+            onClick={toggleAllDetails}
+            className="min-h-9 touch-manipulation rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-gray-300 transition-colors sm:hover:bg-white/5"
+            aria-pressed={allDetailsOn}
+          >
+            {allDetailsOn ? "Detayları gizle" : "Tüm detayları aç"}
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2">
           {pill("summary", "Özet KPI")}
           {pill("acwr", "ACWR")}
@@ -238,38 +284,29 @@ export function AthletePerformanceInsightsPanel({
               <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-2 italic">
                 <TrendingUp size={14} className="text-[#7c3aed]" /> ACWR
               </h4>
-              <div className="h-[240px] sm:h-[280px] lg:h-[300px] w-full min-w-0">
-                {acwrData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={acwrData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1c1c21",
-                          border: "1px solid rgba(124,58,237,0.2)",
-                          borderRadius: "12px",
-                          fontSize: "10px",
-                        }}
-                      />
-                      <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
-                      <defs>
-                        <linearGradient id="spAcwrAkut" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25} />
-                          <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area yAxisId="load" type="monotone" dataKey="akut" stroke="#7c3aed" fill="url(#spAcwrAkut)" strokeWidth={2} />
-                      <Line yAxisId="load" type="monotone" dataKey="kronik" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
-                      <Line yAxisId="ratio" type="monotone" dataKey="ratio" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <EmptyBlock />
-                )}
-              </div>
+              <ChartFrame
+                isEmpty={acwrData.length === 0}
+                heightClassName="h-[240px] sm:h-[280px] lg:h-[300px]"
+                emptyLabel="VERİ YOK"
+              >
+                <ComposedChart data={acwrData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                  <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
+                  <defs>
+                    <linearGradient id="spAcwrAkut" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area yAxisId="load" type="monotone" dataKey="akut" stroke="#7c3aed" fill="url(#spAcwrAkut)" strokeWidth={2} />
+                  <Line yAxisId="load" type="monotone" dataKey="kronik" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
+                  <Line yAxisId="ratio" type="monotone" dataKey="ratio" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ChartFrame>
             </div>
           )}
           {vis.ewma && (
@@ -277,32 +314,23 @@ export function AthletePerformanceInsightsPanel({
               <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-2 italic">
                 <Waves size={14} className="text-[#7c3aed]" /> EWMA
               </h4>
-              <div className="h-[240px] sm:h-[280px] lg:h-[300px] w-full min-w-0">
-                {ewmaData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={ewmaData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1c1c21",
-                          border: "1px solid rgba(124,58,237,0.2)",
-                          borderRadius: "12px",
-                          fontSize: "10px",
-                        }}
-                      />
-                      <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
-                      <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                      <Line yAxisId="load" type="monotone" dataKey="chronicEwma" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
-                      <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <EmptyBlock />
-                )}
-              </div>
+              <ChartFrame
+                isEmpty={ewmaData.length === 0}
+                heightClassName="h-[240px] sm:h-[280px] lg:h-[300px]"
+                emptyLabel="VERİ YOK"
+              >
+                <ComposedChart data={ewmaData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                  <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
+                  <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                  <Line yAxisId="load" type="monotone" dataKey="chronicEwma" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
+                  <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ChartFrame>
             </div>
           )}
         </div>
@@ -357,33 +385,24 @@ export function AthletePerformanceInsightsPanel({
       {vis.loads && view === "grafik" && (
         <div className="bg-black/30 border border-white/5 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 min-w-0">
           <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 italic">Günlük toplam yük</h4>
-          <div className="h-[200px] sm:h-[240px] w-full min-w-0">
-            {normalizedLoads.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={normalizedLoads.map((l) => ({
-                    d: getLoadDate(l).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-                    yuk: l.total_load || 0,
-                  }))}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-                  <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1c1c21",
-                      border: "1px solid rgba(124,58,237,0.2)",
-                      borderRadius: "12px",
-                      fontSize: "10px",
-                    }}
-                  />
-                  <Line type="monotone" dataKey="yuk" stroke="#7c3aed" strokeWidth={3} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyBlock />
-            )}
-          </div>
+          <ChartFrame
+            isEmpty={normalizedLoads.length === 0}
+            heightClassName="h-[200px] sm:h-[240px]"
+            emptyLabel="VERİ YOK"
+          >
+            <LineChart
+              data={normalizedLoads.map((l) => ({
+                d: getLoadDate(l).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+                yuk: l.total_load || 0,
+              }))}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+              <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+              <Line type="monotone" dataKey="yuk" stroke="#7c3aed" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ChartFrame>
         </div>
       )}
 
@@ -422,24 +441,22 @@ export function AthletePerformanceInsightsPanel({
               </tbody>
             </table>
           ) : (
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={[...wellnessReports]
-                    .sort((a, b) => new Date(a.report_date).getTime() - new Date(b.report_date).getTime())
-                    .map((r) => ({
-                      d: new Date(r.report_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-                      skor: getReadinessScore(r),
-                    }))}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-                  <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: "#1c1c21", border: "1px solid rgba(124,58,237,0.2)", borderRadius: "12px" }} />
-                  <Line type="monotone" dataKey="skor" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Hazırlık" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <ChartFrame heightClassName="h-[220px]">
+              <LineChart
+                data={[...wellnessReports]
+                  .sort((a, b) => new Date(a.report_date).getTime() - new Date(b.report_date).getTime())
+                  .map((r) => ({
+                    d: new Date(r.report_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+                    skor: getReadinessScore(r),
+                  }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                <Line type="monotone" dataKey="skor" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Hazırlık" />
+              </LineChart>
+            </ChartFrame>
           )}
         </div>
       )}
@@ -467,24 +484,22 @@ export function AthletePerformanceInsightsPanel({
               </tbody>
             </table>
           ) : (
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={bodyMetrics.map((b) => ({
-                    d: new Date(b.measurement_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-                    kilo: b.weight ?? 0,
-                    yag: b.body_fat ?? 0,
-                  }))}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-                  <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: "#1c1c21", border: "1px solid rgba(124,58,237,0.2)", borderRadius: "12px" }} />
-                  <Line type="monotone" dataKey="kilo" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Kilo" />
-                  <Line type="monotone" dataKey="yag" stroke="#22d3ee" strokeWidth={2} dot={{ r: 2 }} name="Yağ %" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <ChartFrame heightClassName="h-[220px]">
+              <LineChart
+                data={bodyMetrics.map((b) => ({
+                  d: new Date(b.measurement_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+                  kilo: b.weight ?? 0,
+                  yag: b.body_fat ?? 0,
+                }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                <Line type="monotone" dataKey="kilo" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Kilo" />
+                <Line type="monotone" dataKey="yag" stroke="#22d3ee" strokeWidth={2} dot={{ r: 2 }} name="Yağ %" />
+              </LineChart>
+            </ChartFrame>
           )}
         </div>
       )}
@@ -523,13 +538,5 @@ function MiniKpi({
   );
 }
 
-function EmptyBlock() {
-  return (
-    <div className="h-full min-h-[140px] flex flex-col items-center justify-center gap-2 px-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-600">
-      <span className="italic">Bu aralıkta yük verisi yok</span>
-      <span className="font-bold normal-case text-gray-500 tracking-normal max-w-xs leading-relaxed">
-        İdman anketi veya yük kaydı girildiğinde grafik ve ACWR/EWMA hesaplanır.
-      </span>
-    </div>
-  );
-}
+// Faz 10.4 — EmptyBlock kaldırıldı; ChartFrame artık empty-state'i kendisi
+// yönetiyor (emptyLabel prop'u ile). Eski fallback render yolu temizlendi.

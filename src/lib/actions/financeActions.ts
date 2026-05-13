@@ -18,15 +18,75 @@ import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { captureServerActionSignal } from "@/lib/observability/serverActionError";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
+import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMath";
+import { mapPaymentRowForAthlete } from "@/lib/finance/unifiedAthletePaymentTimeline";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
+import { chunkedInQuery } from "@/lib/db/chunkedIn";
+
+function paymentEffectiveInstantMs(p: PaymentRow): number {
+  const pd = p.payment_date?.trim();
+  if (pd) {
+    const t = new Date(pd).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  const dd = p.due_date?.trim();
+  if (dd) {
+    const t = new Date(`${dd}T12:00:00`).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+
+function paymentDisplayIsoDate(p: PaymentRow): string | null {
+  const pd = p.payment_date?.trim();
+  if (pd) {
+    const d = new Date(pd);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  const dd = p.due_date?.trim();
+  if (dd && /^\d{4}-\d{2}-\d{2}$/.test(dd)) return dd;
+  return null;
+}
+
+/** Özel ders paketi: ödenmemiş / kısmi bakiye (payments bekliyor satırlarından ayrı tutulur). */
+function sumPrivateLessonPackageOpenBalances(
+  packages: ReadonlyArray<{
+    payment_status?: string | null;
+    total_price?: unknown;
+    amount_paid?: unknown;
+  }>
+): number {
+  let sum = 0;
+  for (const pkg of packages) {
+    const status = String(pkg.payment_status || "").toLowerCase();
+    if (status === "paid") continue;
+    const total = normalizeMoney(pkg.total_price as number | string | null | undefined);
+    const paid = normalizeMoney(pkg.amount_paid as number | string | null | undefined);
+    if (total <= 0) continue;
+    sum += Math.max(0, normalizeMoney(total - paid));
+  }
+  return normalizeMoney(sum);
+}
 
 type PaymentScope = "membership" | "private_lesson" | "extra_charge";
 type PaymentKind =
   | "monthly_membership"
   | "private_lesson_package"
-  | "license"
-  | "event"
-  | "equipment"
-  | "manual_other";
+  | string;
+
+function normalizePaymentKindKey(input: string | null | undefined, fallback: string): string {
+  const raw = String(input || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return fallback;
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  return normalized || fallback;
+}
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -47,18 +107,38 @@ const MONTH_NAMES_TR = [
   "Aralik",
 ] as const;
 
+/**
+ * `payments.due_date` (YYYY-MM-DD, takvim günü) için ay/yıl etiketini döndürür.
+ *
+ * Eski sürüm `T00:00:00` (TZ'siz) parse edip `getMonth()/getFullYear()` çağırıyordu;
+ * Node sunucusu UTC çalışırken Europe/Istanbul gibi pozitif UTC offset'lerde 31 Ocak
+ * gibi sınır günler için sapma yoktu ama Node lokali başka bir TZ'de çalıştığında
+ * (örn. America/Los_Angeles) 31 Ocak → "Aralık" olarak okunabiliyordu. Sabit
+ * `T12:00:00Z` (UTC öğlen) ile artık her sunucu lokalinde aynı gün okunur.
+ */
 function resolvePaymentPeriod(dueDate: string | null): { monthName: string; yearInt: number } {
-  const baseDate = dueDate ? new Date(`${dueDate}T00:00:00`) : new Date();
+  if (dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    const [yStr, mStr] = dueDate.split("-");
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+      return {
+        monthName: MONTH_NAMES_TR[m - 1] ?? "Ocak",
+        yearInt: y,
+      };
+    }
+  }
+  const baseDate = dueDate ? new Date(`${dueDate}T12:00:00Z`) : new Date();
   if (Number.isNaN(baseDate.getTime())) {
     const now = new Date();
     return {
-      monthName: MONTH_NAMES_TR[now.getMonth()] ?? "Ocak",
-      yearInt: now.getFullYear(),
+      monthName: MONTH_NAMES_TR[now.getUTCMonth()] ?? "Ocak",
+      yearInt: now.getUTCFullYear(),
     };
   }
   return {
-    monthName: MONTH_NAMES_TR[baseDate.getMonth()] ?? "Ocak",
-    yearInt: baseDate.getFullYear(),
+    monthName: MONTH_NAMES_TR[baseDate.getUTCMonth()] ?? "Ocak",
+    yearInt: baseDate.getUTCFullYear(),
   };
 }
 
@@ -84,10 +164,7 @@ function resolvePaymentDomain(input: {
   const typeRaw = (input.paymentTypeRaw || "").trim();
 
   if (scopeRaw === "extra_charge") {
-    const kind: PaymentKind =
-      kindRaw === "license" || kindRaw === "event" || kindRaw === "equipment" || kindRaw === "manual_other"
-        ? kindRaw
-        : "manual_other";
+    const kind: PaymentKind = normalizePaymentKindKey(kindRaw, "extra_charge");
     return { scope: "extra_charge", kind, paymentType: "aylik" };
   }
   if (scopeRaw === "private_lesson") {
@@ -99,24 +176,31 @@ function resolvePaymentDomain(input: {
   return { scope: "membership", kind: "monthly_membership", paymentType: "aylik" };
 }
 
+/**
+ * Finans alanı için hata sınıflandırması (Faz 2.4).
+ * UI bu alana göre "Yetkiniz yok" / "Veri yok" / "Hata" bannerlarını ayrıştırır.
+ */
+export type FinanceErrorKind = "permission_denied" | "auth_required" | "invalid_input" | "fetch_error";
+
 async function resolveFinanceActorForReadWrite(requireWrite: boolean): Promise<
-  { actorUserId: string; actorRole: string; organizationId: string } | { error: string }
+  | { actorUserId: string; actorRole: string; organizationId: string }
+  | { error: string; errorKind: FinanceErrorKind }
 > {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
-  if ("error" in resolved) return { error: resolved.error };
+  if ("error" in resolved) return { error: resolved.error, errorKind: "auth_required" };
   const actor = toTenantProfileRow(resolved.actor);
-  if (!actor.organization_id) return { error: "Kullanici profili dogrulanamadi." };
+  if (!actor.organization_id) return { error: "Kullanici profili dogrulanamadi.", errorKind: "auth_required" };
   const role = getSafeRole(actor.role);
   if (role !== "admin" && role !== "coach") {
-    return { error: FINANCE_ADMIN_ONLY_MESSAGE };
+    return { error: FINANCE_ADMIN_ONLY_MESSAGE, errorKind: "permission_denied" };
   }
   if (role === "coach") {
     const perms = await getCoachPermissions(actor.id, actor.organization_id);
     if (!hasCoachPermission(perms, "can_view_reports")) {
-      return { error: "Finans detayini goruntuleme yetkiniz yok." };
+      return { error: "Finans detayini goruntuleme yetkiniz yok.", errorKind: "permission_denied" };
     }
     if (requireWrite && !hasCoachPermission(perms, "can_manage_athlete_profiles")) {
-      return { error: "Finans planini guncelleme yetkiniz yok." };
+      return { error: "Finans planini guncelleme yetkiniz yok.", errorKind: "permission_denied" };
     }
   }
   return { actorUserId: actor.id, actorRole: actor.role, organizationId: actor.organization_id };
@@ -188,66 +272,12 @@ function mapPrivateLessonPaymentRow(raw: {
   };
 }
 
-function mapPaymentRow(raw: {
-  id: string;
-  profile_id: string | null;
-  organization_id: string;
-  amount: number | string | null;
-  payment_type: string;
-  payment_scope?: string | null;
-  payment_kind?: string | null;
-  display_name?: string | null;
-  metadata_json?: Record<string, unknown> | null;
-  due_date: string | null;
-  payment_date?: string | null;
-  status: string;
-  total_sessions: number | null;
-  remaining_sessions: number | null;
-  description: string | null;
-  deleted_at?: string | null;
-  deleted_by?: string | null;
-  delete_reason?: string | null;
-}): PaymentRow {
-  const pt = raw.payment_type === "paket" ? "paket" : "aylik";
-  const st = raw.status === "odendi" ? "odendi" : "bekliyor";
-  const ownerId = raw.profile_id || "";
-  const scope = raw.payment_scope === "private_lesson" || raw.payment_scope === "extra_charge" ? raw.payment_scope : "membership";
-  const kind =
-    raw.payment_kind === "private_lesson_package" ||
-    raw.payment_kind === "license" ||
-    raw.payment_kind === "event" ||
-    raw.payment_kind === "equipment" ||
-    raw.payment_kind === "manual_other"
-      ? raw.payment_kind
-      : "monthly_membership";
-  return {
-    id: raw.id,
-    profile_id: ownerId,
-    organization_id: raw.organization_id,
-    amount: Number(raw.amount) || 0,
-    payment_type: pt,
-    payment_scope: scope,
-    payment_kind: kind,
-    display_name: raw.display_name ?? null,
-    metadata_json: raw.metadata_json ?? null,
-    due_date: raw.due_date,
-    payment_date: raw.payment_date ?? null,
-    status: st,
-    total_sessions: raw.total_sessions != null ? Number(raw.total_sessions) : null,
-    remaining_sessions: raw.remaining_sessions != null ? Number(raw.remaining_sessions) : null,
-    description: raw.description,
-    deleted_at: raw.deleted_at ?? null,
-    deleted_by: raw.deleted_by ?? null,
-    delete_reason: raw.delete_reason ?? null,
-  };
-}
-
 export type OrgFinanceSnapshot = {
   players: Array<
     PlayerWithPayments & {
       financeSummary: FinanceStatusSummary;
       nextAidatPlan: { dueDate: string | null; amount: number | null };
-      paymentModel: "Aylik" | "Paket" | "Hibrit" | "Ek Tahsilat";
+      paymentModel: "Aylik" | "Paket" | "Hibrit" | "Özel tahsilat";
       activeProductLabel: string | null;
       overdueAmount: number;
       pendingAmountTotal: number;
@@ -284,50 +314,93 @@ export async function listOrgPaymentsForAdmin(): Promise<
 
   const athleteIds = (profileRows || []).map((p) => p.id);
 
-  let paymentRows: Array<Parameters<typeof mapPaymentRow>[0]> = [];
+  let paymentRows: Array<Parameters<typeof mapPaymentRowForAthlete>[0]> = [];
   let privateLessonPackageRows: Array<{
     athlete_id: string;
     package_name: string | null;
     payment_status: "unpaid" | "partial" | "paid";
     is_active: boolean;
     created_at: string;
+    total_price: number | string | null;
+    amount_paid: number | string | null;
   }> = [];
   if (athleteIds.length > 0) {
-    const payRes = await adminClient
-      .from("payments")
-      .select(
-        "id, profile_id, organization_id, amount, payment_type, payment_scope, payment_kind, display_name, metadata_json, due_date, payment_date, status, total_sessions, remaining_sessions, description, deleted_at, deleted_by, delete_reason"
-      )
-      .eq("organization_id", resolved.organizationId)
-      .in("profile_id", athleteIds)
-      .is("deleted_at", null);
+    // Faz 9.2 — chunked .in() for 1000+ athlete fan-out.
+    const payRes = await chunkedInQuery(
+      athleteIds,
+      async (chunk) =>
+        await adminClient
+          .from("payments")
+          .select(
+            "id, profile_id, organization_id, amount, payment_type, payment_scope, payment_kind, display_name, metadata_json, due_date, payment_date, status, total_sessions, remaining_sessions, description, deleted_at, deleted_by, delete_reason"
+          )
+          .eq("organization_id", resolved.organizationId)
+          .in("profile_id", chunk)
+          .is("deleted_at", null),
+      { scope: "financeActions.loadFinanceForAthletes.payments" }
+    );
     if (payRes.error && isPaymentsSchemaCompatibilityError(payRes.error.message)) {
-      const payFallbackRes = await adminClient
-        .from("payments")
-        .select(
-          "id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description"
-        )
-        .eq("organization_id", resolved.organizationId)
-        .in("profile_id", athleteIds);
+      const payFallbackRes = await chunkedInQuery(
+        athleteIds,
+        async (chunk) =>
+          await adminClient
+            .from("payments")
+            .select(
+              "id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description"
+            )
+            .eq("organization_id", resolved.organizationId)
+            .in("profile_id", chunk),
+        { scope: "financeActions.loadFinanceForAthletes.payments.fallback" }
+      );
       if (payFallbackRes.error) return { error: `Odeme listesi alinamadi: ${payFallbackRes.error.message}` };
-      paymentRows = (payFallbackRes.data || []) as Array<Parameters<typeof mapPaymentRow>[0]>;
+      paymentRows = (payFallbackRes.data || []) as Array<Parameters<typeof mapPaymentRowForAthlete>[0]>;
     } else {
       if (payRes.error) return { error: `Odeme listesi alinamadi: ${payRes.error.message}` };
-      paymentRows = (payRes.data || []) as Array<Parameters<typeof mapPaymentRow>[0]>;
+      paymentRows = (payRes.data || []) as Array<Parameters<typeof mapPaymentRowForAthlete>[0]>;
     }
-    const packageRes = await adminClient
-      .from("private_lesson_packages")
-      .select("athlete_id, package_name, payment_status, is_active, created_at")
-      .eq("organization_id", resolved.organizationId)
-      .in("athlete_id", athleteIds)
-      .order("created_at", { ascending: false });
+    const packageRes = await chunkedInQuery(
+      athleteIds,
+      async (chunk) =>
+        await adminClient
+          .from("private_lesson_packages")
+          .select("athlete_id, package_name, payment_status, is_active, created_at, total_price, amount_paid")
+          .eq("organization_id", resolved.organizationId)
+          .in("athlete_id", chunk)
+          .order("created_at", { ascending: false }),
+      { scope: "financeActions.loadFinanceForAthletes.packages" }
+    );
     if (packageRes.error) return { error: `Paket listesi alinamadi: ${packageRes.error.message}` };
-    privateLessonPackageRows = (packageRes.data || []) as typeof privateLessonPackageRows;
+    // Chunk birleştirme sonrası DESC by created_at — parity koru.
+    const merged = (packageRes.data || []) as typeof privateLessonPackageRows;
+    if (merged.length > 1) {
+      merged.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    }
+    privateLessonPackageRows = merged;
+  }
+
+  let privateLessonPaymentLedgerRows: Array<{
+    athlete_id: string;
+    amount: number | string;
+    paid_at: string;
+  }> = [];
+  if (athleteIds.length > 0) {
+    const plpRes = await chunkedInQuery(
+      athleteIds,
+      async (chunk) =>
+        await adminClient
+          .from("private_lesson_payments")
+          .select("athlete_id, amount, paid_at")
+          .eq("organization_id", resolved.organizationId)
+          .in("athlete_id", chunk),
+      { scope: "financeActions.loadFinanceForAthletes.ledger" }
+    );
+    if (plpRes.error) return { error: `Ozel ders odeme gecmisi alinamadi: ${plpRes.error.message}` };
+    privateLessonPaymentLedgerRows = (plpRes.data || []) as typeof privateLessonPaymentLedgerRows;
   }
 
   const paymentsByProfile = new Map<string, PaymentRow[]>();
   paymentRows.forEach((row) => {
-    const mapped = mapPaymentRow(row);
+    const mapped = mapPaymentRowForAthlete(row);
     const list = paymentsByProfile.get(mapped.profile_id) || [];
     list.push(mapped);
     paymentsByProfile.set(mapped.profile_id, list);
@@ -338,6 +411,13 @@ export async function listOrgPaymentsForAdmin(): Promise<
     const list = packageByAthlete.get(pkg.athlete_id) || [];
     list.push(pkg);
     packageByAthlete.set(pkg.athlete_id, list);
+  });
+
+  const plpByAthlete = new Map<string, typeof privateLessonPaymentLedgerRows>();
+  privateLessonPaymentLedgerRows.forEach((row) => {
+    const list = plpByAthlete.get(row.athlete_id) || [];
+    list.push(row);
+    plpByAthlete.set(row.athlete_id, list);
   });
 
   const players = (profileRows || []).map((row) => {
@@ -357,21 +437,43 @@ export async function listOrgPaymentsForAdmin(): Promise<
     const hasPackage = packagePayments.length > 0 || packages.length > 0;
     const hasExtra = extraPayments.length > 0;
     const paymentModel: OrgFinanceSnapshot["players"][number]["paymentModel"] =
-      hasAidat && hasPackage ? "Hibrit" : hasAidat ? "Aylik" : hasPackage ? "Paket" : hasExtra ? "Ek Tahsilat" : "Aylik";
-    const pendingAmountTotalForAthlete = payments
-      .filter((p) => p.status === "bekliyor")
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      hasAidat && hasPackage ? "Hibrit" : hasAidat ? "Aylik" : hasPackage ? "Paket" : hasExtra ? "Özel tahsilat" : "Aylik";
+    const bekliyorPending = normalizeMoney(
+      payments.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    );
+    const packageOpenBalance = sumPrivateLessonPackageOpenBalances(packages);
+    const pendingAmountTotalForAthlete = normalizeMoney(bekliyorPending + packageOpenBalance);
     const overdueAmountForAthlete = payments
       .filter((p) => p.status === "bekliyor" && p.due_date)
       .filter((p) => new Date(`${p.due_date}T00:00:00`).getTime() < new Date().setHours(0, 0, 0, 0))
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const paidPayments = payments
-      .filter((p) => p.status === "odendi" && p.payment_date)
-      .sort((a, b) => new Date(b.payment_date || 0).getTime() - new Date(a.payment_date || 0).getTime());
-    const lastPayment = paidPayments[0] || null;
+
+    type LatestLedgerCand = { ms: number; date: string | null; amount: number };
+    const ledgerCandidates: LatestLedgerCand[] = [];
+    for (const p of payments) {
+      if (p.status !== "odendi") continue;
+      ledgerCandidates.push({
+        ms: paymentEffectiveInstantMs(p),
+        date: paymentDisplayIsoDate(p),
+        amount: normalizeMoney(p.amount),
+      });
+    }
+    for (const plp of plpByAthlete.get(row.id) || []) {
+      const ms = new Date(plp.paid_at).getTime();
+      ledgerCandidates.push({
+        ms: Number.isFinite(ms) ? ms : 0,
+        date: plp.paid_at.slice(0, 10),
+        amount: normalizeMoney(plp.amount),
+      });
+    }
+    ledgerCandidates.sort((a, b) => {
+      if (b.ms !== a.ms) return b.ms - a.ms;
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+    const latestLedger = ledgerCandidates.find((c) => c.ms > 0) ?? ledgerCandidates[0] ?? null;
     const activeProductLabel =
       activePackage?.package_name ||
-      (row.next_aidat_due_date ? `Aidat (${row.next_aidat_due_date})` : hasExtra ? "Ek Tahsilatlar" : null);
+      (row.next_aidat_due_date ? `Aidat (${row.next_aidat_due_date})` : hasExtra ? "Özel tahsilatlar" : null);
     return {
       id: row.id,
       full_name: toDisplayName(row.full_name, row.email, "Sporcu"),
@@ -391,15 +493,13 @@ export async function listOrgPaymentsForAdmin(): Promise<
       activeProductLabel,
       overdueAmount: overdueAmountForAthlete,
       pendingAmountTotal: pendingAmountTotalForAthlete,
-      lastPaymentDate: lastPayment?.payment_date ?? null,
-      lastPaymentAmount: lastPayment?.amount ?? null,
+      lastPaymentDate: latestLedger?.date ?? null,
+      lastPaymentAmount: latestLedger != null ? latestLedger.amount : null,
     };
   }) as OrgFinanceSnapshot["players"];
 
+  const pendingAmountTotal = players.reduce((sum, p) => sum + p.pendingAmountTotal, 0);
   const allPayments = players.flatMap((p) => p.payments || []);
-  const pendingAmountTotal = allPayments
-    .filter((pay) => pay.status === "bekliyor")
-    .reduce((sum, pay) => sum + (Number(pay.amount) || 0), 0);
   const collectionPowerPercent =
     allPayments.length === 0
       ? 0
@@ -423,9 +523,9 @@ export async function createOrgPayment(formData: FormData) {
   const profileId = formData.get("profile_id")?.toString().trim();
   if (!assertUuid(profileId)) return { error: "Gecersiz sporcu." };
 
-  const amountRaw = formData.get("amount");
-  const amount = typeof amountRaw === "string" ? Number(amountRaw) : Number(amountRaw);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) {
+  const amountRaw = formData.get("amount")?.toString();
+  const amount = parseMoneyInput(amountRaw);
+  if (amount == null || amount <= 0 || amount > 1_000_000_000) {
     return { error: "Gecersiz tutar." };
   }
 
@@ -536,7 +636,8 @@ export async function createOrgPayment(formData: FormData) {
             : "aylik aidat";
       await insertNotificationsForUsers(
         [profileId],
-        `Yeni odeme kaydi: ₺${amount} (${typeLabel}). Durum: bekliyor.`
+        `Yeni odeme kaydi: ₺${amount} (${typeLabel}). Durum: bekliyor.`,
+        "payment.scheduled"
       );
     } catch {
       /* bildirim opsiyonel */
@@ -647,7 +748,8 @@ export async function updateOrgPaymentStatus(paymentId: string, status: string) 
       const notifiedProfileId = row.profile_id || "";
       await insertNotificationsForUsers(
         [notifiedProfileId],
-        `Odeme durumu guncellendi: ₺${row.amount} (${row.payment_type}). Yeni durum: ${st}.`
+        `Odeme durumu guncellendi: ₺${row.amount} (${row.payment_type}). Yeni durum: ${st}.`,
+        st === "odendi" ? "payment.received" : "payment.scheduled"
       );
     } catch {
       /* bildirim opsiyonel */
@@ -743,7 +845,7 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
     .eq("profile_id", athleteId)
     .is("deleted_at", null)
     .order("due_date", { ascending: false });
-  let paymentsData: Array<Parameters<typeof mapPaymentRow>[0]> = [];
+  let paymentsData: Array<Parameters<typeof mapPaymentRowForAthlete>[0]> = [];
   let paymentsErr: string | null = null;
   if (paymentsRes.error && isPaymentsSchemaCompatibilityError(paymentsRes.error.message)) {
     const fallbackRes = await adminClient
@@ -753,11 +855,11 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
       .eq("profile_id", athleteId)
       .order("due_date", { ascending: false });
     if (fallbackRes.error) paymentsErr = fallbackRes.error.message;
-    else paymentsData = (fallbackRes.data || []) as Array<Parameters<typeof mapPaymentRow>[0]>;
+    else paymentsData = (fallbackRes.data || []) as Array<Parameters<typeof mapPaymentRowForAthlete>[0]>;
   } else if (paymentsRes.error) {
     paymentsErr = paymentsRes.error.message;
   } else {
-    paymentsData = (paymentsRes.data || []) as Array<Parameters<typeof mapPaymentRow>[0]>;
+    paymentsData = (paymentsRes.data || []) as Array<Parameters<typeof mapPaymentRowForAthlete>[0]>;
   }
   const [packagesRes, packagePaymentsRes] = await Promise.all([
     adminClient
@@ -778,7 +880,7 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
   if (packagesRes.error) return { error: `Ozel ders paketleri alinamadi: ${packagesRes.error.message}` };
   if (packagePaymentsRes.error) return { error: `Ozel ders odemeleri alinamadi: ${packagePaymentsRes.error.message}` };
 
-  const allPayments = paymentsData.map((row) => mapPaymentRow(row));
+  const allPayments = paymentsData.map((row) => mapPaymentRowForAthlete(row));
   const aidatPayments = allPayments.filter((p) => p.payment_type === "aylik");
   const legacyPackagePayments = allPayments.filter((p) => p.payment_type === "paket");
   const privateLessonPackages = (packagesRes.data || []).map((row) => mapPrivateLessonPackageRow(row as never));
@@ -790,6 +892,8 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
     plannedNextAmount: athlete.next_aidat_amount != null ? Number(athlete.next_aidat_amount) : null,
     hasPartialPackagePayment: privateLessonPackages.some((pkg) => pkg.paymentStatus === "partial"),
   });
+
+  const orgTimeZone = await resolveOrganizationTimeZone(organizationId);
 
   return {
     athlete: {
@@ -813,27 +917,32 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
       dueDate: athlete.next_aidat_due_date ?? null,
       amount: athlete.next_aidat_amount != null ? Number(athlete.next_aidat_amount) : null,
     },
+    timeZone: orgTimeZone,
   } satisfies AthleteFinanceDetail;
 }
 
 export async function getAthleteFinanceDetailForManagement(athleteId: string): Promise<
-  AthleteFinanceDetail | { error: string }
+  AthleteFinanceDetail | { error: string; errorKind?: FinanceErrorKind }
 > {
   return withServerActionGuard("finance.getAthleteFinanceDetailForManagement", async () => {
-    if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." };
+    if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi.", errorKind: "invalid_input" as const };
     const resolved = await resolveFinanceActorForReadWrite(false);
-    if ("error" in resolved) return { error: resolved.error };
+    if ("error" in resolved) return { error: resolved.error, errorKind: resolved.errorKind };
     return buildAthleteFinanceDetailByOrg(resolved.organizationId, athleteId);
   });
 }
 
-export async function getMyFinanceDetailForAthlete(): Promise<AthleteFinanceDetail | { error: string }> {
+export async function getMyFinanceDetailForAthlete(): Promise<
+  AthleteFinanceDetail | { error: string; errorKind?: FinanceErrorKind }
+> {
   return withServerActionGuard("finance.getMyFinanceDetailForAthlete", async () => {
     const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
-    if ("error" in resolved) return { error: resolved.error };
+    if ("error" in resolved) return { error: resolved.error, errorKind: "auth_required" as const };
     const actor = toTenantProfileRow(resolved.actor);
-    if (!actor.organization_id) return { error: "Organizasyon bilgisi eksik." };
-    if (getSafeRole(actor.role) !== "sporcu") return { error: "Bu sayfa yalnizca sporcular icindir." };
+    if (!actor.organization_id) return { error: "Organizasyon bilgisi eksik.", errorKind: "auth_required" as const };
+    if (getSafeRole(actor.role) !== "sporcu") {
+      return { error: "Bu sayfa yalnizca sporcular icindir.", errorKind: "permission_denied" as const };
+    }
     const adminClient = createSupabaseAdminClient();
     const { data: athletePerm } = await adminClient
       .from("athlete_permissions")
@@ -841,7 +950,7 @@ export async function getMyFinanceDetailForAthlete(): Promise<AthleteFinanceDeta
       .eq("athlete_id", actor.id)
       .maybeSingle();
     if ((athletePerm?.can_view_financial_status ?? true) === false) {
-      return { error: "Finansal durum goruntuleme yetkiniz kapali." };
+      return { error: "Finansal durum goruntuleme yetkiniz kapali.", errorKind: "permission_denied" as const };
     }
     return buildAthleteFinanceDetailByOrg(actor.organization_id, actor.id);
   });
@@ -856,8 +965,11 @@ export async function updateAthleteNextAidatPlanForManagement(formData: FormData
 
     const dueDate = formData.get("next_due_date")?.toString().trim() || "";
     const amountRaw = formData.get("next_amount")?.toString().trim() || "";
-    const amount = amountRaw ? Number(amountRaw) : null;
-    if (amount != null && (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000)) {
+    const amount = amountRaw ? parseMoneyInput(amountRaw) : null;
+    if (amountRaw && amount == null) {
+      return { error: "Bir sonraki aidat tutari gecersiz." };
+    }
+    if (amount != null && (amount < 0 || amount > 1_000_000_000)) {
       return { error: "Bir sonraki aidat tutari gecersiz." };
     }
     if (dueDate && Number.isNaN(new Date(`${dueDate}T00:00:00`).getTime())) {
@@ -1021,7 +1133,8 @@ export async function markPlannedAidatAsPaidForManagement(formData: FormData) {
       try {
         await insertNotificationsForUsers(
           [athleteId],
-          `Aidat odemesi tamamlandi. Odeme tarihi: ${plannedDueDate}. Bir sonraki aidat: ${advancedDueDate}.`
+          `Aidat odemesi tamamlandi. Odeme tarihi: ${plannedDueDate}. Bir sonraki aidat: ${advancedDueDate}.`,
+          "payment.received"
         );
       } catch {
         /* bildirim opsiyonel */

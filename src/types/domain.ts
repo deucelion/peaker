@@ -25,10 +25,7 @@ export interface PaymentRow {
   payment_kind?:
     | "monthly_membership"
     | "private_lesson_package"
-    | "license"
-    | "event"
-    | "equipment"
-    | "manual_other";
+    | string;
   display_name?: string | null;
   metadata_json?: Record<string, unknown> | null;
   due_date: string | null;
@@ -67,6 +64,7 @@ export interface TestDefinitionRow {
   value_type?: "number" | "text" | null;
   sort_order?: number | null;
   created_at?: string | null;
+  improvement_direction?: "higher_better" | "lower_better" | "unknown" | null;
 }
 
 export interface AthleticResultRow {
