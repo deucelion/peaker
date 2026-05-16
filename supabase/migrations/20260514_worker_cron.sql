@@ -90,5 +90,11 @@ begin
   raise notice 'peaker_worker_tick scheduled (every minute via pg_net)';
 end$$;
 
-comment on extension pg_cron is
-  'Peaker scheduler — retention + MV refresh + worker tick.';
+-- pg_cron Dashboard'dan etkinleştirilmeden bu satır 42704 verir; guard zorunlu.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $cmd$comment on extension pg_cron is
+      'Peaker scheduler — retention + MV refresh + worker tick.'$cmd$;
+  end if;
+end$$;
