@@ -1,5 +1,6 @@
 import type { PaymentRow } from "@/types/domain";
 import type { FinanceStatusSummary } from "@/lib/types/finance";
+import { normalizeMoney } from "@/lib/privateLessons/packageMath";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,12 +13,35 @@ function todayDateOnlyMs() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 }
 
+/** Özel ders paketlerinde kalan tahsilat bakiyesi (payments bekliyor hariç). */
+export function sumPackageOpenBalance(
+  packages: ReadonlyArray<{
+    payment_status?: string | null;
+    total_price?: unknown;
+    amount_paid?: unknown;
+  }>
+): number {
+  let sum = 0;
+  for (const pkg of packages) {
+    const status = String(pkg.payment_status || "").toLowerCase();
+    if (status === "paid") continue;
+    const total = normalizeMoney(pkg.total_price as number | string | null | undefined);
+    const paid = normalizeMoney(pkg.amount_paid as number | string | null | undefined);
+    if (total <= 0) continue;
+    sum += Math.max(0, normalizeMoney(total - paid));
+  }
+  return normalizeMoney(sum);
+}
+
 export function computeFinanceStatusSummary(input: {
   aidatPayments: PaymentRow[];
   plannedNextDueDate?: string | null;
   plannedNextAmount?: number | null;
   hasPartialPackagePayment?: boolean;
+  /** Paket total_price − amount_paid (ödenmemiş/kısmi). */
+  packageOpenBalance?: number;
 }): FinanceStatusSummary {
+  const packageOpen = normalizeMoney(input.packageOpenBalance ?? 0);
   const aidat = (input.aidatPayments || []).filter((p) => p.payment_type === "aylik");
   const pending = aidat.filter((p) => p.status !== "odendi");
   const todayMs = todayDateOnlyMs();
@@ -72,7 +96,7 @@ export function computeFinanceStatusSummary(input: {
   }
 
   if (pending.length > 0 || input.hasPartialPackagePayment) {
-    return {
+    const partial: FinanceStatusSummary = {
       tone: "paid",
       label: "Kısmi Ödeme",
       nextDueDate,
@@ -80,14 +104,32 @@ export function computeFinanceStatusSummary(input: {
       overdueCount: 0,
       pendingCount: pending.length,
     };
+    return applyPackageOpenBalanceToSummary(partial, packageOpen);
   }
 
-  return {
+  const settled: FinanceStatusSummary = {
     tone: "paid",
     label: nextDueDate ? "Ödeme Tamamlandı" : "Borç Bulunmuyor",
     nextDueDate,
     nextAmount,
     overdueCount: 0,
     pendingCount: pending.length,
+  };
+  return applyPackageOpenBalanceToSummary(settled, packageOpen);
+}
+
+function applyPackageOpenBalanceToSummary(
+  summary: FinanceStatusSummary,
+  packageOpen: number
+): FinanceStatusSummary {
+  if (packageOpen <= 0.001) return summary;
+  if (summary.label === "Gecikmiş Ödeme" || summary.tone === "overdue") return summary;
+  if (summary.label === "Ödeme Bekleniyor" && summary.tone === "approaching") return summary;
+  if (summary.label === "Kısmi Ödeme" && summary.pendingCount > 0) return summary;
+  return {
+    ...summary,
+    tone: "paid",
+    label: "Açık Bakiye Var",
+    pendingCount: summary.pendingCount,
   };
 }

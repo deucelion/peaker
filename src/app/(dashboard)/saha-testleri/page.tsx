@@ -23,12 +23,13 @@ import {
   saveFieldTestDefinitionOrder,
   saveAthleticFieldResults,
   updateFieldTestDefinition,
-  type AthleticResultCell,
   type MetricValueType,
 } from "@/lib/actions/athleticFieldActions";
 import type { AthleticResultRow, ProfileBasic, TestDefinitionRow } from "@/types/domain";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorState from "@/components/ui/data-display/InlineErrorState";
+import { buildFieldTestCells, metricValueKindFromRow } from "@/lib/fieldTests/buildFieldTestSavePayload";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
@@ -57,6 +58,11 @@ export default function SahaTestleriFinal() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveErrorDetail, setSaveErrorDetail] = useState<{
+    title: string;
+    description: string;
+    correlationId?: string;
+  } | null>(null);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [exportBusy, setExportBusy] = useState(false);
@@ -407,34 +413,28 @@ export default function SahaTestleriFinal() {
 
     setSaveLoading(true);
     setSaveMessage(null);
+    setSaveErrorDetail(null);
     setSaveFeedback("saving");
     try {
-      const cells: AthleticResultCell[] = [];
-      for (const pId of selectedPlayers) {
-        for (const m of metrics) {
-          const key = `${pId}-${m.id}`;
-          const raw = testValues[key];
-          const str = typeof raw === "string" ? raw.trim() : raw;
-          const valueType = metricIsText(m) ? "text" : "number";
-          if (valueType === "number") {
-            const numeric = str === "" || str === null || str === undefined ? null : Number(str);
-            if (numeric !== null && Number.isNaN(numeric)) {
-              setSaveMessage("Geçersiz sayısal değer.");
-              setSaveFeedback("error");
-              setSaveLoading(false);
-              return;
-            }
-            cells.push({ profileId: pId, testId: m.id, valueNumber: numeric, valueText: null });
-          } else {
-            cells.push({
-              profileId: pId,
-              testId: m.id,
-              valueNumber: null,
-              valueText: str === "" || str === null || str === undefined ? null : String(str),
-            });
-          }
-        }
+      const built = buildFieldTestCells({
+        selectedProfileIds: selectedPlayers,
+        metrics: metrics.map((m) => ({
+          id: m.id,
+          valueType: metricValueKindFromRow(m),
+        })),
+        testValues,
+      });
+      if (built.error) {
+        setSaveMessage(built.error);
+        setSaveErrorDetail({
+          title: "Veri doğrulanamadı",
+          description: "Bazı metrik alanları geçersiz olabilir.",
+        });
+        setSaveFeedback("error");
+        setSaveLoading(false);
+        return;
       }
+      const cells = built.cells;
 
       const notesPayload = selectedPlayers.map((profileId) => ({
         profileId,
@@ -487,6 +487,14 @@ export default function SahaTestleriFinal() {
 
       if ("error" in result && result.error) {
         setSaveMessage(result.error);
+        setSaveErrorDetail({
+          title: "Saha testi kaydedilemedi",
+          description: result.error,
+          correlationId: "correlationId" in result ? result.correlationId : undefined,
+        });
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[field-test save]", result);
+        }
         setSaveFeedback("error");
       } else {
         if (scopeKey && fieldDraftStorageKey) {
@@ -907,11 +915,29 @@ export default function SahaTestleriFinal() {
           <Notification message={directoryError} variant="error" className="px-6 py-4" />
         </div>
       )}
-      {saveMessage && (
+      {saveErrorDetail ? (
+        <InlineErrorState
+          errorKind="fetch_error"
+          title={saveErrorDetail.title}
+          description={
+            saveErrorDetail.correlationId
+              ? `${saveErrorDetail.description} · Korelasyon: ${saveErrorDetail.correlationId}`
+              : saveErrorDetail.description
+          }
+          onRetry={() => void saveSelectedResults()}
+          className="mx-0"
+        />
+      ) : null}
+      {saveMessage && !saveErrorDetail ? (
         <div className="min-w-0 break-words">
           <Notification message={saveMessage} variant={saveFeedback === "error" ? "error" : "success"} className="px-6 py-4" />
         </div>
-      )}
+      ) : null}
+      {saveMessage && saveErrorDetail && saveFeedback !== "error" ? (
+        <div className="min-w-0 break-words">
+          <Notification message={saveMessage} variant="success" className="px-6 py-4" />
+        </div>
+      ) : null}
 
       {/* METRİK EDİTÖRÜ MODAL */}
       {showMetricModal && (

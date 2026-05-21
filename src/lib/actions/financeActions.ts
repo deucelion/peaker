@@ -9,7 +9,7 @@ import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
 import type { PaymentRow, PlayerWithPayments } from "@/types/domain";
 import type { AthleteFinanceDetail, FinanceStatusSummary, PrivateLessonPayment } from "@/lib/types";
-import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
+import { computeFinanceStatusSummary, sumPackageOpenBalance } from "@/lib/finance/paymentSummary";
 import { shouldNotifyFinancialEvent } from "@/lib/finance/notificationPolicy";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
@@ -54,26 +54,6 @@ function paymentDisplayIsoDate(p: PaymentRow): string | null {
   const dd = p.due_date?.trim();
   if (dd && /^\d{4}-\d{2}-\d{2}$/.test(dd)) return dd;
   return null;
-}
-
-/** Özel ders paketi: ödenmemiş / kısmi bakiye (payments bekliyor satırlarından ayrı tutulur). */
-function sumPrivateLessonPackageOpenBalances(
-  packages: ReadonlyArray<{
-    payment_status?: string | null;
-    total_price?: unknown;
-    amount_paid?: unknown;
-  }>
-): number {
-  let sum = 0;
-  for (const pkg of packages) {
-    const status = String(pkg.payment_status || "").toLowerCase();
-    if (status === "paid") continue;
-    const total = normalizeMoney(pkg.total_price as number | string | null | undefined);
-    const paid = normalizeMoney(pkg.amount_paid as number | string | null | undefined);
-    if (total <= 0) continue;
-    sum += Math.max(0, normalizeMoney(total - paid));
-  }
-  return normalizeMoney(sum);
 }
 
 type PaymentScope = "membership" | "private_lesson" | "extra_charge";
@@ -398,11 +378,13 @@ export async function listOrgPaymentsForAdmin(): Promise<
     const aidatPayments = payments.filter((p) => p.payment_type === "aylik");
     const extraPayments = payments.filter((p) => p.payment_scope === "extra_charge");
     const packagePayments = payments.filter((p) => p.payment_type === "paket" || p.payment_scope === "private_lesson");
+    const packageOpenBalance = sumPackageOpenBalance(packages);
     const financeSummary = computeFinanceStatusSummary({
       aidatPayments,
       plannedNextDueDate: row.next_aidat_due_date ?? null,
       plannedNextAmount: row.next_aidat_amount != null ? Number(row.next_aidat_amount) : null,
       hasPartialPackagePayment: packages.some((p) => p.payment_status === "partial"),
+      packageOpenBalance,
     });
     const activePackage = packages.find((p) => p.is_active) || packages[0] || null;
     const hasAidat = aidatPayments.length > 0 || row.next_aidat_due_date != null;
@@ -413,7 +395,6 @@ export async function listOrgPaymentsForAdmin(): Promise<
     const bekliyorPending = normalizeMoney(
       payments.filter((p) => p.status === "bekliyor").reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     );
-    const packageOpenBalance = sumPrivateLessonPackageOpenBalances(packages);
     const pendingAmountTotalForAthlete = normalizeMoney(bekliyorPending + packageOpenBalance);
     const overdueAmountForAthlete = payments
       .filter((p) => p.status === "bekliyor" && p.due_date)
@@ -874,6 +855,13 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
     plannedNextDueDate: athlete.next_aidat_due_date ?? null,
     plannedNextAmount: athlete.next_aidat_amount != null ? Number(athlete.next_aidat_amount) : null,
     hasPartialPackagePayment: privateLessonPackages.some((pkg) => pkg.paymentStatus === "partial"),
+    packageOpenBalance: sumPackageOpenBalance(
+      privateLessonPackages.map((p) => ({
+        payment_status: p.paymentStatus,
+        total_price: p.totalPrice,
+        amount_paid: p.amountPaid,
+      }))
+    ),
   });
 
   const orgTimeZone = await resolveOrganizationTimeZone(organizationId);

@@ -10,7 +10,8 @@ export interface FinanceStatusSummary {
     | "Ödeme Bekleniyor"
     | "Kısmi Ödeme"
     | "Gecikmiş Ödeme"
-    | "Borç Bulunmuyor";
+    | "Borç Bulunmuyor"
+    | "Açık Bakiye Var";
   nextDueDate: string | null;
   nextAmount: number | null;
   overdueCount: number;

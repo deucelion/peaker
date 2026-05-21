@@ -14,25 +14,19 @@ import { csvFilename } from "@/lib/export/csv";
 import { buildCsvFromRows } from "@/lib/export/csvStream";
 import { logger } from "@/lib/monitoring";
 import { chunkedInQuery } from "@/lib/db/chunkedIn";
+import {
+  buildAthleticResultUpsertRow,
+  resolveAthleticResultsWriteShape,
+} from "@/lib/fieldTests/athleticResultsWriteShape";
+import {
+  FIELDTEST_DIAG_SCHEMA,
+  FIELDTEST_DIAG_VALIDATION,
+  fieldTestSaveFailure,
+  type FieldTestSaveFailure,
+} from "@/lib/fieldTests/fieldTestSaveErrors";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
-}
-
-function toUserFriendlyFieldTestWriteError(
-  err: { message?: string | null; code?: string | null } | null | undefined,
-  fallback: string
-) {
-  const code = (err?.code || "").toLowerCase();
-  const msg = (err?.message || "").toLowerCase();
-
-  if (code === "42p10" || msg.includes("no unique or exclusion constraint")) {
-    return "Saha testi kayıt altyapısı eksik görünüyor. Lütfen tekrar deneyin veya yöneticinize bilgi verin.";
-  }
-  if (code === "23505" || msg.includes("duplicate key")) {
-    return "Aynı sporcu, metrik ve tarih için yalnızca tek kayıt tutulabilir.";
-  }
-  return fallback;
 }
 
 type TestDefinitionOrgShape = {
@@ -382,20 +376,34 @@ export type AthleticResultCell = {
   valueText: string | null;
 };
 
+export type FieldTestSaveResult =
+  | { success: true }
+  | FieldTestSaveFailure;
+
 export async function saveAthleticFieldResults(input: {
   testDate: string;
   selectedProfileIds: string[];
   cells: AthleticResultCell[];
   notes?: Array<{ profileId: string; note: string | null }>;
-}) {
+}): Promise<FieldTestSaveResult> {
   const resolved = await resolveFieldTestActor();
-  if ("error" in resolved) return { error: resolved.error };
+  if ("error" in resolved) {
+    return fieldTestSaveFailure(resolved.error ?? "Yetki doğrulanamadı.", {
+      diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
+    });
+  }
 
   const testDate = input.testDate?.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) return { error: "Gecersiz test tarihi." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
+    return fieldTestSaveFailure("Geçersiz test tarihi.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
+  }
 
   const selected = input.selectedProfileIds.filter(assertUuid);
-  if (selected.length === 0) return { error: "En az bir sporcu secilmelidir." };
+  if (selected.length === 0) {
+    return fieldTestSaveFailure("En az bir sporcu seçilmelidir.", {
+      diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
+    });
+  }
 
   const selectedSet = new Set(selected);
 
@@ -408,11 +416,17 @@ export async function saveAthleticFieldResults(input: {
 
   const validAthleteIds = new Set((athletes || []).map((a) => a.id));
   for (const id of selected) {
-    if (!validAthleteIds.has(id)) return { error: "Secilen sporculardan biri bu organizasyonda degil." };
+    if (!validAthleteIds.has(id)) {
+      return fieldTestSaveFailure("Seçilen sporculardan biri bu organizasyonda değil.", {
+        diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
+      });
+    }
   }
 
   const cells = input.cells.filter((c) => assertUuid(c.profileId) && assertUuid(c.testId) && selectedSet.has(c.profileId));
-  if (cells.length === 0) return { error: "Kaydedilecek hucre yok." };
+  if (cells.length === 0) {
+    return fieldTestSaveFailure("Kaydedilecek hücre yok.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
+  }
 
   const testIds = Array.from(new Set(cells.map((c) => c.testId)));
   let orgShape: TestDefinitionOrgShape = { hasOrganizationId: true, hasOrgId: false };
@@ -420,7 +434,7 @@ export async function saveAthleticFieldResults(input: {
     orgShape = await resolveTestDefinitionsOrgShape(resolved.adminClient);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return { error: `Metrik tablo yapisi okunamadi: ${message}` as const };
+    return fieldTestSaveFailure("Metrik tablo yapısı okunamadı.", { rawMessage: message });
   }
   let defsQuery = resolved.adminClient.from("test_definitions").select("id, value_type").in("id", testIds);
   if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
@@ -437,10 +451,40 @@ export async function saveAthleticFieldResults(input: {
     (defs || []).map((d) => [String(d.id), normalizeMetricValueType(d.value_type) as MetricValueType])
   );
   for (const tid of testIds) {
-    if (!validTestIds.has(tid)) return { error: "Gecersiz veya baska organizasyona ait metrik." };
+    if (!validTestIds.has(tid)) {
+      return fieldTestSaveFailure("Geçersiz veya başka organizasyona ait metrik.", {
+        diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
+      });
+    }
+  }
+
+  let writeShape;
+  try {
+    writeShape = await resolveAthleticResultsWriteShape(resolved.adminClient);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return fieldTestSaveFailure("Saha testi tablo yapısı okunamadı.", { rawMessage: message });
+  }
+
+  const hasTextCells = cells.some((c) => (valueTypeByTestId.get(c.testId) || "number") === "text" && (c.valueText?.trim() || ""));
+  if (hasTextCells && !writeShape.hasValueText) {
+    return fieldTestSaveFailure(
+      "Yazılı not metrikleri için veritabanı güncellemesi gerekli (value_text kolonu).",
+      { diagnosticsCode: FIELDTEST_DIAG_SCHEMA }
+    );
   }
 
   const orgId = resolved.organizationId;
+
+  if (process.env.NODE_ENV !== "production") {
+    logger.info("field_test.save.start", "field test save", {
+      testDate,
+      selectedCount: selected.length,
+      cellCount: cells.length,
+      organizationId: orgId,
+      writeShape,
+    });
+  }
 
   for (const cell of cells) {
     const valueType = valueTypeByTestId.get(cell.testId) || "number";
@@ -453,23 +497,44 @@ export async function saveAthleticFieldResults(input: {
           .eq("profile_id", cell.profileId)
           .eq("test_id", cell.testId)
           .eq("test_date", testDate);
-        if (delErr) return { error: toUserFriendlyFieldTestWriteError(delErr, "Saha testi kaydı silinemedi.") };
+        if (delErr) {
+          return fieldTestSaveFailure("Saha testi kaydı silinemedi.", {
+            rawMessage: delErr.message,
+            pgCode: delErr.code,
+          });
+        }
         continue;
       }
       const v = Number(cell.valueNumber);
-      if (!Number.isFinite(v)) return { error: "Gecersiz olcum degeri." };
-      const { error: upErr } = await resolved.adminClient.from("athletic_results").upsert(
-        {
-          profile_id: cell.profileId,
-          test_id: cell.testId,
-          value: v,
-          value_text: null,
-          test_date: testDate,
-          organization_id: orgId,
-        },
-        { onConflict: "profile_id,test_id,test_date" }
-      );
-      if (upErr) return { error: toUserFriendlyFieldTestWriteError(upErr, "Saha testi kaydı kaydedilemedi.") };
+      if (!Number.isFinite(v)) {
+        return fieldTestSaveFailure("Geçersiz ölçüm değeri.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
+      }
+      const row = buildAthleticResultUpsertRow({
+        profileId: cell.profileId,
+        testId: cell.testId,
+        testDate,
+        organizationId: orgId,
+        valueType: "number",
+        valueNumber: v,
+        valueText: null,
+        shape: writeShape,
+      });
+      const { error: upErr } = await resolved.adminClient
+        .from("athletic_results")
+        .upsert(row, { onConflict: "profile_id,test_id,test_date" });
+      if (upErr) {
+        logger.warn("field_test.cell_write_failed", "upsert failed", {
+          profileId: cell.profileId,
+          testId: cell.testId,
+          valueType,
+          code: upErr.code,
+          ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
+        });
+        return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
+          rawMessage: upErr.message,
+          pgCode: upErr.code,
+        });
+      }
       continue;
     }
 
@@ -480,20 +545,39 @@ export async function saveAthleticFieldResults(input: {
         .eq("profile_id", cell.profileId)
         .eq("test_id", cell.testId)
         .eq("test_date", testDate);
-      if (delErr) return { error: toUserFriendlyFieldTestWriteError(delErr, "Saha testi kaydı silinemedi.") };
+      if (delErr) {
+        return fieldTestSaveFailure("Saha testi kaydı silinemedi.", {
+          rawMessage: delErr.message,
+          pgCode: delErr.code,
+        });
+      }
     } else {
-      const { error: upErr } = await resolved.adminClient.from("athletic_results").upsert(
-        {
-          profile_id: cell.profileId,
-          test_id: cell.testId,
-          value: null,
-          value_text: normalizedText,
-          test_date: testDate,
-          organization_id: orgId,
-        },
-        { onConflict: "profile_id,test_id,test_date" }
-      );
-      if (upErr) return { error: toUserFriendlyFieldTestWriteError(upErr, "Saha testi kaydı kaydedilemedi.") };
+      const row = buildAthleticResultUpsertRow({
+        profileId: cell.profileId,
+        testId: cell.testId,
+        testDate,
+        organizationId: orgId,
+        valueType: "text",
+        valueNumber: null,
+        valueText: normalizedText,
+        shape: writeShape,
+      });
+      const { error: upErr } = await resolved.adminClient
+        .from("athletic_results")
+        .upsert(row, { onConflict: "profile_id,test_id,test_date" });
+      if (upErr) {
+        logger.warn("field_test.cell_write_failed", "upsert failed", {
+          profileId: cell.profileId,
+          testId: cell.testId,
+          valueType,
+          code: upErr.code,
+          ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
+        });
+        return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
+          rawMessage: upErr.message,
+          pgCode: upErr.code,
+        });
+      }
     }
   }
 
@@ -507,7 +591,12 @@ export async function saveAthleticFieldResults(input: {
         .eq("organization_id", orgId)
         .eq("profile_id", noteRow.profileId)
         .eq("test_date", testDate);
-      if (delErr) return { error: `Genel not silinemedi: ${delErr.message}` as const };
+      if (delErr) {
+        return fieldTestSaveFailure("Genel not silinemedi.", {
+          rawMessage: delErr.message,
+          pgCode: delErr.code,
+        });
+      }
       continue;
     }
     const { error: upErr } = await resolved.adminClient.from("athletic_result_notes").upsert(
@@ -519,13 +608,18 @@ export async function saveAthleticFieldResults(input: {
       },
       { onConflict: "profile_id,test_date" }
     );
-    if (upErr) return { error: `Genel not kaydedilemedi: ${upErr.message}` as const };
+    if (upErr) {
+      return fieldTestSaveFailure("Genel not kaydedilemedi.", {
+        rawMessage: upErr.message,
+        pgCode: upErr.code,
+      });
+    }
   }
 
   revalidatePath("/saha-testleri");
   revalidatePath("/saha-testleri/genel-rapor");
   revalidatePath("/sporcu");
-  return { success: true as const };
+  return { success: true };
 }
 
 /**

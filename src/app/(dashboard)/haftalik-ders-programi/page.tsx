@@ -244,57 +244,70 @@ export default function WeeklyLessonSchedulePage() {
       setQuickError(null);
       setQuickInfo(null);
       void (async () => {
-        const [lessonRes, packageRes] = await Promise.all([
-          listLessonsSnapshot(1, 1),
-          listPrivateLessonPackagesForManagement(),
-        ]);
-        if (cancelled) return;
+        try {
+          const [lessonRes, packageRes] = await Promise.all([
+            listLessonsSnapshot(1, 1),
+            listPrivateLessonPackagesForManagement(),
+          ]);
+          if (cancelled) return;
 
-        if (!("error" in lessonRes)) {
-          setQuickCoachOptions(lessonRes.coaches || []);
-          setGroupForm((prev) => ({
-            ...prev,
-            coachId: prev.coachId || lessonRes.coaches?.[0]?.id || "",
-          }));
-        } else {
-          setQuickCoachOptions([]);
-        }
+          if (!("error" in lessonRes)) {
+            setQuickCoachOptions(lessonRes.coaches || []);
+            setGroupForm((prev) => ({
+              ...prev,
+              coachId: prev.coachId || lessonRes.coaches?.[0]?.id || "",
+            }));
+          } else {
+            setQuickCoachOptions([]);
+          }
 
-        if (!("error" in packageRes)) {
-          const active = (packageRes.packages || []).filter((p) => p.isActive && p.remainingLessons > 0);
-          setQuickPackages(active);
-          setPrivateForm((prev) => ({
-            ...prev,
-            packageId: prev.packageId || active[0]?.id || "",
-            coachId: (() => {
-              const selectedPackageId = prev.packageId || active[0]?.id || "";
-              const selectedPackage = active.find((pkg) => pkg.id === selectedPackageId);
-              return selectedPackage?.coachId || "";
-            })(),
-          }));
-        } else {
-          setQuickPackages([]);
-          setQuickInfo("Özel ders planlama verisi alınamadı. Yetki veya paket durumu kontrol edilmelidir.");
-        }
+          if (!("error" in packageRes)) {
+            const active = (packageRes.packages || []).filter(
+              (p) => p.isActive && p.remainingLessons > 0
+            );
+            setQuickPackages(active);
+            setPrivateForm((prev) => ({
+              ...prev,
+              packageId: prev.packageId || active[0]?.id || "",
+              coachId: (() => {
+                const selectedPackageId = prev.packageId || active[0]?.id || "";
+                const selectedPackage = active.find((pkg) => pkg.id === selectedPackageId);
+                return selectedPackage?.coachId || "";
+              })(),
+            }));
+          } else {
+            setQuickPackages([]);
+            setQuickInfo("Özel ders planlama verisi alınamadı. Yetki veya paket durumu kontrol edilmelidir.");
+          }
 
-        const locationsRes = await listLocationsForActor();
-        if (!("error" in locationsRes)) {
-          const nextLocations = (locationsRes.locations || []).map((row) => ({
-            id: row.id,
-            name: row.name,
-            color: row.color,
-          }));
-          setLocationOptions(nextLocations);
-          setGroupForm((prev) => ({
-            ...prev,
-            location: prev.location || nextLocations[0]?.name || "Ana Saha",
-          }));
-          setPrivateForm((prev) => ({
-            ...prev,
-            location: prev.location || nextLocations[0]?.name || "",
-          }));
+          const locationsRes = await listLocationsForActor();
+          if (!cancelled && !("error" in locationsRes)) {
+            const nextLocations = (locationsRes.locations || []).map((row) => ({
+              id: row.id,
+              name: row.name,
+              color: row.color,
+            }));
+            setLocationOptions(nextLocations);
+            setGroupForm((prev) => ({
+              ...prev,
+              location: prev.location || nextLocations[0]?.name || "Ana Saha",
+            }));
+            setPrivateForm((prev) => ({
+              ...prev,
+              location: prev.location || nextLocations[0]?.name || "",
+            }));
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setQuickPackages([]);
+            setQuickInfo("Özel ders planlama verisi alınamadı. Tekrar deneyin.");
+            if (process.env.NODE_ENV !== "production") {
+              console.error("[weekly-quick-create load]", err);
+            }
+          }
+        } finally {
+          if (!cancelled) setQuickBusy(false);
         }
-        setQuickBusy(false);
       })();
     }, 0);
     return () => {
@@ -501,25 +514,33 @@ export default function WeeklyLessonSchedulePage() {
     setQuickBusy(true);
     setQuickError(null);
     setQuickInfo("Özel ders planı kaydediliyor…");
-    const res = await createPrivateLessonSession(fd);
-    if ("error" in res) {
-      setQuickError(res.error || "Özel ders planlanamadı.");
+    try {
+      const res = await createPrivateLessonSession(fd);
+      if ("error" in res) {
+        setQuickError(res.error || "Özel ders planlanamadı.");
+        setQuickInfo(null);
+        return;
+      }
+      setQuickInfo("Özel ders planlandı, takvim güncelleniyor…");
+      await fetchSnapshot();
+      setQuickCreateAt(null);
       setQuickInfo(null);
+      setActionMessage("Özel ders takvimden planlandı.");
+      setRecentCreatedRange({
+        dayKey: lessonDate,
+        startMinutes: startMin,
+        endMinutes: endMin,
+        expiresAt: Date.now() + 3500,
+      });
+    } catch (err) {
+      setQuickError("Özel ders planlanamadı. Tekrar deneyin.");
+      setQuickInfo(null);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[weekly-private-submit]", err);
+      }
+    } finally {
       setQuickBusy(false);
-      return;
     }
-    setQuickInfo("Özel ders planlandı, takvim güncelleniyor…");
-    await fetchSnapshot();
-    setQuickBusy(false);
-    setQuickCreateAt(null);
-    setQuickInfo(null);
-    setActionMessage("Özel ders takvimden planlandı.");
-    setRecentCreatedRange({
-      dayKey: lessonDate,
-      startMinutes: startMin,
-      endMinutes: endMin,
-      expiresAt: Date.now() + 3500,
-    });
   }
 
   async function submitOneClickGroupLesson() {
@@ -612,25 +633,33 @@ export default function WeeklyLessonSchedulePage() {
     setQuickBusy(true);
     setQuickError(null);
     setQuickInfo("Hızlı özel ders planlanıyor…");
-    const res = await createPrivateLessonSession(fd);
-    if ("error" in res) {
-      setQuickError(res.error || "Hızlı özel ders planlanamadı.");
+    try {
+      const res = await createPrivateLessonSession(fd);
+      if ("error" in res) {
+        setQuickError(res.error || "Hızlı özel ders planlanamadı.");
+        setQuickInfo(null);
+        return;
+      }
+      setQuickInfo("Özel ders planlandı, takvim güncelleniyor…");
+      await fetchSnapshot();
+      setQuickCreateAt(null);
       setQuickInfo(null);
+      setActionMessage("Hızlı özel ders planlandı.");
+      setRecentCreatedRange({
+        dayKey: lessonDate,
+        startMinutes: startMin,
+        endMinutes: endMin,
+        expiresAt: Date.now() + 3500,
+      });
+    } catch (err) {
+      setQuickError("Hızlı özel ders planlanamadı. Tekrar deneyin.");
+      setQuickInfo(null);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[weekly-oneclick-private]", err);
+      }
+    } finally {
       setQuickBusy(false);
-      return;
     }
-    setQuickInfo("Özel ders planlandı, takvim güncelleniyor…");
-    await fetchSnapshot();
-    setQuickBusy(false);
-    setQuickCreateAt(null);
-    setQuickInfo(null);
-    setActionMessage("Hızlı özel ders planlandı.");
-    setRecentCreatedRange({
-      dayKey: lessonDate,
-      startMinutes: startMin,
-      endMinutes: endMin,
-      expiresAt: Date.now() + 3500,
-    });
   }
 
   // Faz 11.5 — Stable callback referansları; child memo'ları gereksiz

@@ -57,6 +57,14 @@ const PRESENTATION_BY_LABEL: Record<FinanceStatusSummary["label"], FinanceStatus
     inlineTextClass: "text-emerald-300",
     supportText: "Aktif borç bulunmuyor.",
   },
+  "Açık Bakiye Var": {
+    label: "Açık Bakiye Var",
+    tone: "orange",
+    badgeClass: "border-amber-500/35 bg-amber-500/10 text-amber-200",
+    cardClass: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+    inlineTextClass: "text-amber-300",
+    supportText: "Özel ders paketinde tahsilat bekleyen bakiye var.",
+  },
 };
 
 export function getFinanceStatusPresentation(summary?: FinanceSummaryLike): FinanceStatusPresentation {

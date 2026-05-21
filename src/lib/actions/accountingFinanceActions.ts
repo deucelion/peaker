@@ -23,6 +23,10 @@ import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } fr
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
 import { applyPrivateLessonPaymentActiveFilter, getSchemaCapabilities } from "@/lib/schemaCompat";
 import { diagnosticsCode, operationalError } from "@/lib/ui/operationalErrors";
+import {
+  filterPackagesEligibleForCollection,
+  type AccountingPackageRowInput,
+} from "@/lib/finance/accountingPackageOptions";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import { csvFilename } from "@/lib/export/csv";
 import { buildCsvFromRows } from "@/lib/export/csvStream";
@@ -114,6 +118,9 @@ export type AccountingFinancePackageOption = {
   amountPaid: number;
   paymentStatus: "unpaid" | "partial" | "paid";
   isActive: boolean;
+  remainingBalance?: number;
+  lifecycleStatus?: import("@/lib/privateLessons/packageStatus").PackageLifecycleStatus;
+  nextPaymentDueAt?: string | null;
 };
 
 export type AccountingFinanceSnapshot = {
@@ -1327,37 +1334,47 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
     return { error: "Sporcu bu organizasyonda bulunamadı." };
   }
 
-  const { data: rows, error } = await adminClient
+  const baseSelect =
+    "id, package_name, remaining_lessons, total_lessons, used_lessons, total_price, amount_paid, payment_status, is_active";
+  let rows: unknown[] | null = null;
+  let listError: { message?: string; code?: string } | null = null;
+
+  const extended = await adminClient
     .from("private_lesson_packages")
-    .select("id, package_name, remaining_lessons, total_price, amount_paid, payment_status, is_active")
+    .select(`${baseSelect}, lifecycle_status, next_payment_due_at`)
     .eq("organization_id", organizationId)
     .eq("athlete_id", athleteId)
-    .eq("is_active", true)
     .order("created_at", { ascending: false });
 
-  if (error) {
+  if (!extended.error) {
+    rows = extended.data;
+  } else {
+    const msg = (extended.error.message || "").toLowerCase();
+    const code = (extended.error.code || "").toLowerCase();
+    if (code === "42703" || msg.includes("lifecycle_status") || msg.includes("next_payment_due")) {
+      const legacy = await adminClient
+        .from("private_lesson_packages")
+        .select(baseSelect)
+        .eq("organization_id", organizationId)
+        .eq("athlete_id", athleteId)
+        .order("created_at", { ascending: false });
+      rows = legacy.data;
+      listError = legacy.error;
+    } else {
+      listError = extended.error;
+    }
+  }
+
+  if (listError) {
     return {
-      error: operationalError("Paketler alınamadı", {
-        rawMessage: error.message,
-        code: diagnosticsCode("FIN", "packages"),
+      error: operationalError("Paketler şu anda alınamadı.", {
+        rawMessage: listError.message,
+        code: diagnosticsCode("FIN", "PACKAGES_FETCH"),
       }),
     };
   }
 
-  const packages: AccountingFinancePackageOption[] = (rows || [])
-    .map((row) => ({
-      id: String(row.id),
-      packageName: String(row.package_name || "Paket"),
-      remainingLessons: Math.max(0, Math.floor(Number(row.remaining_lessons) || 0)),
-      totalPrice: normalizeMoney(row.total_price),
-      amountPaid: normalizeMoney(row.amount_paid),
-      paymentStatus: (row.payment_status as AccountingFinancePackageOption["paymentStatus"]) || "unpaid",
-      isActive: row.is_active !== false,
-    }))
-    .filter((p) => {
-      if (p.totalPrice <= 0) return true;
-      return normalizeMoney(p.totalPrice - p.amountPaid) > 0.001;
-    });
+  const packages = filterPackagesEligibleForCollection((rows || []) as AccountingPackageRowInput[]);
 
   return { packages };
 }

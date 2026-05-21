@@ -87,6 +87,9 @@ export async function replayOfflineActionByKind(
         notes,
       });
       if ("error" in res && res.error) {
+        if (process.env.NODE_ENV !== "production" && "devHint" in res && res.devHint) {
+          console.error("[field-test replay]", res);
+        }
         return { ok: false, message: res.error, failureKind: classifyReplayFailure(res.error) };
       }
       return { ok: true };

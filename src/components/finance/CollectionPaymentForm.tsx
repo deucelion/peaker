@@ -11,23 +11,18 @@ import {
 } from "@/lib/actions/accountingFinanceActions";
 import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMath";
 import { PATHS } from "@/lib/navigation/routeRegistry";
+import {
+  formatAccountingPackageOptionLabel,
+  PACKAGE_FETCH_TIMEOUT_MS,
+  PAYMENT_SUBMIT_TIMEOUT_MS,
+  withAsyncTimeout,
+} from "@/lib/finance/accountingPackageOptions";
 
 const PAYMENT_KIND_FORM_OPTIONS = [
   { value: "monthly_membership", label: "Aylık Üyelik" },
   { value: "private_lesson_package", label: "Özel Ders Paketi" },
   { value: "extra_charge", label: "Özelleştirilebilir tahsilat" },
 ] as const;
-
-function formatPackageDropdownLabel(pkg: AccountingFinancePackageOption) {
-  const remainingPay = normalizeMoney(pkg.totalPrice - pkg.amountPaid);
-  const paidLabel =
-    pkg.paymentStatus === "paid"
-      ? "Ödeme tamam"
-      : pkg.paymentStatus === "partial"
-        ? "Kısmi ödeme"
-        : "Ödeme bekliyor";
-  return `${pkg.packageName} · Kalan ${pkg.remainingLessons} ders · Kalan ₺${remainingPay.toLocaleString("tr-TR")} (${paidLabel})`;
-}
 
 function defaultFormState() {
   return {
@@ -76,7 +71,9 @@ export function CollectionPaymentForm({
   const [packageOptionsLoading, setPackageOptionsLoading] = useState(false);
   const [packageOptionsError, setPackageOptionsError] = useState<string | null>(null);
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [paymentSubmitError, setPaymentSubmitError] = useState<string | null>(null);
   const paymentSubmitInFlightRef = useRef(false);
+  const packageFetchGenRef = useRef(0);
 
   useEffect(() => {
     onBusyChange?.(paymentSubmitting);
@@ -95,47 +92,66 @@ export function CollectionPaymentForm({
     });
   }, [resetKey, initialPrefill?.profileId, initialPrefill?.packageId, initialPrefill?.paymentKind]);
 
-  useEffect(() => {
+  const loadPackageOptions = useCallback(async () => {
     if (paymentForm.paymentKind !== "private_lesson_package" || !paymentForm.profileId) {
-      const resetId = window.setTimeout(() => {
-        setPackageOptions([]);
-        setPackageOptionsError(null);
-        setPackageOptionsLoading(false);
-      }, 0);
-      return () => clearTimeout(resetId);
-    }
-    let cancelled = false;
-    const loadId = window.setTimeout(() => {
-      setPackageOptionsLoading(true);
+      setPackageOptions([]);
       setPackageOptionsError(null);
-    }, 0);
-    void (async () => {
-      await new Promise((r) => setTimeout(r, 0));
-      if (cancelled) return;
-      const res = await listPrivateLessonPackagesForAccounting({
-        athleteId: paymentForm.profileId,
-        organizationId: organizationIdFromUrl,
-      });
-      if (cancelled) return;
       setPackageOptionsLoading(false);
+      return;
+    }
+    const gen = ++packageFetchGenRef.current;
+    setPackageOptionsLoading(true);
+    setPackageOptionsError(null);
+    try {
+      const res = await withAsyncTimeout(
+        listPrivateLessonPackagesForAccounting({
+          athleteId: paymentForm.profileId,
+          organizationId: organizationIdFromUrl,
+        }),
+        PACKAGE_FETCH_TIMEOUT_MS,
+        "Paket listesi zaman aşımına uğradı."
+      );
+      if (gen !== packageFetchGenRef.current) return;
       if ("error" in res) {
         setPackageOptions([]);
-        setPackageOptionsError(res.error);
+        setPackageOptionsError(res.error || "Paketler şu anda alınamadı.");
         return;
       }
       setPackageOptions(res.packages);
-    })();
-    return () => {
-      cancelled = true;
-      clearTimeout(loadId);
-    };
+      if (res.packages.length === 1) {
+        setPaymentForm((prev) => ({
+          ...prev,
+          packageId: prev.packageId || res.packages[0]!.id,
+        }));
+      }
+    } catch (err) {
+      if (gen !== packageFetchGenRef.current) return;
+      const msg =
+        err instanceof Error && err.message.includes("zaman aşımı")
+          ? "İşlem zaman aşımına uğradı. Tekrar deneyin."
+          : "Paketler şu anda alınamadı. Tekrar deneyin.";
+      setPackageOptions([]);
+      setPackageOptionsError(msg);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[collection-payment packages]", err);
+      }
+    } finally {
+      if (gen === packageFetchGenRef.current) {
+        setPackageOptionsLoading(false);
+      }
+    }
   }, [paymentForm.paymentKind, paymentForm.profileId, organizationIdFromUrl]);
+
+  useEffect(() => {
+    void loadPackageOptions();
+  }, [loadPackageOptions]);
 
   const paymentAmountValue = parseMoneyInput(paymentForm.amount) ?? Number.NaN;
   const packageKindRequiresSelection = paymentForm.paymentKind === "private_lesson_package";
   const extraKindRequired = paymentForm.paymentKind === "extra_charge";
   const paymentSubmitDisabled =
     paymentSubmitting ||
+    packageOptionsLoading ||
     !paymentForm.profileId ||
     !Number.isFinite(paymentAmountValue) ||
     paymentAmountValue <= 0 ||
@@ -157,6 +173,7 @@ export function CollectionPaymentForm({
     }
     paymentSubmitInFlightRef.current = true;
     setPaymentSubmitting(true);
+    setPaymentSubmitError(null);
     try {
       const fd = new FormData();
       fd.set("organizationId", organizationIdFromUrl || "");
@@ -171,17 +188,51 @@ export function CollectionPaymentForm({
       if (paymentForm.paymentKind === "private_lesson_package" && paymentForm.packageId) {
         fd.set("packageId", paymentForm.packageId);
       }
-      const res = await createAccountingPayment(fd);
+      const selectedPkg =
+        paymentForm.paymentKind === "private_lesson_package"
+          ? packageOptions.find((p) => p.id === paymentForm.packageId)
+          : null;
+      if (selectedPkg) {
+        const remaining =
+          selectedPkg.remainingBalance ?? normalizeMoney(selectedPkg.totalPrice - selectedPkg.amountPaid);
+        if (remaining > 0.001 && paymentAmountValue > remaining + 0.001) {
+          const msg = "Girilen tutar kalan bakiyeden yüksek olamaz.";
+          setPaymentSubmitError(msg);
+          onError?.(msg);
+          return;
+        }
+      }
+      const res = await withAsyncTimeout(
+        createAccountingPayment(fd),
+        PAYMENT_SUBMIT_TIMEOUT_MS,
+        "Tahsilat kaydı zaman aşımına uğradı."
+      );
       if ("error" in res) {
-        onError?.(res.error || "Tahsilat kaydı oluşturulamadı.");
+        const msg = res.error || "Tahsilat kaydı oluşturulamadı.";
+        setPaymentSubmitError(msg);
+        onError?.(msg);
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[collection-payment submit]", res);
+        }
         return;
       }
       await onSuccess();
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message.includes("zaman aşımı")
+          ? "İşlem zaman aşımına uğradı. Tekrar deneyin."
+          : "Tahsilat kaydı oluşturulamadı. Tekrar deneyin.";
+      setPaymentSubmitError(msg);
+      onError?.(msg);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[collection-payment submit]", err);
+      }
     } finally {
       paymentSubmitInFlightRef.current = false;
       setPaymentSubmitting(false);
     }
   }, [
+    packageOptions,
     organizationIdFromUrl,
     paymentForm,
     onSuccess,
@@ -294,10 +345,21 @@ export function CollectionPaymentForm({
                   Paketler yükleniyor…
                 </p>
               ) : packageOptionsError ? (
-                <p className="text-[11px] font-medium text-red-300/90">{packageOptionsError}</p>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-medium text-red-300/90">{packageOptionsError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadPackageOptions()}
+                    className="text-[11px] font-bold text-emerald-400 underline-offset-2 hover:underline"
+                  >
+                    Tekrar dene
+                  </button>
+                </div>
               ) : packageOptions.length === 0 ? (
                 <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-3">
-                  <p className="text-[11px] font-medium text-gray-400">Bu sporcu için aktif özel ders paketi bulunmuyor.</p>
+                  <p className="text-[11px] font-medium text-gray-400">
+                    Bu sporcuya uygun özel ders paketi bulunamadı.
+                  </p>
                   <button
                     type="button"
                     onClick={() => router.push(PATHS.ozelDersPaketleri)}
@@ -316,7 +378,7 @@ export function CollectionPaymentForm({
                     <option value="">Paket seçin</option>
                     {packageOptions.map((pkg) => (
                       <option key={pkg.id} value={pkg.id}>
-                        {formatPackageDropdownLabel(pkg)}
+                        {formatAccountingPackageOptionLabel(pkg)}
                       </option>
                     ))}
                   </select>
@@ -336,6 +398,11 @@ export function CollectionPaymentForm({
             />
           </label>
         </div>
+        {paymentSubmitError ? (
+          <p className="text-[11px] font-medium text-red-300/90" role="alert">
+            {paymentSubmitError}
+          </p>
+        ) : null}
       </fieldset>
       <div className="flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
         {layout === "modal" && onCancel ? (
