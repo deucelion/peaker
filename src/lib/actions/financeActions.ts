@@ -8,7 +8,7 @@ import { FINANCE_ADMIN_ONLY_MESSAGE } from "@/lib/finance/messages";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
 import type { PaymentRow, PlayerWithPayments } from "@/types/domain";
-import type { AthleteFinanceDetail, FinanceStatusSummary, PrivateLessonPackage, PrivateLessonPayment } from "@/lib/types";
+import type { AthleteFinanceDetail, FinanceStatusSummary, PrivateLessonPayment } from "@/lib/types";
 import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
 import { shouldNotifyFinancialEvent } from "@/lib/finance/notificationPolicy";
 import { toDisplayName } from "@/lib/profile/displayName";
@@ -22,6 +22,14 @@ import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMat
 import { mapPaymentRowForAthlete } from "@/lib/finance/unifiedAthletePaymentTimeline";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import { chunkedInQuery } from "@/lib/db/chunkedIn";
+import {
+  applyPrivateLessonPaymentActiveFilter,
+  getSchemaCapabilities,
+  mapPackageRowCompat,
+  runPackageSelectWithCompat,
+  userFacingDataError,
+  type RawPackageRow,
+} from "@/lib/schemaCompat";
 
 function paymentEffectiveInstantMs(p: PaymentRow): number {
   const pd = p.payment_date?.trim();
@@ -206,48 +214,6 @@ async function resolveFinanceActorForReadWrite(requireWrite: boolean): Promise<
   return { actorUserId: actor.id, actorRole: actor.role, organizationId: actor.organization_id };
 }
 
-function mapPrivateLessonPackageRow(raw: {
-  id: string;
-  organization_id: string;
-  athlete_id: string;
-  coach_id: string | null;
-  package_type: string;
-  package_name: string;
-  total_lessons: number;
-  used_lessons: number;
-  remaining_lessons: number;
-  total_price: number;
-  amount_paid: number;
-  payment_status: "unpaid" | "partial" | "paid";
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  athlete_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
-  coach_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
-}): PrivateLessonPackage {
-  const athlete = Array.isArray(raw.athlete_profile) ? raw.athlete_profile[0] : raw.athlete_profile;
-  const coach = Array.isArray(raw.coach_profile) ? raw.coach_profile[0] : raw.coach_profile;
-  return {
-    id: raw.id,
-    organizationId: raw.organization_id,
-    athleteId: raw.athlete_id,
-    athleteName: toDisplayName(athlete?.full_name, athlete?.email, "Sporcu"),
-    coachId: raw.coach_id,
-    coachName: coach ? toDisplayName(coach?.full_name, coach?.email, "Koç") : null,
-    packageType: raw.package_type,
-    packageName: raw.package_name,
-    totalLessons: Number(raw.total_lessons) || 0,
-    usedLessons: Number(raw.used_lessons) || 0,
-    remainingLessons: Number(raw.remaining_lessons) || 0,
-    totalPrice: Number(raw.total_price) || 0,
-    amountPaid: Number(raw.amount_paid) || 0,
-    paymentStatus: raw.payment_status,
-    isActive: Boolean(raw.is_active),
-    createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
-  };
-}
-
 function mapPrivateLessonPaymentRow(raw: {
   id: string;
   package_id: string;
@@ -384,17 +350,23 @@ export async function listOrgPaymentsForAdmin(): Promise<
     paid_at: string;
   }> = [];
   if (athleteIds.length > 0) {
+    const caps = await getSchemaCapabilities();
     const plpRes = await chunkedInQuery(
       athleteIds,
       async (chunk) =>
-        await adminClient
-          .from("private_lesson_payments")
-          .select("athlete_id, amount, paid_at")
-          .eq("organization_id", resolved.organizationId)
-          .in("athlete_id", chunk),
+        await applyPrivateLessonPaymentActiveFilter(
+          adminClient
+            .from("private_lesson_payments")
+            .select("athlete_id, amount, paid_at")
+            .eq("organization_id", resolved.organizationId)
+            .in("athlete_id", chunk),
+          caps
+        ),
       { scope: "financeActions.loadFinanceForAthletes.ledger" }
     );
-    if (plpRes.error) return { error: `Ozel ders odeme gecmisi alinamadi: ${plpRes.error.message}` };
+    if (plpRes.error) {
+      return { error: userFacingDataError("Özel ders ödeme geçmişi alınamadı", plpRes.error.message) };
+    }
     privateLessonPaymentLedgerRows = (plpRes.data || []) as typeof privateLessonPaymentLedgerRows;
   }
 
@@ -861,29 +833,40 @@ async function buildAthleteFinanceDetailByOrg(organizationId: string, athleteId:
   } else {
     paymentsData = (paymentsRes.data || []) as Array<Parameters<typeof mapPaymentRowForAthlete>[0]>;
   }
-  const [packagesRes, packagePaymentsRes] = await Promise.all([
-    adminClient
+  const caps = await getSchemaCapabilities();
+  const packagesFetch = await runPackageSelectWithCompat(caps, async (select) => {
+    const { data, error } = await adminClient
       .from("private_lesson_packages")
-      .select("id, organization_id, athlete_id, coach_id, package_type, package_name, total_lessons, used_lessons, remaining_lessons, total_price, amount_paid, payment_status, is_active, created_at, updated_at, athlete_profile:profiles!private_lesson_packages_athlete_id_fkey(full_name, email), coach_profile:profiles!private_lesson_packages_coach_id_fkey(full_name, email)")
+      .select(select)
       .eq("organization_id", organizationId)
       .eq("athlete_id", athleteId)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false });
+    return { data, error };
+  });
+  const packagePaymentsRes = await applyPrivateLessonPaymentActiveFilter(
     adminClient
       .from("private_lesson_payments")
       .select("id, package_id, athlete_id, coach_id, amount, paid_at, note, created_by, created_at")
       .eq("organization_id", organizationId)
       .eq("athlete_id", athleteId)
       .order("paid_at", { ascending: false }),
-  ]);
+    caps
+  );
 
   if (paymentsErr) return { error: `Aidat gecmisi alinamadi: ${paymentsErr}` };
-  if (packagesRes.error) return { error: `Ozel ders paketleri alinamadi: ${packagesRes.error.message}` };
-  if (packagePaymentsRes.error) return { error: `Ozel ders odemeleri alinamadi: ${packagePaymentsRes.error.message}` };
+  if (packagesFetch.error) {
+    return { error: userFacingDataError("Özel ders paketleri alınamadı", packagesFetch.error.message) };
+  }
+  if (packagePaymentsRes.error) {
+    return { error: userFacingDataError("Özel ders ödeme geçmişi alınamadı", packagePaymentsRes.error.message) };
+  }
 
   const allPayments = paymentsData.map((row) => mapPaymentRowForAthlete(row));
   const aidatPayments = allPayments.filter((p) => p.payment_type === "aylik");
   const legacyPackagePayments = allPayments.filter((p) => p.payment_type === "paket");
-  const privateLessonPackages = (packagesRes.data || []).map((row) => mapPrivateLessonPackageRow(row as never));
+  const privateLessonPackages = ((packagesFetch.data || []) as unknown as RawPackageRow[]).map((row) =>
+    mapPackageRowCompat(row)
+  );
   const privateLessonPayments = (packagePaymentsRes.data || []).map((row) => mapPrivateLessonPaymentRow(row));
 
   const summary = computeFinanceStatusSummary({

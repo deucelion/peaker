@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { listMyNotificationsSnapshot } from "@/lib/actions/snapshotActions";
 import type { AppNotification } from "@/lib/types";
 
@@ -13,6 +14,21 @@ import type { AppNotification } from "@/lib/types";
  */
 
 export const NOTIFICATIONS_PAGE_SIZE = 50;
+
+function mapNotificationRow(raw: Record<string, unknown>): AppNotification {
+  return {
+    id: String(raw.id ?? ""),
+    userId: String(raw.user_id ?? ""),
+    message: String(raw.message ?? ""),
+    read: Boolean(raw.read),
+    createdAt:
+      typeof raw.created_at === "string"
+        ? raw.created_at
+        : raw.created_at instanceof Date
+          ? raw.created_at.toISOString()
+          : new Date().toISOString(),
+  };
+}
 
 export function useNotificationsViewer() {
   const [loading, setLoading] = useState(true);
@@ -59,6 +75,61 @@ export function useNotificationsViewer() {
     }, 0);
     return () => clearTimeout(id);
   }, [fetchData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const channelRef: { current: ReturnType<typeof supabase.channel> | null } = { current: null };
+
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      const uid = data.user?.id ?? null;
+      if (!uid) return;
+
+      const channel = supabase
+        .channel(`notifications-page-${uid}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${uid}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            const next = mapNotificationRow(row);
+            setItems((prev) => {
+              if (prev.some((p) => p.id === next.id)) return prev;
+              return [next, ...prev];
+            });
+            setTotal((t) => t + 1);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${uid}`,
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            const next = mapNotificationRow(row);
+            setItems((prev) => prev.map((p) => (p.id === next.id ? next : p)));
+          }
+        )
+        .subscribe();
+
+      channelRef.current = channel;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channelRef.current) void supabase.removeChannel(channelRef.current);
+    };
+  }, []);
 
   const unreadCount = useMemo(() => items.filter((n) => !n.read).length, [items]);
 

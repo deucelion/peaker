@@ -22,7 +22,8 @@ export type QueryErrorKind =
   | "permission_denied"
   | "auth_required"
   | "invalid_input"
-  | "fetch_error";
+  | "fetch_error"
+  | "timeout";
 
 export type QueryStatus = "idle" | "loading" | "refreshing" | "ready" | "empty" | "error";
 
@@ -49,6 +50,7 @@ export function toneForErrorKind(kind: QueryErrorKind | null | undefined): Query
     case "invalid_input":
       return "amber";
     case "fetch_error":
+    case "timeout":
       return "red";
     default:
       return "red";
@@ -90,6 +92,8 @@ export function defaultErrorTitle(kind: QueryErrorKind | null | undefined): stri
       return "Parametreler hatalı. Filtreleri kontrol edin.";
     case "fetch_error":
       return "Veriler alınamadı.";
+    case "timeout":
+      return "İstek zaman aşımına uğradı.";
     default:
       return "Beklenmeyen bir hata oluştu.";
   }
@@ -99,8 +103,37 @@ export function defaultErrorTitle(kind: QueryErrorKind | null | undefined): stri
  * Standart retry önerisi (fetch_error için). Diğer kind'larda boş döner.
  */
 export function defaultRetryHint(kind: QueryErrorKind | null | undefined): string | null {
-  if (kind === "fetch_error") return "Bir süre sonra tekrar deneyin veya sayfayı yenileyin.";
+  if (kind === "fetch_error" || kind === "timeout") {
+    return "Bir süre sonra tekrar deneyin veya sayfayı yenileyin.";
+  }
   return null;
+}
+
+/**
+ * Sayfa banner'ları için başlık + açıklama (server mesajı opsiyonel).
+ */
+export function queryErrorCopy(
+  kind: QueryErrorKind | null | undefined,
+  serverMessage?: string | null
+): { title: string; description: string } {
+  const title = defaultErrorTitle(kind);
+  const hint = defaultRetryHint(kind);
+  if (kind === "timeout") {
+    return {
+      title,
+      description: serverMessage || "Sorgu çok uzun sürdü. Tarih aralığını daraltıp tekrar deneyin.",
+    };
+  }
+  if (kind === "fetch_error") {
+    return {
+      title,
+      description: serverMessage || hint || "Sunucu yanıt vermedi.",
+    };
+  }
+  return {
+    title,
+    description: serverMessage || hint || title,
+  };
 }
 
 /**
@@ -122,7 +155,8 @@ export function normalizeErrorKind(value: unknown): QueryErrorKind {
     value === "permission_denied" ||
     value === "auth_required" ||
     value === "invalid_input" ||
-    value === "fetch_error"
+    value === "fetch_error" ||
+    value === "timeout"
   ) {
     return value;
   }

@@ -7,7 +7,7 @@ import { getCoachPermissions, hasCoachPermission } from "@/lib/auth/coachPermiss
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
-import { normalizeMoney } from "@/lib/privateLessons/packageMath";
+import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { captureServerActionSignal } from "@/lib/observability/serverActionError";
 
@@ -102,17 +102,17 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
   }
 
   const totalLessons = Math.floor(Number(formData.get("totalLessons")?.toString() || "0"));
-  const packageTotalPrice = normalizeMoney(formData.get("packageTotalPrice")?.toString() || "0");
+  const packageTotalPrice = parseTRYMoneyInput(formData.get("packageTotalPrice")?.toString()) ?? 0;
   const packageStartDate = asDate(formData.get("packageStartDate")?.toString());
-  const monthlyAmount = normalizeMoney(formData.get("monthlyAmount")?.toString() || "0");
+  const monthlyAmount = parseTRYMoneyInput(formData.get("monthlyAmount")?.toString()) ?? 0;
   const monthlyStartDate = asDate(formData.get("monthlyStartDate")?.toString());
 
-  const paymentTotal = normalizeMoney(formData.get("paymentTotal")?.toString() || "0");
-  const paymentPaid = normalizeMoney(formData.get("paymentPaid")?.toString() || "0");
+  const paymentTotal = parseTRYMoneyInput(formData.get("paymentTotal")?.toString()) ?? 0;
+  const paymentPaid = parseTRYMoneyInput(formData.get("paymentPaid")?.toString()) ?? 0;
   const paymentDate = asDate(formData.get("paymentDate")?.toString()) || new Date().toISOString().slice(0, 10);
 
   if (paymentPaid < 0 || paymentTotal < 0 || paymentPaid > paymentTotal) {
-    return { error: "Ödeme alanları geçersiz." };
+    return { error: "Tahsilat alanları geçersiz." };
   }
 
   if (onboardingMode === "private_lesson") {

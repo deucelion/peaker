@@ -16,178 +16,25 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { logger } from "@/lib/monitoring/logger";
 import { isUuid } from "@/lib/validation/uuid";
+import { trackQueueGrowth } from "@/lib/monitoring/runtime";
 import { evaluateOperationalAlerts, type OperationalAlertFinding } from "@/lib/telemetry/alertRules";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRateLimiterRuntimeMetrics } from "@/lib/rateLimit/adapter";
-
-export type CronJobStatus = {
-  jobname: string;
-  schedule?: string | null;
-  active?: boolean | null;
-  lastRunStatus?: string | null;
-  lastRunStartedAt?: string | null;
-  lastRunDurationMs?: number | null;
-  lastRunMessage?: string | null;
-};
-
-export type RetentionRunRow = {
-  jobname: string;
-  startTime: string;
-  endTime: string | null;
-  status: string;
-  returnMessage: string | null;
-  durationMs: number | null;
-};
-
-export type MaterializedViewStatus = {
-  name: string;
-  refreshedAt?: string | null;
-  rowCount?: number | null;
-  available: boolean;
-  reason?: string;
-};
-
-// Faz 11.8 — Queue / job visibility.
-export type RecentJobRow = {
-  id: string;
-  organizationId: string | null;
-  kind: string;
-  status: string;
-  attempts: number;
-  maxAttempts: number;
-  enqueuedAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  errorKind: string | null;
-  errorMessage: string | null;
-};
-
-export type QueueStats = {
-  available: boolean;
-  reason?: string;
-  total: number;
-  byStatus: Record<string, number>;
-  failedRecentCount: number;
-  oldestQueuedAt: string | null;
-  // Faz 12.8 — Worker visibility ek metrikleri.
-  deadLetterCount: number;
-  averageDurationMs: number | null;
-  p95DurationMs: number | null;
-};
-
-// Faz 12.8 — Worker heartbeat / active worker visibility.
-export type WorkerHeartbeatRow = {
-  workerId: string;
-  source: string;
-  lastTickAt: string;
-  processedCount: number;
-  succeededCount: number;
-  failedCount: number;
-  deadLetterCount: number;
-  durationMs: number;
-  isActive: boolean;
-  rescueRescuedCount?: number;
-  rescueDeadStuckCount?: number;
-  retryStormDetected?: boolean;
-};
-
-/** Faz 13.1 — Son 24 saat heartbeat toplamları (worker recovery kartları). */
-export type WorkerRecovery24h = {
-  rescuedJobs: number;
-  deadJobs: number;
-  retryStorms: number;
-};
-
-export type OperationalAlertRow = {
-  id: string;
-  ruleKey: string;
-  severity: "info" | "warning" | "critical";
-  title: string;
-  detail: Record<string, unknown>;
-  organizationId: string | null;
-  createdAt: string;
-  resolvedAt: string | null;
-  acknowledgedAt: string | null;
-  acknowledgedBy: string | null;
-  escalationCount: number;
-  lastEscalatedAt: string | null;
-  noiseSuppressed: boolean;
-};
-
-export type OperationalTimelineRow = {
-  id: string;
-  eventType: string;
-  severity: "info" | "warning" | "critical";
-  summary: string;
-  organizationId: string | null;
-  createdAt: string;
-  payload: Record<string, unknown>;
-};
-
-// Faz 12.8 — Export duration sample for sparkline.
-export type ExportDurationSample = {
-  finishedAt: string;
-  kind: string;
-  durationMs: number;
-  rowCount: number | null;
-  truncated: boolean;
-};
-
-// Faz 12.8 — MV freshness threshold result.
-export type MvFreshnessStatus = {
-  name: string;
-  refreshedAt: string | null;
-  ageMinutes: number | null;
-  staleDurationSeconds: number | null;
-  refreshDurationMs: number | null;
-  staleness: "fresh" | "stale" | "critical" | "missing";
-};
-
-/** Faz 14.5 — Özet kuyruk analitiği (ağır sorgu yok; snapshot örnekleri üzerinden). */
-export type QueueAnalyticsBrief = {
-  jobsEnqueuedLast60Min: number;
-  jobsPerMinuteEstimate: number | null;
-  multiAttemptFraction: number | null;
-  dlqInSample: number;
-  avgExecutionMs: number | null;
-  p95ExecutionMs: number | null;
-  exportsFinishedLast24h: number;
-  exportRowsLast24h: number;
-  exportRowsPerMinuteEstimate: number | null;
-  workerPulseActive: number;
-  workerPulseTotal: number;
-};
-
-export type RateLimiterRuntimeSnapshot = ReturnType<typeof getRateLimiterRuntimeMetrics>;
-
-export type SystemOperationsSnapshot = {
-  cronAvailable: boolean;
-  cronJobs: CronJobStatus[];
-  recentRetentionRuns: RetentionRunRow[];
-  materializedViews: MaterializedViewStatus[];
-  mvFreshness: MvFreshnessStatus[];
-  queueStats: QueueStats;
-  recentJobs: RecentJobRow[];
-  activeWorkers: WorkerHeartbeatRow[];
-  exportDurationSamples: ExportDurationSample[];
-  /** Faz 13.1 — Worker recovery (24h heartbeat toplamı). */
-  workerRecovery24h: WorkerRecovery24h;
-  /** Faz 13.3 — Kalıcı uyarılar (açık kayıtlar önce). */
-  operationalAlerts: OperationalAlertRow[];
-  /** Faz 13.7 — Operasyon zaman çizelgesi. */
-  operationalTimeline: OperationalTimelineRow[];
-  /** Faz 14.2 — Rate limiter process metrikleri + adapter geçmişi. */
-  rateLimiterRuntime: RateLimiterRuntimeSnapshot;
-  /** Faz 14.3 — queued/running export job sayısı (son 100 örnek içinde). */
-  activeExportJobsCount: number;
-  /** Faz 14.5 — Hafif kuyruk analitiği. */
-  queueAnalyticsBrief: QueueAnalyticsBrief;
-  /** Faz 14.3 — Açık (çözümlenmemiş) uyarı sayısı. */
-  openOperationalAlertsCount: number;
-  /** super_admin daraltması; admin için her zaman kendi org id. */
-  jobsScopeOrganizationId: string | null;
-  generatedAt: string;
-};
+import type {
+  CronJobStatus,
+  ExportDurationSample,
+  MaterializedViewStatus,
+  MvFreshnessStatus,
+  OperationalAlertRow,
+  OperationalTimelineRow,
+  QueueAnalyticsBrief,
+  QueueStats,
+  RecentJobRow,
+  RetentionRunRow,
+  SystemOperationsSnapshot,
+  WorkerHeartbeatRow,
+  WorkerRecovery24h,
+} from "@/lib/actions/systemOperationsTypes";
 
 const WORKER_ACTIVE_WINDOW_MS = 5 * 60_000;
 const MV_STALE_THRESHOLD_MIN = 60 * 24; // 24h
@@ -680,6 +527,36 @@ export async function getSystemOperationsSnapshot(options?: {
   const mvCriticalNames = mvFreshness.filter((m) => m.staleness === "critical").map((m) => m.name);
   const mvStaleNames = mvFreshness.filter((m) => m.staleness === "stale").map((m) => m.name);
 
+  const activeExportJobsCount = recentJobs.filter(
+    (j) =>
+      (j.status === "queued" || j.status === "running") && (j.kind || "").startsWith("export.")
+  ).length;
+
+  const jobsLast60Min = recentJobs.filter((j) => {
+    const t = Date.parse(j.enqueuedAt);
+    return Number.isFinite(t) && Date.now() - t < 60 * 60 * 1000;
+  }).length;
+
+  let workerHeartbeatStaleMinutes: number | null = null;
+  if (activeWorkers.length > 0) {
+    const ticks = activeWorkers
+      .map((w) => Date.parse(w.lastTickAt))
+      .filter((t): t is number => Number.isFinite(t));
+    if (ticks.length > 0) {
+      workerHeartbeatStaleMinutes = Math.floor((Date.now() - Math.max(...ticks)) / 60_000);
+    }
+  }
+
+  const cronFailedJobNames = cronJobs
+    .filter((j) => (j.lastRunStatus || "").toLowerCase() === "failed")
+    .map((j) => j.jobname);
+
+  trackQueueGrowth({
+    jobsLast60Min,
+    queuedTotal: Number(queueStats.byStatus.queued ?? 0),
+    dlqCount: queueStats.deadLetterCount,
+  });
+
   const alertFindings = evaluateOperationalAlerts({
     oldestQueuedAgeMinutes,
     deadLetterSampleCount: queueStats.deadLetterCount,
@@ -689,6 +566,10 @@ export async function getSystemOperationsSnapshot(options?: {
     workerRescued24h: workerRecovery24h.rescuedJobs,
     workerDeadStuck24h: workerRecovery24h.deadJobs,
     workerRetryStorms24h: workerRecovery24h.retryStorms,
+    workerHeartbeatStaleMinutes,
+    cronFailedJobNames,
+    queueJobsLast60Min: jobsLast60Min,
+    activeExportJobsCount,
   });
   await syncOperationalAlertsToDb(adminClient, alertFindings);
 
@@ -748,10 +629,6 @@ export async function getSystemOperationsSnapshot(options?: {
   }
 
   const openOperationalAlertsCount = operationalAlerts.filter((a) => !a.resolvedAt).length;
-  const activeExportJobsCount = recentJobs.filter(
-    (j) =>
-      (j.status === "queued" || j.status === "running") && (j.kind || "").startsWith("export.")
-  ).length;
   const queueAnalyticsBrief = buildQueueAnalyticsBrief({
     recentJobs,
     queueStats,

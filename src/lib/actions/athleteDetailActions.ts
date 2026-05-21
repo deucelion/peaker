@@ -7,7 +7,9 @@ import { getCoachPermissions } from "@/lib/auth/coachPermissions";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { toDisplayName } from "@/lib/profile/displayName";
+import { applyPrivateLessonPaymentActiveFilter, getSchemaCapabilities } from "@/lib/schemaCompat";
 import { isUuid } from "@/lib/validation/uuid";
+import { PACKAGE_EVENT_LABEL_TR, type PackageEventType } from "@/lib/privateLessons/packageEventTypes";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -120,7 +122,9 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     .order("measurement_date", { ascending: true });
   const bodyMetrics = bodyRes.error ? [] : bodyRes.data ?? [];
 
-  const [packageRes, privatePaymentRes, aidatRes, lessonRes, injuryRes, programRes] = await Promise.all([
+  const caps = await getSchemaCapabilities();
+  const [packageRes, privatePaymentRes, aidatRes, lessonRes, injuryRes, programRes, financeNotesRes] =
+    await Promise.all([
     adminClient
       .from("private_lesson_packages")
       .select("id, package_name, remaining_lessons, payment_status, is_active, total_lessons, used_lessons, total_price, amount_paid, updated_at")
@@ -128,13 +132,16 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
       .eq("athlete_id", athleteId)
       .order("updated_at", { ascending: false })
       .limit(5),
-    adminClient
-      .from("private_lesson_payments")
-      .select("id, amount, paid_at, note")
-      .eq("organization_id", actor.organization_id)
-      .eq("athlete_id", athleteId)
-      .order("paid_at", { ascending: false })
-      .limit(40),
+    applyPrivateLessonPaymentActiveFilter(
+      adminClient
+        .from("private_lesson_payments")
+        .select("id, amount, paid_at, note")
+        .eq("organization_id", actor.organization_id)
+        .eq("athlete_id", athleteId)
+        .order("paid_at", { ascending: false })
+        .limit(40),
+      caps
+    ),
     adminClient
       .from("payments")
       .select("id, amount, payment_date, due_date, status, payment_type, description")
@@ -163,7 +170,42 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
       .eq("athlete_id", athleteId)
       .order("created_at", { ascending: false })
       .limit(30),
+    adminClient
+      .from("finance_contact_notes")
+      .select("id, note, contact_method, created_at, follow_up_date")
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", athleteId)
+      .is("deleted_at", null)
+      .is("package_id", null)
+      .order("created_at", { ascending: false })
+      .limit(40),
   ]);
+
+  const pkgIds = (packageRes.data || []).map((p) => p.id as string).filter(Boolean);
+  let packageEvents: Array<{
+    id: string;
+    created_at: string;
+    event_type: string;
+    title: string;
+    description: string | null;
+  }> = [];
+  if (pkgIds.length > 0) {
+    const evRes = await adminClient
+      .from("private_lesson_package_events")
+      .select("id, created_at, event_type, title, description")
+      .eq("organization_id", actor.organization_id)
+      .in("package_id", pkgIds)
+      .order("created_at", { ascending: false })
+      .limit(80);
+    packageEvents = evRes.data || [];
+  }
+
+  const CONTACT_METHOD_TR: Record<string, string> = {
+    phone: "Telefon",
+    whatsapp: "WhatsApp",
+    in_person: "Yüz yüze",
+    other: "Diğer",
+  };
 
   const activePackage = (packageRes.data || []).find((p) => p.is_active) || (packageRes.data || [])[0] || null;
 
@@ -180,17 +222,17 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     }) || []),
     ...((privatePaymentRes.data || []).map((row) => ({
       id: `private-payment-${row.id}`,
-      type: "payment",
+      type: "payment" as const,
       at: row.paid_at || new Date(0).toISOString(),
-      title: `Özel ders ödeme: ₺${Number(row.amount || 0)}`,
-      detail: row.note || "Özel ders tahsilatı",
+      title: `Özel ders tahsilat kaydı: ₺${Number(row.amount || 0)}`,
+      detail: row.note || "Paket tahsilatı (manuel kayıt)",
     })) || []),
     ...((aidatRes.data || []).map((row) => ({
       id: `aidat-${row.id}`,
-      type: "payment",
+      type: "payment" as const,
       at: row.payment_date || row.due_date || new Date(0).toISOString(),
-      title: `${row.payment_type === "aylik" ? "Aidat" : "Paket"} ödeme: ₺${Number(row.amount || 0)}`,
-      detail: `${row.status || "bekliyor"} · ${row.description || "Ödeme kaydı"}`,
+      title: `${row.payment_type === "aylik" ? "Aidat" : "Üyelik"} tahsilat kaydı: ₺${Number(row.amount || 0)}`,
+      detail: `${row.status || "bekliyor"} · ${row.description || "Tahsilat kaydı"}`,
     })) || []),
     ...((injuryRes.data || []).map((row) => ({
       id: `injury-${row.id}`,
@@ -201,11 +243,33 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     })) || []),
     ...((programRes.data || []).map((row) => ({
       id: `program-${row.id}`,
-      type: "note",
+      type: "note" as const,
       at: row.created_at || new Date(0).toISOString(),
       title: row.title || "Program notu",
       detail: row.note || (row.is_active ? "Aktif program notu" : "Pasif program notu"),
     })) || []),
+    ...((financeNotesRes.data || []).map((row) => ({
+      id: `finance-note-${row.id}`,
+      type: "finance_movement" as const,
+      at: row.created_at || new Date(0).toISOString(),
+      title: "Finans görüşme notu",
+      detail: `${CONTACT_METHOD_TR[String(row.contact_method)] || "İletişim"} — ${row.note || ""}${
+        row.follow_up_date ? ` · Takip tarihi: ${row.follow_up_date}` : ""
+      }`,
+    })) || []),
+    ...(packageEvents.map((row) => {
+      const label =
+        PACKAGE_EVENT_LABEL_TR[row.event_type as PackageEventType] ||
+        row.event_type ||
+        "";
+      return {
+        id: `pkg-event-${row.id}`,
+        type: "finance_movement" as const,
+        at: row.created_at || new Date(0).toISOString(),
+        title: row.title,
+        detail: row.description || label,
+      };
+    }) || []),
   ]
     .filter((event) => event.at && !Number.isNaN(new Date(event.at).getTime()))
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());

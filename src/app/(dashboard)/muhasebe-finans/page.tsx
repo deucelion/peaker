@@ -8,11 +8,16 @@ import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonStatGrid, SkeletonTable } from "@/components/ui/skeletons";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import {
-  exportAccountingFinancePaymentsCSV,
   type AccountingFinanceSnapshot,
   type AccountingFinanceFilters,
 } from "@/lib/actions/accountingFinanceActions";
+import { resolvePaymentsExportDateRange } from "@/lib/export/paymentsExportDateRange";
+import { useStreamingCsvDownload } from "@/lib/hooks/useStreamingCsvDownload";
 import { useAccountingFinanceDashboard } from "@/lib/hooks/useAccountingFinanceDashboard";
+import { useFinanceRealtimeSync } from "@/lib/hooks/useFinanceRealtimeSync";
+import { postFinanceTouch } from "@/lib/realtime/financeCrossTab";
+import { formatRelativeTimeTr } from "@/lib/realtime/formatRelativeTimeTr";
+import { LiveConnectionStrip, type LiveStatusTone } from "@/components/realtime/LiveStatusPrimitives";
 import {
   getAccountingLessonStatusLabel,
   getAccountingLessonTypeLabel,
@@ -30,6 +35,7 @@ import { MuhasebePaymentsTable } from "./_components/MuhasebePaymentsTable";
 import { MuhasebeCoachesTable } from "./_components/MuhasebeCoachesTable";
 import { MuhasebeLessonsTable } from "./_components/MuhasebeLessonsTable";
 import { MuhasebePaymentModal } from "./_components/MuhasebePaymentModal";
+import { MuhasebeReceivablesSection } from "./_components/MuhasebeReceivablesSection";
 
 const LESSON_STATUS_OPTIONS = [
   { value: "all", label: "Tüm durumlar" },
@@ -79,6 +85,8 @@ function defaultGeneralFilters(): GeneralFiltersState {
     lessonStatus: "all",
     paymentKind: "",
     paymentStatus: "all",
+    packageLifecycle: "all",
+    packagePaymentState: "all",
   };
 }
 
@@ -143,7 +151,9 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
   const [coachesFiltersAdvancedOpen, setCoachesFiltersAdvancedOpen] = useState(false);
   const [canOpenAthletePayments, setCanOpenAthletePayments] = useState(false);
   const [refreshAck, setRefreshAck] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [financeLiveAt, setFinanceLiveAt] = useState<string | null>(null);
+  const csvExport = useStreamingCsvDownload();
+  const receivablesLiveRefreshRef = useRef<(() => void) | null>(null);
 
   const runFetch = useCallback(
     async (opts?: {
@@ -165,6 +175,12 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
         paymentKind: isGeneral ? (cf as GeneralFiltersState).paymentKind || undefined : undefined,
         paymentStatus: isGeneral
           ? ((cf as GeneralFiltersState).paymentStatus as AccountingFinanceFilters["paymentStatus"])
+          : "all",
+        packageLifecycle: isGeneral
+          ? ((cf as GeneralFiltersState).packageLifecycle as AccountingFinanceFilters["packageLifecycle"])
+          : "all",
+        packagePaymentState: isGeneral
+          ? ((cf as GeneralFiltersState).packagePaymentState as AccountingFinanceFilters["packagePaymentState"])
           : "all",
         lessonsOnly: !isGeneral,
       };
@@ -223,12 +239,32 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
 
   const refreshDashboardHard = useCallback(async () => {
     const ok = await runFetch();
+    receivablesLiveRefreshRef.current?.();
     router.refresh();
     if (ok) {
+      setFinanceLiveAt(new Date().toISOString());
       setRefreshAck(true);
       window.setTimeout(() => setRefreshAck(false), 2600);
     }
   }, [runFetch, router]);
+
+  const refreshFinanceSoft = useCallback(async () => {
+    const ok = await runFetch();
+    receivablesLiveRefreshRef.current?.();
+    if (ok) {
+      setFinanceLiveAt(new Date().toISOString());
+      setRefreshAck(true);
+      window.setTimeout(() => setRefreshAck(false), 1600);
+    }
+  }, [runFetch]);
+
+  useFinanceRealtimeSync({
+    organizationId: snapshot?.organizationId ?? null,
+    enabled: Boolean(snapshot?.organizationId),
+    onInvalidate: () => {
+      void refreshFinanceSoft();
+    },
+  });
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | null = null;
@@ -248,6 +284,7 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
   }, [runFetch]);
 
   useLayoutEffect(() => {
+    if (activeView === "alacak") return;
     // runFetch dış (Supabase) sistemle senkronize olur ve sonuca göre state set
     // eder; effect içinde setState çağrısı kaçınılmaz.
     if (activeView === "genel" && dataScopeRef.current === "lessons_only") {
@@ -280,6 +317,12 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
 
   const coachesOptions = snapshot?.options.coaches;
 
+  const financeLiveTone: LiveStatusTone = loadError
+    ? "degraded"
+    : loading || dashboard.refreshing
+      ? "syncing"
+      : "live";
+
   const activeGeneralFilterSummary = useMemo(() => {
     const cf = appliedGeneralFilters;
     const rangePart =
@@ -307,42 +350,40 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
 
   const lessons = snapshot?.lessons || [];
 
-  const handleExportPayments = useCallback(async () => {
-    setExporting(true);
-    setActionFeedback(null);
-    try {
-      const cf = appliedGeneralRef.current;
-      const res = await exportAccountingFinancePaymentsCSV({
-        orgId: readOrgFromUrl(),
-        month: cf.month,
-        dateFrom: cf.dateFrom || undefined,
-        dateTo: cf.dateTo || undefined,
-        coachId: cf.coachId || undefined,
-        lessonType: cf.lessonType as AccountingFinanceFilters["lessonType"],
-        lessonStatus: cf.lessonStatus as AccountingFinanceFilters["lessonStatus"],
-        paymentKind: cf.paymentKind || undefined,
-        paymentStatus: cf.paymentStatus as AccountingFinanceFilters["paymentStatus"],
-      });
-      if ("error" in res) {
-        setActionFeedback({ type: "error", message: res.error || "CSV dışa aktarımı başarısız." });
-      } else {
-        const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = res.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setActionFeedback({ type: "success", message: `${res.rowCount} tahsilat satırı indirildi.` });
-      }
-    } catch {
-      setActionFeedback({ type: "error", message: "CSV dışa aktarımı başarısız." });
-    } finally {
-      setExporting(false);
+  const runPaymentsExport = useCallback(() => {
+    const cf = appliedGeneralRef.current;
+    const range = resolvePaymentsExportDateRange({
+      month: cf.month,
+      dateFrom: cf.dateFrom || undefined,
+      dateTo: cf.dateTo || undefined,
+    });
+    if (!range) {
+      setActionFeedback({ type: "error", message: "Geçersiz tarih aralığı. Başlangıç ve bitiş tarihlerini kontrol edin." });
+      return;
     }
-  }, []);
+    const orgId = readOrgFromUrl();
+    void csvExport.run(
+      () => {
+        const u = new URL("/api/exports/payments/stream", window.location.origin);
+        u.searchParams.set("dateFrom", range.dateFrom);
+        u.searchParams.set("dateTo", range.dateTo);
+        if (orgId) u.searchParams.set("organizationId", orgId);
+        if (cf.paymentStatus && cf.paymentStatus !== "all") {
+          u.searchParams.set("paymentStatus", cf.paymentStatus);
+        }
+        if (cf.paymentKind) u.searchParams.set("paymentKind", cf.paymentKind);
+        return u.toString();
+      },
+      {
+        success: ({ rowCount, truncated }) =>
+          truncated && rowCount != null && Number.isFinite(rowCount)
+            ? `İlk ${rowCount} tahsilat satırı indirildi. Daha dar tarih aralığı deneyin.`
+            : rowCount != null && Number.isFinite(rowCount)
+              ? `${rowCount} tahsilat satırı indirildi.`
+              : "Tahsilat CSV indirildi.",
+      }
+    );
+  }, [csvExport]);
 
   if (loading && !snapshot && !loadError) {
     return (
@@ -385,13 +426,13 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
       {activeView === "genel" ? (
         <button
           type="button"
-          onClick={() => void handleExportPayments()}
-          disabled={exporting || loading}
+          onClick={runPaymentsExport}
+          disabled={csvExport.exporting || loading}
           className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:bg-white/5 disabled:opacity-50 sm:min-h-9"
           title="Tahsilat listesini CSV olarak indir (filtreyle)"
           aria-label="Tahsilat listesini CSV olarak indir"
         >
-          {exporting ? (
+          {csvExport.exporting ? (
             <Loader2 className="size-3.5 shrink-0 animate-spin text-emerald-400" aria-hidden />
           ) : (
             <Download size={12} className="shrink-0 opacity-80" aria-hidden />
@@ -427,18 +468,33 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
               Muhasebe & <span className="text-green-500">Finans</span>
             </h1>
             <p className="mt-1 text-xs font-semibold text-gray-400">
-              Tahsilat ve ders kayıtlarını tek ekrandan takip edin.
+              Tahsilat ve ders kayıtlarını tek ekrandan takip edin. Bu ekran yalnızca manuel tahsilat takibi içindir; online
+              ödeme veya kart işlemi yapılmaz.
               {canOpenAthletePayments ? (
                 <>
                   {" "}
                   Sporcu bazlı özet için{" "}
                   <button type="button" onClick={() => router.push("/finans")} className="text-emerald-400 underline-offset-2 hover:underline">
-                    Sporcu ödemeleri
+                    Sporcu tahsilat özeti
                   </button>
                   .
                 </>
               ) : null}
             </p>
+            {!embedded ? (
+              <div className="mt-3">
+                <LiveConnectionStrip
+                  status={financeLiveTone}
+                  lastSyncLabel={
+                    financeLiveAt
+                      ? formatRelativeTimeTr(financeLiveAt)
+                      : snapshot
+                        ? "az önce"
+                        : null
+                  }
+                />
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
             {periodChip}
@@ -468,6 +524,20 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
               type="button"
               onClick={() => {
                 setFilterApplyFeedback(null);
+                setActiveView("alacak");
+              }}
+              className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
+                activeView === "alacak"
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+                  : "border-white/10 bg-black/20 text-gray-400 hover:border-white/20 hover:text-gray-200"
+              }`}
+            >
+              Alacak takibi
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterApplyFeedback(null);
                 setActiveView("koclar");
               }}
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
@@ -480,7 +550,11 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
             </button>
           </div>
           <p className="text-xs font-semibold text-gray-500">
-            {activeView === "genel" ? "Tahsilat + ders kayıtları" : "Koç ders aktivitesi"}
+            {activeView === "genel"
+              ? "Tahsilat + ders kayıtları"
+              : activeView === "alacak"
+                ? "Paket borcu · vade · manuel tahsilat takibi"
+                : "Koç ders aktivitesi"}
           </p>
         </div>
 
@@ -494,12 +568,26 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
               }}
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-500 px-5 text-xs font-black uppercase tracking-wide text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
             >
-              Tahsilat Ekle
+              Tahsilat Kaydı Ekle
             </button>
           </div>
         ) : null}
       </section>
 
+      {actionFeedback ? <Notification message={actionFeedback.message} variant={actionFeedback.type} /> : null}
+      {csvExport.feedback ? (
+        <Notification
+          message={csvExport.feedback.text}
+          variant={
+            csvExport.feedback.tone === "err" ? "error" : csvExport.feedback.tone === "warn" ? "info" : "success"
+          }
+        />
+      ) : null}
+
+      {activeView === "alacak" ? (
+        <MuhasebeReceivablesSection readOrgFromUrl={readOrgFromUrl} liveRefreshRef={receivablesLiveRefreshRef} />
+      ) : (
+        <>
       {loadError ? (
         <EmptyState
           variant="error"
@@ -515,7 +603,6 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
           Eski tahsilat kayıtları farklı formatta olabilir; liste yine gösterilir.
         </p>
       ) : null}
-      {actionFeedback ? <Notification message={actionFeedback.message} variant={actionFeedback.type} /> : null}
 
       {activeView === "genel" ? (
         <MuhasebeFilterBar
@@ -561,6 +648,8 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
       {activeView === "genel" ? (
         <MuhasebePaymentsTable
           rows={snapshot?.payments || []}
+          canAdjustRecords={canOpenAthletePayments}
+          onRecordsAdjusted={() => void refreshDashboardHard()}
           onAddPayment={() => {
             setPaymentModalKey((k) => k + 1);
             setShowPaymentModal(true);
@@ -588,6 +677,8 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
         }}
         onGoLessonManagement={() => router.push("/haftalik-ders-programi")}
       />
+        </>
+      )}
 
       <MuhasebePaymentModal
         open={showPaymentModal}
@@ -602,6 +693,8 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
         onSuccess={async () => {
           setActionFeedback({ type: "success", message: "Tahsilat kaydı başarıyla eklendi." });
           await refreshDashboardHard();
+          const oid = snapshot?.organizationId;
+          if (oid) postFinanceTouch(oid, "payment-modal");
           setShowPaymentModal(false);
         }}
       />

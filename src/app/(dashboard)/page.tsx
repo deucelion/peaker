@@ -21,6 +21,11 @@ import EmptyStateCard from "@/components/EmptyStateCard";
 import OnboardingChecklist, {
   type OnboardingProgress,
 } from "@/components/onboarding/OnboardingChecklist";
+import { LiveStatusBadge } from "@/components/realtime/LiveStatusPrimitives";
+import { CoachMobileQuickStrip } from "@/components/mobile/CoachMobileQuickStrip";
+import { CompactListRow, CompactMetricCard } from "@/components/compact";
+import { useLiveAttendanceDashboard } from "@/lib/hooks/useLiveAttendanceDashboard";
+import { useOrgPresenceCounts } from "@/lib/hooks/useOrgPresenceCounts";
 
 // --- TYPESCRIPT INTERFACES ---
 interface StatCardProps {
@@ -144,8 +149,9 @@ export default function Dashboard() {
   const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
   const router = useRouter();
 
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
+  const fetchDashboardData = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = Boolean(opts?.soft);
+    if (!soft) setLoading(true);
     try {
       const boot = await bootstrapTenantHomeDashboard();
       if ("redirectTo" in boot) {
@@ -226,9 +232,28 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Dashboard Load Error:", err);
     } finally {
-      setLoading(false);
+      if (!soft) setLoading(false);
     }
   }, [router]);
+
+  const softRefreshDashboard = useCallback(() => {
+    void fetchDashboardData({ soft: true });
+  }, [fetchDashboardData]);
+
+  useLiveAttendanceDashboard({
+    enabled: !loading && (role === "admin" || role === "coach"),
+    onSoftRefresh: softRefreshDashboard,
+  });
+
+  const presenceCounts = useOrgPresenceCounts(
+    !loading && role === "admin" ? currentOrgId : null,
+    !loading && role === "admin" ? "admin" : null
+  );
+
+  useOrgPresenceCounts(
+    !loading && role === "coach" ? currentOrgId : null,
+    !loading && role === "coach" ? "coach" : null
+  );
 
   useEffect(() => {
     void fetchDashboardData();
@@ -310,24 +335,33 @@ export default function Dashboard() {
         <header className="flex min-w-0 flex-col justify-between gap-6 border-b border-white/5 pb-6 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="ui-h1">
-              GUNLUK <span className="text-[#7c3aed]">OPERASYON</span>
+              GÜNLÜK <span className="text-[#7c3aed]">OPERASYON</span>
             </h1>
             <p className="ui-lead break-words">
-              {orgName} • Bugun ne yapmaliyim paneli
+              {orgName} • Bugün ne yapmalıyım?
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <LiveStatusBadge tone="live" label="Yoklama & ders canlı" pulse />
+            </div>
           </div>
-          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-[10px] font-black uppercase w-full min-w-0">
-            <span className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-300">BUGUN {todayLessons.length}</span>
-            <span className="px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/20 text-[#c4b5fd]">BEKLEYEN {pendingAttendanceLessons.length}</span>
-            {coachOpsMetrics && (
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <CompactMetricCard label="Bugün ders" value={todayLessons.length} tone="purple" />
+            <CompactMetricCard
+              label="Bekleyen yoklama"
+              value={pendingAttendanceLessons.length}
+              tone={pendingAttendanceLessons.length > 0 ? "amber" : "emerald"}
+            />
+            {coachOpsMetrics ? (
               <>
-                <span className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-300">7G DERS {coachOpsMetrics.lessons7d}</span>
-                <span className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sky-300">YOKLAMA {coachOpsMetrics.attendanceRate}</span>
-                <span className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-emerald-300">SPORCU {coachOpsMetrics.activeAthletes}</span>
+                <CompactMetricCard label="7 gün ders" value={coachOpsMetrics.lessons7d} tone="neutral" />
+                <CompactMetricCard label="Yoklama oranı" value={coachOpsMetrics.attendanceRate} tone="sky" />
+                <CompactMetricCard label="Aktif sporcu" value={coachOpsMetrics.activeAthletes} tone="emerald" />
               </>
-            )}
+            ) : null}
           </div>
         </header>
+
+        <CoachMobileQuickStrip />
 
         <section className="ui-card min-w-0">
           <h3 className="ui-h2-sm mb-3">Bugün Öncelik</h3>
@@ -365,37 +399,45 @@ export default function Dashboard() {
             )}
           </div>
           {todayLessons.length === 0 ? (
-            <p className="text-gray-500 text-[10px] font-black uppercase italic">Bugün planlı ders yok.</p>
+            <EmptyStateCard
+              title="Bugün planlı ders yok"
+              description="Haftalık çizelgeden yeni ders ekleyebilir veya mevcut planı kontrol edebilirsiniz."
+              primaryAction={canCreateLessons ? { label: "Ders oluştur", href: "/dersler" } : undefined}
+              compact
+            />
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {todayLessons.map((lesson) => {
-                const participantCount = (lesson.training_participants || []).length;
-                const pending = (lesson.training_participants || []).filter((p) => (p.attendance_status || "registered") === "registered").length;
+                const pending = (lesson.training_participants || []).filter(
+                  (p) => (p.attendance_status || "registered") === "registered"
+                ).length;
+                const time = new Date(lesson.start_time).toLocaleTimeString("tr-TR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
                 return (
-                  <div key={lesson.id} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-white font-black italic uppercase break-words">{lesson.title}</p>
-                      <p className="text-[10px] text-gray-500 font-bold italic break-words">
-                        {new Date(lesson.start_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} • {lesson.location || "Ana Saha"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
-                      <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300">
-                        {participantCount}/{lesson.capacity || 0}
-                      </span>
-                      <span className={`px-3 py-1 rounded-xl border ${pending === 0 ? "text-green-400 border-green-500/20 bg-green-500/10" : "text-amber-300 border-amber-500/20 bg-amber-500/10"}`}>
-                        {pending === 0 ? "YOKLAMA ALINDI" : `${pending} BEKLIYOR`}
-                      </span>
-                      <Link href={`/dersler/${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-gray-300 touch-manipulation">
-                        DETAY
-                      </Link>
-                      {canTakeAttendance && (
-                        <Link href={`/antrenman-yonetimi?trainingId=${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-3 py-1 text-[#c4b5fd] touch-manipulation">
-                          YOKLAMA
-                        </Link>
-                      )}
-                    </div>
-                  </div>
+                  <CompactListRow
+                    key={lesson.id}
+                    title={lesson.title}
+                    meta={`${time} · ${lesson.location || "Ana Saha"}`}
+                    badge={
+                      pending === 0
+                        ? { label: "Yoklama tamam", tone: "success" }
+                        : { label: `${pending} bekliyor`, tone: "warning" }
+                    }
+                    href={`/dersler/${lesson.id}`}
+                    actions={[
+                      ...(canTakeAttendance
+                        ? [
+                            {
+                              label: "Yoklama",
+                              href: `/antrenman-yonetimi?modul=grup-dersleri&view=yoklama&trainingId=${lesson.id}`,
+                              primary: true,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 );
               })}
             </div>
@@ -406,13 +448,24 @@ export default function Dashboard() {
           <section className="ui-card">
             <h3 className="ui-h2-sm mb-4">Yoklama Bekleyen Dersler</h3>
             {pendingAttendanceLessons.length === 0 ? (
-              <p className="text-gray-500 text-[10px] font-black uppercase italic">Bekleyen yoklama yok.</p>
+              <p className="text-[10px] font-bold text-gray-500">Tüm yoklamalar güncel.</p>
             ) : (
               <div className="grid gap-2">
                 {pendingAttendanceLessons.map((lesson) => (
-                  <Link key={lesson.id} href={`/antrenman-yonetimi?trainingId=${lesson.id}`} className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-300 text-[10px] font-black uppercase break-words touch-manipulation min-h-11 flex items-center">
-                    {lesson.title} • HIZLI YOKLAMA
-                  </Link>
+                  <CompactListRow
+                    key={lesson.id}
+                    title={lesson.title}
+                    meta="Yoklama bekliyor"
+                    badge={{ label: "Acil", tone: "warning" }}
+                    href={`/antrenman-yonetimi?modul=grup-dersleri&view=yoklama&trainingId=${lesson.id}`}
+                    actions={[
+                      {
+                        label: "Yoklama al",
+                        href: `/antrenman-yonetimi?modul=grup-dersleri&view=yoklama&trainingId=${lesson.id}`,
+                        primary: true,
+                      },
+                    ]}
+                  />
                 ))}
               </div>
             )}
@@ -552,6 +605,13 @@ export default function Dashboard() {
           <p className="ui-lead break-words">
             {orgName} • Performans Yönetim Merkezi
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <LiveStatusBadge tone="live" label="Operasyon canlı" pulse />
+            <span className="text-[10px] font-semibold text-gray-500">
+              Çevrimiçi özet: <span className="text-gray-400">{presenceCounts.adminOnline}</span> admin ·{" "}
+              <span className="text-gray-400">{presenceCounts.coachOnline}</span> koç
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-4 bg-[#121215] border border-white/5 px-4 py-3 rounded-xl shadow-xl min-w-0 max-w-full">
           <div className="w-10 h-10 shrink-0 bg-green-500/10 rounded-lg flex items-center justify-center text-green-500">

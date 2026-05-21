@@ -15,6 +15,11 @@ import {
 } from "lucide-react";
 import Notification from "@/components/Notification";
 import { getRpeSurveyEligibility, submitAthleteTrainingLoadSurvey } from "@/lib/actions/trainingLoadSurveyActions";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { buildOfflineScopeKey } from "@/lib/offline/scope";
+import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
+import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
 
 function toLocalDateInput(d: Date) {
   const y = d.getFullYear();
@@ -23,11 +28,23 @@ function toLocalDateInput(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+const RPE_INITIAL = {
+  duration: 90,
+  rpe: 5,
+  selectedSession: "Antrenman",
+  sessionDate: toLocalDateInput(new Date()),
+};
+
 export default function RPEAnketi() {
-  const [duration, setDuration] = useState<number>(90);
-  const [rpe, setRpe] = useState<number>(5);
-  const [selectedSession, setSelectedSession] = useState<string>("Antrenman");
-  const [sessionDate, setSessionDate] = useState(() => toLocalDateInput(new Date()));
+  const [scopeKey, setScopeKey] = useState("");
+  const [draftQueued, setDraftQueued] = useState(false);
+  const online = useOnlineStatus();
+  const { values, setValue, hasDraft, clearDraft } = useFormDraft({
+    scopeKey,
+    formId: "rpe_survey",
+    initial: RPE_INITIAL,
+  });
+  const { duration, rpe, selectedSession, sessionDate } = values;
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -44,6 +61,14 @@ export default function RPEAnketi() {
     void (async () => {
       const res = await getRpeSurveyEligibility();
       setIsAllowed(res.allowed);
+    })();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) return;
+      setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
     })();
   }, []);
 
@@ -74,6 +99,35 @@ export default function RPEAnketi() {
       return;
     }
 
+    if (!online) {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) {
+        setSubmitError("Çevrimdışı kayıt için oturum doğrulanamadı.");
+        setLoading(false);
+        return;
+      }
+      const queued = enqueueOfflineAction({
+        kind: "rpe_draft",
+        scopeKey: buildOfflineScopeKey(me.organizationId, me.userId),
+        payload: {
+          sessionDate,
+          durationMinutes: duration,
+          rpeScore: rpe,
+          sessionType: selectedSession,
+        },
+        title: "RPE raporu taslağı",
+      });
+      if ("error" in queued) {
+        setSubmitError(queued.error);
+        setLoading(false);
+        return;
+      }
+      setDraftQueued(true);
+      setSubmitError(null);
+      setLoading(false);
+      return;
+    }
+
     const result = await submitAthleteTrainingLoadSurvey({
       sessionDate,
       durationMinutes: duration,
@@ -87,6 +141,7 @@ export default function RPEAnketi() {
       return;
     }
 
+    clearDraft();
     setIsSubmitted(true);
     setTimeout(() => setIsSubmitted(false), 3000);
     setLoading(false);
@@ -101,6 +156,16 @@ export default function RPEAnketi() {
         <h1 className="text-2xl sm:text-3xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">İDMAN <span className="text-[#7c3aed]">RAPORU</span></h1>
         <p className="text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.3em] italic px-2 break-words">Gelişimin için idman verilerini sisteme işle</p>
       </header>
+
+      {!online && !draftQueued ? (
+        <Notification message="Çevrimdışısınız; kayıt güvenli kuyruğa alınır." variant="info" />
+      ) : null}
+      {hasDraft && !isSubmitted ? (
+        <Notification message="Taslak otomatik kaydedildi." variant="info" />
+      ) : null}
+      {draftQueued ? (
+        <Notification message="RPE raporu kuyruğa alındı. Bağlantı gelince senkronize edilir." variant="info" />
+      ) : null}
 
       {isSubmitted ? (
         <div className="bg-green-500/10 border border-green-500/20 p-8 rounded-[2.5rem] text-center space-y-4 animate-in zoom-in duration-300">
@@ -121,7 +186,7 @@ export default function RPEAnketi() {
                 value={sessionDate}
                 min={minDateStr}
                 max={maxDateStr}
-                onChange={(e) => setSessionDate(e.target.value)}
+                onChange={(e) => setValue({ sessionDate: e.target.value })}
                 className="w-full min-h-11 sm:max-w-[14rem] bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-base sm:text-sm font-bold text-white outline-none focus:border-[#7c3aed]/50 [color-scheme:dark] touch-manipulation"
               />
               <p className="text-[9px] text-gray-600 font-bold uppercase tracking-wide italic leading-relaxed">
@@ -140,7 +205,7 @@ export default function RPEAnketi() {
                 <button
                   type="button"
                   key={type}
-                  onClick={() => setSelectedSession(type)}
+                  onClick={() => setValue({ selectedSession: type })}
                   className={`min-h-11 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black italic text-[9px] sm:text-[10px] uppercase transition-all border touch-manipulation ${
                     selectedSession === type 
                     ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/20 sm:scale-[1.02]' 
@@ -163,7 +228,7 @@ export default function RPEAnketi() {
             </div>
             <input 
               type="range" min="15" max="180" step="5" value={duration} 
-              onChange={(e) => setDuration(parseInt(e.target.value))}
+              onChange={(e) => setValue({ duration: parseInt(e.target.value, 10) })}
               className="w-full h-3 sm:h-2 bg-[#1c1c21] rounded-lg appearance-none cursor-pointer accent-[#7c3aed] touch-manipulation py-1"
             />
           </div>
@@ -183,7 +248,7 @@ export default function RPEAnketi() {
                 <button 
                   type="button"
                   key={val}
-                  onClick={() => setRpe(val)}
+                  onClick={() => setValue({ rpe: val })}
                   className={`min-h-11 h-10 sm:h-12 rounded-lg sm:rounded-xl text-sm sm:text-base font-black italic transition-all touch-manipulation ${
                     rpe === val ? 'bg-[#7c3aed] text-white sm:scale-110 shadow-lg shadow-[#7c3aed]/30' : 'bg-[#1c1c21] text-gray-600 sm:hover:bg-white/5'
                   }`}

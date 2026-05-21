@@ -7,6 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/data-display";
 import { markAllNotificationsReadForCurrentUser, markNotificationRead } from "@/lib/actions/lessonActions";
 import { useNotificationsViewer } from "@/lib/hooks/useNotificationsViewer";
+import { RelativeTimeText } from "@/components/realtime/LiveStatusPrimitives";
 import { NotificationPreferencesPanel } from "./_components/NotificationPreferencesPanel";
 
 export default function NotificationsPage() {
@@ -27,6 +28,7 @@ export default function NotificationsPage() {
     const result = await markNotificationRead(id);
     if (result?.success) {
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      window.dispatchEvent(new Event("peaker-notifications-invalidate"));
     }
   }
 
@@ -40,6 +42,7 @@ export default function NotificationsPage() {
     } else if (result?.success) {
       setItems((prev) => prev.map((n) => (n.read ? n : { ...n, read: true })));
       setFeedback(`${result.updatedCount} bildirim okundu işaretlendi.`);
+      window.dispatchEvent(new Event("peaker-notifications-invalidate"));
       window.setTimeout(() => setFeedback(null), 3500);
     }
     setBulkBusy(false);
@@ -100,11 +103,19 @@ export default function NotificationsPage() {
       {!error && items.length > 0 && (
         <div className="grid gap-3 min-w-0">
           {items.map((item) => (
-            <div key={item.id} className={`bg-[#121215] border rounded-[1.5rem] p-4 min-w-0 ${item.read ? "border-white/5" : "border-[#7c3aed]/30"}`}>
+            <div
+              key={item.id}
+              className={`bg-[#121215] border rounded-[1.5rem] p-4 min-w-0 transition-[box-shadow,transform] duration-500 ${
+                item.read ? "border-white/5" : "border-[#7c3aed]/30 shadow-[0_0_0_1px_rgba(124,58,237,0.15)]"
+              }`}
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
                 <div className="min-w-0 flex-1">
                   <p className="text-white text-sm font-black italic break-words">{item.message}</p>
-                  <p className="text-[10px] text-gray-500 font-bold italic mt-1 break-words">{new Date(item.createdAt).toLocaleString("tr-TR")}</p>
+                  <p className="text-[10px] text-gray-500 font-bold italic mt-1 break-words">
+                    <RelativeTimeText iso={item.createdAt} /> ·{" "}
+                    {new Date(item.createdAt).toLocaleString("tr-TR")}
+                  </p>
                 </div>
                 {!item.read && (
                   <button

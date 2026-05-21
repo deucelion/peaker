@@ -24,6 +24,13 @@ export interface WeeklyLessonScheduleItem {
   note: string | null;
   detailHref: string;
   status: string;
+  /** Özel ders oturumları — tamamlama butonu ve paket kontrolleri */
+  packageId?: string;
+  packageLifecycleStatus?: string | null;
+  packageRemainingLessons?: number;
+  packageTotalLessons?: number;
+  packageUsedLessons?: number;
+  packageIsActive?: boolean;
 }
 
 export interface WeeklyLessonScheduleSnapshot {

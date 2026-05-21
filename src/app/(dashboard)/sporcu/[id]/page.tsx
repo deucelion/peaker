@@ -37,6 +37,7 @@ import {
   type WeeklyLoadPoint,
 } from "./_components/AthletePerformanceHero";
 import { AthleteProfileForm } from "./_components/AthleteProfileForm";
+import { AthletePrivateLessonPackagesSection } from "./_components/AthletePrivateLessonPackagesSection";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
@@ -150,9 +151,9 @@ export default function SporcuDetayDinamik() {
     }
     const rawPaymentStatus = (financePackage?.paymentStatus || "").trim().toLowerCase();
     if (["overdue", "gecikmis", "gecikmiş"].includes(rawPaymentStatus)) {
-      signals.push({ key: "payment-overdue", label: "Ödeme gecikmiş", tone: "red" });
+      signals.push({ key: "payment-overdue", label: "Tahsilat vadesi geçmiş", tone: "red" });
     } else if (["unpaid", "beklemede", "partial", "partially_paid", "kısmi", "kismi"].includes(rawPaymentStatus)) {
-      signals.push({ key: "payment-pending", label: "Ödeme bekleniyor", tone: "amber" });
+      signals.push({ key: "payment-pending", label: "Bekleyen tahsilat tutarı", tone: "amber" });
     }
     if (financePackage?.activePackageName) {
       signals.push({
@@ -464,6 +465,10 @@ export default function SporcuDetayDinamik() {
         onDraftChange={handleProfileDraftChange}
         onSubmit={handleProfileSubmit}
       />
+
+      {id && player ? (
+        <AthletePrivateLessonPackagesSection athleteId={id} athleteName={player.full_name || "Sporcu"} />
+      ) : null}
 
       <div className="grid min-w-0 gap-5 md:gap-6 lg:grid-cols-2 lg:items-start">
         <AthleteInjurySection

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
+import { AthletePageHeader, AthleteEmptyState } from "@/components/athlete";
 import { mapAthleteProgram, type RawProgram } from "@/lib/mappers";
 import type { AthleteProgram } from "@/lib/types";
 import { listAthleteProgramsForAthleteView, markProgramRead } from "@/lib/actions/programActions";
@@ -62,12 +63,16 @@ export default function MyProgramsPage() {
   }
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
-      <header className="min-w-0 border-b border-white/5 pb-5 sm:pb-6">
-        <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-          PROGRAMLARIM <span className="text-[#7c3aed]">VE NOTLAR</span>
-        </h1>
-      </header>
+    <div className="min-w-0 space-y-5 overflow-x-hidden pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
+      <AthletePageHeader
+        backHref="/sporcu"
+        title={
+          <>
+            Programlarım <span className="text-[#7c3aed]">ve notlar</span>
+          </>
+        }
+        subtitle="Koçunuzun atadığı antrenman planları"
+      />
 
       {error ? (
         <div className="min-w-0 break-words">
@@ -76,10 +81,14 @@ export default function MyProgramsPage() {
       ) : null}
 
       {!error && items.length === 0 && (
-        <div className="min-w-0 rounded-[1.5rem] border border-white/5 bg-[#121215] p-8 text-center sm:rounded-[2rem] sm:p-16">
-          <FileText size={40} className="mx-auto mb-4 text-gray-700" aria-hidden />
-          <p className="text-gray-500 font-black italic uppercase tracking-widest text-xs">Henuz size atanmis program yok.</p>
-        </div>
+        <AthleteEmptyState
+          icon={FileText}
+          title="Henüz size atanmış program yok"
+          description="Koçunuz program atadığında burada görüntülenecek."
+          hint="Aktif program ve geçmiş notlar bu sayfada listelenir."
+          action={{ label: "Gelişim profilime dön", href: "/sporcu" }}
+          compact
+        />
       )}
 
       {!error && items.length > 0 && (

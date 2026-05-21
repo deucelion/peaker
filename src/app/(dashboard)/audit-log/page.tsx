@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -14,7 +14,11 @@ import {
   X,
 } from "lucide-react";
 import Notification from "@/components/Notification";
-import { type AuditLogListItem } from "@/lib/actions/auditLogActions";
+import EmptyState from "@/components/ui/EmptyState";
+import { InlineErrorState } from "@/components/ui/data-display";
+import { SkeletonTable } from "@/components/ui/skeletons";
+import type { AuditLogListItem } from "@/lib/actions/auditLogTypes";
+import { useStreamingCsvDownload } from "@/lib/hooks/useStreamingCsvDownload";
 import {
   ALL_AUDIT_ACTIONS,
   ALL_AUDIT_ENTITIES,
@@ -24,6 +28,8 @@ import {
   metadataEntries,
   metadataValueToString,
 } from "@/lib/audit/labels";
+import { auditListErrorMessage } from "@/lib/audit/auditDiagnostics";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import {
   AUDIT_LOG_PAGE_SIZE as PAGE_SIZE,
   useAuditLogViewer,
@@ -71,120 +77,41 @@ export default function AuditLogPage() {
     loading,
     error,
     errorKind,
+    diagnosticsCode,
+    status,
+    isError,
     scopeOrgId,
     refetch: fetchData,
     setFilter,
     resetFilter,
   } = useAuditLogViewer();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [selectedDetail, setSelectedDetail] = useState<AuditLogListItem | null>(null);
   const [showCustomRange, setShowCustomRange] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportFeedback, setExportFeedback] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
-  const [exportBytes, setExportBytes] = useState(0);
-  const [exportPhase, setExportPhase] = useState<"idle" | "running" | "aborted" | "done" | "failed">("idle");
-  const exportAbortRef = useRef<AbortController | null>(null);
+  const csvExport = useStreamingCsvDownload();
 
-  const cancelStreamingExport = useCallback(() => {
-    exportAbortRef.current?.abort();
-  }, []);
-
-  const runStreamingExport = useCallback(async () => {
-    const ac = new AbortController();
-    exportAbortRef.current = ac;
-    setExporting(true);
-    setExportBytes(0);
-    setExportPhase("running");
-    setExportFeedback(null);
-    try {
-      const u = new URL("/api/exports/audit-log/stream", window.location.origin);
-      if (filter.action) u.searchParams.set("action", filter.action);
-      if (filter.entityType) u.searchParams.set("entityType", filter.entityType);
-      if (filter.fromIso) u.searchParams.set("fromIso", filter.fromIso);
-      if (filter.toIso) u.searchParams.set("toIso", filter.toIso);
-      if (scopeOrgId) u.searchParams.set("organizationId", scopeOrgId);
-      const res = await fetch(u.toString(), { method: "GET", signal: ac.signal, credentials: "include" });
-      if (res.status === 429) {
-        const j = (await res.json().catch(() => ({}))) as { retryAfterSeconds?: number; error?: string };
-        const sec = typeof j.retryAfterSeconds === "number" ? j.retryAfterSeconds : 60;
-        setExportFeedback({
-          tone: "warn",
-          text: j.error ? `${j.error} (${sec}s)` : `Oran sınırı: ${sec} sn sonra tekrar deneyin.`,
-        });
-        setExportPhase("failed");
-        return;
-      }
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        setExportFeedback({
-          tone: "err",
-          text: typeof j.error === "string" ? j.error : "Dışa aktarma başarısız.",
-        });
-        setExportPhase("failed");
-        return;
-      }
-      const disp = res.headers.get("Content-Disposition");
-      let filename = "audit-export.csv";
-      const m = disp?.match(/filename="([^"]+)"/);
-      if (m?.[1]) filename = m[1];
-      const reader = res.body?.getReader();
-      if (!reader) {
-        setExportFeedback({ tone: "err", text: "Akış okunamadı." });
-        setExportPhase("failed");
-        return;
-      }
-      const chunks: BlobPart[] = [];
-      let bytes = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          chunks.push(value);
-          bytes += value.byteLength;
-          setExportBytes(bytes);
-        }
-      }
-      if (ac.signal.aborted) {
-        setExportPhase("aborted");
-        setExportFeedback({ tone: "warn", text: "Dışa aktarma iptal edildi." });
-        return;
-      }
-      const rowH = res.headers.get("X-Peaker-Row-Count");
-      const truncH = res.headers.get("X-Peaker-Truncated");
-      const rowCount = rowH != null && rowH !== "" ? Number(rowH) : null;
-      const truncated = truncH === "1";
-      const blob = new Blob(chunks, { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setExportPhase("done");
-      setExportFeedback({
-        tone: truncated ? "warn" : "ok",
-        text:
+  const runStreamingExport = useCallback(() => {
+    void csvExport.run(
+      () => {
+        const u = new URL("/api/exports/audit-log/stream", window.location.origin);
+        if (filter.action) u.searchParams.set("action", filter.action);
+        if (filter.entityType) u.searchParams.set("entityType", filter.entityType);
+        if (filter.fromIso) u.searchParams.set("fromIso", filter.fromIso);
+        if (filter.toIso) u.searchParams.set("toIso", filter.toIso);
+        if (scopeOrgId) u.searchParams.set("organizationId", scopeOrgId);
+        return u.toString();
+      },
+      {
+        success: ({ rowCount, truncated }) =>
           truncated && rowCount != null && Number.isFinite(rowCount)
-            ? `İlk ${rowCount} satır (cap). Daha dar tarih aralığı deneyin.`
+            ? `İlk ${rowCount} satır indirildi. Daha dar tarih aralığı deneyin.`
             : rowCount != null && Number.isFinite(rowCount)
-              ? `${rowCount} kayıt indirildi (streaming).`
-              : "CSV indirildi (streaming).",
-      });
-    } catch {
-      if (ac.signal.aborted) {
-        setExportPhase("aborted");
-        setExportFeedback({ tone: "warn", text: "Dışa aktarma iptal edildi." });
-      } else {
-        setExportPhase("failed");
-        setExportFeedback({ tone: "err", text: "CSV indirme başarısız." });
+              ? `${rowCount} kayıt indirildi.`
+              : "CSV indirildi.",
       }
-    } finally {
-      setExporting(false);
-      exportAbortRef.current = null;
-    }
-  }, [filter.action, filter.entityType, filter.fromIso, filter.toIso, scopeOrgId]);
+    );
+  }, [csvExport, filter.action, filter.entityType, filter.fromIso, filter.toIso, scopeOrgId]);
 
   useEffect(() => {
     if (!selectedDetail) return;
@@ -196,8 +123,8 @@ export default function AuditLogPage() {
   }, [selectedDetail]);
 
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return items;
-    const q = search.trim().toLowerCase();
+    if (!debouncedSearch.trim()) return items;
+    const q = debouncedSearch.trim().toLowerCase();
     return items.filter((i) =>
       i.actorName.toLowerCase().includes(q) ||
       i.action.toLowerCase().includes(q) ||
@@ -206,7 +133,7 @@ export default function AuditLogPage() {
       entityLabel(i.entityType).toLowerCase().includes(q) ||
       i.entityId.toLowerCase().includes(q)
     );
-  }, [items, search]);
+  }, [items, debouncedSearch]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -253,6 +180,19 @@ export default function AuditLogPage() {
     resetFilter();
     setSearch("");
     setShowCustomRange(false);
+  }
+
+  if (status === "loading") {
+    return (
+      <div className="ui-page-loose space-y-5 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
+        <header className="space-y-2">
+          <h1 className="ui-h1">
+            Audit <span className="text-[#7c3aed]">Kayıtları</span>
+          </h1>
+        </header>
+        <SkeletonTable rows={8} cols={4} />
+      </div>
+    );
   }
 
   if (errorKind === "permission_denied") {
@@ -318,42 +258,42 @@ export default function AuditLogPage() {
           </button>
           <button
             type="button"
-            disabled={exporting}
-            onClick={() => void runStreamingExport()}
+            disabled={csvExport.exporting}
+            onClick={runStreamingExport}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
             aria-label="Audit kayıtlarını CSV olarak indir (streaming)"
           >
-            {exporting ? (
+            {csvExport.exporting ? (
               <Loader2 className="size-3.5 animate-spin text-emerald-400" aria-hidden />
             ) : (
               <Download size={14} className="opacity-80" aria-hidden />
             )}
             CSV indir
           </button>
-          {exporting ? (
+          {csvExport.exporting ? (
             <button
               type="button"
-              onClick={() => cancelStreamingExport()}
+              onClick={csvExport.cancel}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase tracking-widest text-red-200 hover:border-red-500/50 sm:min-h-10"
             >
               İptal
             </button>
           ) : null}
         </div>
-        {exporting ? (
+        {csvExport.exporting ? (
           <p className="text-[10px] font-bold text-gray-500" aria-live="polite">
-            Aktarılıyor… {exportBytes > 0 ? `${(exportBytes / 1024).toFixed(1)} KB` : ""}
+            Aktarılıyor… {csvExport.bytes > 0 ? `${(csvExport.bytes / 1024).toFixed(1)} KB` : ""}
           </p>
         ) : null}
-        {exportPhase === "aborted" ? (
+        {csvExport.phase === "aborted" ? (
           <span className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-200">
             İptal
           </span>
         ) : null}
-        {exportPhase === "failed" ? (
+        {csvExport.phase === "failed" ? (
           <button
             type="button"
-            onClick={() => void runStreamingExport()}
+            onClick={runStreamingExport}
             className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-3 text-[9px] font-black uppercase tracking-widest text-white"
           >
             <RotateCcw size={12} aria-hidden />
@@ -485,11 +425,28 @@ export default function AuditLogPage() {
         )}
       </section>
 
-      {error ? <Notification message={error} variant="error" /> : null}
-      {exportFeedback ? (
+      {isError && errorKind ? (
+        <InlineErrorState
+          errorKind={errorKind}
+          title={auditListErrorMessage(errorKind, error).title}
+          description={
+            diagnosticsCode
+              ? `${auditListErrorMessage(errorKind, error).description} (Tanı kodu: ${diagnosticsCode})`
+              : auditListErrorMessage(errorKind, error).description
+          }
+          onRetry={
+            errorKind === "fetch_error" || errorKind === "timeout"
+              ? () => void fetchData()
+              : undefined
+          }
+        />
+      ) : null}
+      {csvExport.feedback ? (
         <Notification
-          message={exportFeedback.text}
-          variant={exportFeedback.tone === "err" ? "error" : exportFeedback.tone === "warn" ? "info" : "success"}
+          message={csvExport.feedback.text}
+          variant={
+            csvExport.feedback.tone === "err" ? "error" : csvExport.feedback.tone === "warn" ? "info" : "success"
+          }
         />
       ) : null}
 
@@ -510,31 +467,29 @@ export default function AuditLogPage() {
               <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-hidden />
               Yükleniyor…
             </div>
+          ) : isError ? (
+            <p className="px-4 py-10 text-center text-[10px] font-semibold text-gray-500 sm:px-5">
+              Kayıtlar yüklenemedi. Yukarıdaki hata bandından tekrar deneyin.
+            </p>
           ) : filteredItems.length === 0 ? (
-            <div className="px-4 py-12 text-center sm:px-5">
-              <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-gray-500">
-                <Inbox size={20} aria-hidden />
-              </div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-gray-300">
-                {filterChips.length > 0
-                  ? "Bu filtreyle eşleşen kayıt yok."
-                  : "Henüz audit kaydı oluşmamış."}
-              </p>
-              <p className="mt-1 text-[10px] font-semibold normal-case text-gray-500">
-                {filterChips.length > 0
-                  ? "Tarih aralığını genişletmeyi veya bir filtreyi kaldırmayı deneyin."
-                  : "Sistem üzerindeki yönetim eylemleri burada görünür."}
-              </p>
-              {filterChips.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  className="mt-3 inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:text-white"
-                >
-                  <RotateCcw size={12} aria-hidden />
-                  Filtreleri temizle
-                </button>
-              )}
+            <div className="px-4 py-6 sm:px-5">
+              <EmptyState
+                variant={filterChips.length > 0 ? "filtered_empty" : "no_data"}
+                icon={Inbox}
+                title={
+                  filterChips.length > 0 ? "Bu filtrelerde audit kaydı yok" : "Henüz audit kaydı yok"
+                }
+                description={
+                  filterChips.length > 0
+                    ? "Tarih aralığını genişletin veya filtreleri temizleyin."
+                    : "Yönetim eylemleri burada listelenir."
+                }
+                primaryAction={
+                  filterChips.length > 0
+                    ? { label: "Filtreleri temizle", onClick: clearAllFilters }
+                    : undefined
+                }
+              />
             </div>
           ) : (
             <ul className="divide-y divide-white/5">

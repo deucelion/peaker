@@ -13,14 +13,9 @@ import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { appendOperationalTimeline } from "@/lib/operational/timeline";
 import { isUuid } from "@/lib/validation/uuid";
 import { logger } from "@/lib/monitoring/logger";
+import type { QueueAdminActionResult } from "@/lib/actions/queueAdminTypes";
 
 const MAIN_QUEUE = "peaker_jobs";
-
-type ActionError = { ok: false; error: string; errorKind?: "auth" | "permission" | "validation" | "fetch" };
-
-export type QueueAdminActionResult<T extends Record<string, unknown> = Record<string, unknown>> =
-  | ({ ok: true } & T)
-  | ActionError;
 
 type JobRow = {
   id: string;

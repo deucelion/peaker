@@ -18,14 +18,19 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "PEAKER | Performance Lab",
   description: "Elite Athletic Performance & Management System",
-  // Organizasyon ismini dinamik yapmak istersen ileride burayı güncelleyeceğiz
+  applicationName: "PEAKER",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "PEAKER",
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: "#09090b",
   width: "device-width",
   initialScale: 1,
-  // Zoom varsayılanı: erişilebilirlik (WCAG) ve düşük görüş / iOS Safari ile uyum
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

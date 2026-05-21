@@ -5,6 +5,7 @@ import {
   defaultRetryHint,
   deriveQueryStatus,
   normalizeErrorKind,
+  queryErrorCopy,
   toneForErrorKind,
 } from "./queryState";
 
@@ -51,8 +52,15 @@ describe("queryState helpers", () => {
 
   it("normalizeErrorKind falls back to fetch_error for unknown values", () => {
     expect(normalizeErrorKind("permission_denied")).toBe("permission_denied");
+    expect(normalizeErrorKind("timeout")).toBe("timeout");
     expect(normalizeErrorKind("nonsense")).toBe("fetch_error");
     expect(normalizeErrorKind(undefined)).toBe("fetch_error");
     expect(normalizeErrorKind(null)).toBe("fetch_error");
+  });
+
+  it("queryErrorCopy includes timeout guidance", () => {
+    const copy = queryErrorCopy("timeout");
+    expect(copy.title).toMatch(/zaman aşımı/i);
+    expect(copy.description).toMatch(/daralt/i);
   });
 });

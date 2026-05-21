@@ -23,11 +23,17 @@ import {
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
+import { InlineErrorState } from "@/components/ui/data-display";
+import { useMountedRef } from "@/lib/hooks/useMountedRef";
+import { queryErrorCopy } from "@/lib/ui/queryState";
 import { ChartFrame, chartTooltipStyle } from "@/components/ui/charts";
-import {
-  getSystemOperationsSnapshot,
-  type SystemOperationsSnapshot,
-} from "@/lib/actions/systemOperationsActions";
+import { LiveConnectionStrip, type LiveStatusTone } from "@/components/realtime/LiveStatusPrimitives";
+import { getSystemOperationsSnapshot } from "@/lib/actions/systemOperationsActions";
+import type { SystemOperationsSnapshot } from "@/lib/actions/systemOperationsTypes";
+import { getSchemaHealthSnapshotForOps } from "@/lib/actions/schemaHealthActions";
+import type { SchemaHealthSnapshot } from "@/lib/actions/schemaHealthActions";
+import { getClientRealtimeStatsSnapshot } from "@/lib/realtime/clientRealtimeStats";
+import { formatRelativeTimeTr } from "@/lib/realtime/formatRelativeTimeTr";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import {
   queueAdminRetrySingleJob,
@@ -45,6 +51,7 @@ import {
   replayEnqueueAuditExport,
   replayEnqueueRetentionAudit,
 } from "@/lib/actions/operationalReplayActions";
+import { ProductionHealthOverview } from "@/components/ops/ProductionHealthOverview";
 
 /**
  * Faz 10.6 — Sistem Operasyonları Paneli.
@@ -153,6 +160,7 @@ type RecentJobRow = SystemOperationsSnapshot["recentJobs"][number];
 
 export default function SystemOperationsPage() {
   const [snapshot, setSnapshot] = useState<SystemOperationsSnapshot | null>(null);
+  const [schemaHealth, setSchemaHealth] = useState<SchemaHealthSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,24 +175,50 @@ export default function SystemOperationsPage() {
   const [replayReason, setReplayReason] = useState("");
   const [replayBusy, setReplayBusy] = useState(false);
 
+  const [lastSyncAtMs, setLastSyncAtMs] = useState<number | null>(null);
+  const [browserOnline, setBrowserOnline] = useState(
+    () => typeof navigator !== "undefined" && navigator.onLine
+  );
+
+  const mountedRef = useMountedRef();
+
+  useEffect(() => {
+    const up = () => setBrowserOnline(true);
+    const down = () => setBrowserOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setRefreshing(true);
     setError(null);
     try {
-      const res = await getSystemOperationsSnapshot({
-        scopeOrganizationId: orgScopeInput.trim() || undefined,
-      });
+      const [res, healthRes] = await Promise.all([
+        getSystemOperationsSnapshot({
+          scopeOrganizationId: orgScopeInput.trim() || undefined,
+        }),
+        getSchemaHealthSnapshotForOps(),
+      ]);
+      if (!mountedRef.current) return;
       if ("error" in res) {
         setError(res.error);
         setSnapshot(null);
+        setSchemaHealth(null);
         return;
       }
       setSnapshot(res);
+      setSchemaHealth("snapshot" in healthRes ? healthRes.snapshot : null);
+      setLastSyncAtMs(Date.now());
     } finally {
+      if (!mountedRef.current) return;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orgScopeInput]);
+  }, [orgScopeInput, mountedRef]);
 
   const loadRef = useRef(load);
   useEffect(() => {
@@ -285,6 +319,14 @@ export default function SystemOperationsPage() {
     return m;
   }, [filteredOpenAlerts]);
 
+  const opsLiveTone: LiveStatusTone = !browserOnline
+    ? "offline"
+    : error
+      ? "degraded"
+      : refreshing
+        ? "syncing"
+        : "live";
+
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4">
@@ -306,6 +348,22 @@ export default function SystemOperationsPage() {
           <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
             Retention cron, materialized view ve job durumu
           </p>
+          <div className="mt-3 space-y-2">
+            <LiveConnectionStrip
+              status={opsLiveTone}
+              lastSyncLabel={
+                lastSyncAtMs != null ? formatRelativeTimeTr(new Date(lastSyncAtMs).toISOString()) : null
+              }
+            />
+            <details className="rounded-lg border border-white/10 bg-black/20 p-2 text-[9px] text-gray-500">
+              <summary className="cursor-pointer font-bold uppercase tracking-widest text-gray-400">
+                Bu oturum — istemci realtime telemetri
+              </summary>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all">
+                {JSON.stringify(getClientRealtimeStatsSnapshot(), null, 2)}
+              </pre>
+            </details>
+          </div>
         </div>
         <button
           type="button"
@@ -322,11 +380,20 @@ export default function SystemOperationsPage() {
         </button>
       </header>
 
-      {error && <Notification message={error} variant="error" />}
+      {error ? (
+        <InlineErrorState
+          errorKind="fetch_error"
+          title={queryErrorCopy("fetch_error").title}
+          description={error}
+          onRetry={() => void load()}
+        />
+      ) : null}
 
       {snapshot && !error && (
         <>
           {notifyOk ? <Notification message={notifyOk} variant="success" /> : null}
+
+          <ProductionHealthOverview snapshot={snapshot} />
 
           <section className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.07] px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-gray-300">
             <span className="inline-flex items-center gap-2 text-emerald-300 font-black uppercase tracking-widest">
@@ -355,10 +422,100 @@ export default function SystemOperationsPage() {
             <span className="text-gray-400">
               Uyarı: <span className="tabular-nums text-amber-300">{snapshot.openOperationalAlertsCount}</span> açık
             </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-red-200"
+              title="Dead-letter kuyruğundaki iş sayısı"
+            >
+              <Skull size={12} aria-hidden />
+              DLQ: <span className="tabular-nums">{snapshot.queueStats.deadLetterCount}</span>
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              title="Son 60 dakikada kuyruğa alınan iş tahmini"
+            >
+              <Gauge size={12} className="text-[#7c3aed]" aria-hidden />
+              ~{snapshot.queueAnalyticsBrief.jobsPerMinuteEstimate?.toFixed(1) ?? "—"}/dk
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              title="Son 24 saatte tamamlanan export sayısı ve satır"
+            >
+              <TrendingUp size={12} className="text-emerald-400" aria-hidden />
+              Export 24s: {snapshot.queueAnalyticsBrief.exportsFinishedLast24h} (
+              {snapshot.queueAnalyticsBrief.exportRowsLast24h} satır)
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              title="En son worker heartbeat"
+            >
+              <Clock size={12} className="text-gray-500" aria-hidden />
+              Tick:{" "}
+              {formatDateTime(
+                snapshot.activeWorkers.find((w) => w.isActive)?.lastTickAt ??
+                  snapshot.activeWorkers[0]?.lastTickAt
+              )}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              title="pg_cron retention job son çalışma"
+            >
+              <Database size={12} className="text-gray-500" aria-hidden />
+              Cron:{" "}
+              {formatDateTime(
+                snapshot.cronJobs.find((j) => j.jobname.includes("retention"))?.lastRunStartedAt ??
+                  snapshot.cronJobs[0]?.lastRunStartedAt
+              )}
+            </span>
             <span className="text-[9px] text-gray-500 sm:ml-auto">
               Otomatik yenileme (45s / sekme gizliyken 120s) · Son: {formatDateTime(snapshot.generatedAt)}
             </span>
           </section>
+
+          {schemaHealth ? (
+            <section
+              className={`rounded-2xl border px-4 py-3 ${
+                schemaHealth.ok
+                  ? "border-emerald-500/25 bg-emerald-500/5"
+                  : "border-amber-500/30 bg-amber-500/10"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white">
+                  Migration / şema sağlığı
+                </p>
+                <span
+                  className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase ${
+                    schemaHealth.ok ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"
+                  }`}
+                >
+                  {schemaHealth.ok ? "Uyumlu" : "Drift tespit edildi"}
+                </span>
+              </div>
+              <ul className="mt-2 grid gap-1 text-[10px] font-semibold text-gray-300 sm:grid-cols-2">
+                <li>
+                  lifecycle_status:{" "}
+                  {schemaHealth.packages.lifecycleStatus ? "✓" : "eksik (FAZ 18)"}
+                </li>
+                <li>voided_at (PLP): {schemaHealth.payments.privateLessonVoidedAt ? "✓" : "eksik (FAZ 19)"}</li>
+                <li>
+                  package_events: {schemaHealth.packages.packageEventsTable ? "✓" : "eksik (FAZ 18)"}
+                </li>
+                <li>
+                  void RPC: {schemaHealth.payments.privateLessonVoidRpc ? "✓" : "eksik (FAZ 19)"}
+                </li>
+              </ul>
+              {schemaHealth.driftWarnings.length > 0 ? (
+                <ul className="mt-2 list-inside list-disc text-[10px] text-amber-100/90">
+                  {schemaHealth.driftWarnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-2 text-[9px] text-gray-500">
+                Algılama: {formatDateTime(schemaHealth.detectedAt)}
+              </p>
+            </section>
+          ) : null}
 
           {/* Faz 13.1 — Worker recovery kartları */}
           <section className="grid gap-3 sm:grid-cols-3">
@@ -1294,6 +1451,9 @@ export default function SystemOperationsPage() {
                   {replayOpen === "alerts" && "Snapshot üzerinden uyarı kuralları yeniden değerlendirilir."}
                   {replayOpen === "export_audit" && "Audit CSV export async job kuyruğa alınır."}
                   {replayOpen === "retention" && "Audit log retention denetim job tetiklenir (super_admin)."}
+                </p>
+                <p className="mt-1 text-[9px] font-semibold text-amber-300/90">
+                  Aynı işlem 60 saniye içinde tekrar tetiklenemez (replay cooldown).
                 </p>
                 <label className="mt-4 block text-[9px] font-black uppercase tracking-widest text-gray-500">
                   Sebep (metadata)

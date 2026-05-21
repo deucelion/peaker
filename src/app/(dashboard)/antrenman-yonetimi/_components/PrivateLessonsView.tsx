@@ -25,6 +25,7 @@ export function PrivateLessonsView({
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schemaWarnings, setSchemaWarnings] = useState<string[]>([]);
   const [rows, setRows] = useState<PrivateLessonPackage[]>([]);
 
   const load = useCallback(async () => {
@@ -32,11 +33,13 @@ export function PrivateLessonsView({
     const res = await listPrivateLessonPackagesForManagement();
     if ("error" in res) {
       setError(res.error || "Özel ders paketleri alınamadı.");
+      setSchemaWarnings([]);
       setRows([]);
       setLoading(false);
       return;
     }
     setError(null);
+    setSchemaWarnings(res.schemaWarnings ?? []);
     setRows(res.packages || []);
     setLoading(false);
   }, []);
@@ -300,6 +303,19 @@ export function PrivateLessonsView({
 
   return (
     <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+      {schemaWarnings.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[10px] font-semibold text-amber-100">
+          <p className="font-black uppercase tracking-wide text-amber-200">Şema uyumluluk modu</p>
+          <p className="mt-1 normal-case text-amber-100/90">
+            Veritabanı migration (FAZ 18/19) eksik; paket durumu is_active alanından türetiliyor.
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-0.5 normal-case">
+            {schemaWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <h2 className="text-sm font-black uppercase text-white">Paket Listesi</h2>
       <p className="mt-1 text-[11px] font-semibold text-gray-500">
         Özel ders operasyonu için önce paketi seçin, sonra detaydan işlem yapın.

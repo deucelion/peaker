@@ -8,6 +8,20 @@ import {
   getMorningReportEligibility,
   submitWellnessReportToday,
 } from "@/lib/actions/wellnessFormActions";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { buildOfflineScopeKey } from "@/lib/offline/scope";
+import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
+import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
+
+const WELLNESS_INITIAL = {
+  fatigue: 3,
+  sleep_quality: 3,
+  muscle_soreness: 3,
+  stress_level: 3,
+  energy_level: 3,
+  resting_heart_rate: 60,
+};
 
 export default function SporcuWellnessGiris() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -16,13 +30,16 @@ export default function SporcuWellnessGiris() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
-  const [form, setForm] = useState({ 
-    fatigue: 3, 
-    sleep_quality: 3, 
-    muscle_soreness: 3, 
-    stress_level: 3, 
-    energy_level: 3,
-    resting_heart_rate: 60 
+  const [draftQueued, setDraftQueued] = useState(false);
+  const [scopeKey, setScopeKey] = useState("");
+  const online = useOnlineStatus();
+  const { values: form, setValue, hasDraft: hasFormDraft, clearDraft } = useFormDraft({
+    scopeKey,
+    formId: "wellness_morning",
+    initial: WELLNESS_INITIAL,
+    serialize: (v) => ({ form: v }),
+    deserialize: (p, init) =>
+      p.form && typeof p.form === "object" ? { ...init, ...(p.form as typeof WELLNESS_INITIAL) } : init,
   });
 
   const todayDisplay = useMemo(
@@ -61,6 +78,14 @@ export default function SporcuWellnessGiris() {
     })();
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) return;
+      setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
+    })();
+  }, []);
+
   if (isAllowed === false) {
     return (
       <div className="min-w-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
@@ -79,6 +104,27 @@ export default function SporcuWellnessGiris() {
       return;
     }
 
+    if (!online) {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) {
+        setSubmitError("Çevrimdışı kayıt için oturum doğrulanamadı.");
+        return;
+      }
+      const queued = enqueueOfflineAction({
+        kind: "wellness_draft",
+        scopeKey: buildOfflineScopeKey(me.organizationId, me.userId),
+        payload: { form },
+        title: "Sabah raporu taslağı",
+      });
+      if ("error" in queued) {
+        setSubmitError(queued.error);
+        return;
+      }
+      setDraftQueued(true);
+      setSubmitError(null);
+      return;
+    }
+
     setLoading(true);
     setSubmitError(null);
 
@@ -89,6 +135,7 @@ export default function SporcuWellnessGiris() {
       setSubmitError(result.error);
       return;
     }
+    clearDraft();
     setSubmitted(true);
   };
 
@@ -99,8 +146,8 @@ export default function SporcuWellnessGiris() {
       </div>
       <h1 className="text-2xl sm:text-3xl md:text-4xl font-black italic uppercase tracking-tighter leading-none">RAPOR <br/> <span className="text-[#7c3aed]">TAMAMLANDI</span></h1>
       <p className="text-gray-500 mt-4 sm:mt-5 uppercase text-[9px] sm:text-[10px] font-bold tracking-[0.35em] italic leading-relaxed max-w-sm">Veriler aynı veritabanına kaydedildi; antrenör ve yönetici panelleri veriyi sayfa yenilemesi veya sonraki yüklemede görür.</p>
-      <Link href="/sporcu" className="mt-8 sm:mt-10 inline-flex min-h-12 items-center justify-center px-8 py-3.5 sm:px-10 sm:py-4 bg-[#121215] border border-white/5 rounded-2xl text-[10px] font-black uppercase italic sm:hover:bg-white/10 transition-all tracking-widest touch-manipulation">
-        DASHBOARD&apos;A GİT
+      <Link href="/sporcu" className="mt-8 sm:mt-10 inline-flex min-h-12 items-center justify-center rounded-xl border border-white/5 bg-[#121215] px-8 py-3.5 text-[10px] font-black uppercase italic tracking-widest touch-manipulation sm:hover:bg-white/10">
+        Panele dön
       </Link>
     </div>
   );
@@ -110,13 +157,13 @@ export default function SporcuWellnessGiris() {
       <header className="pt-4 sm:pt-6 md:pt-8 space-y-2 sm:space-y-3">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="h-px w-6 sm:w-8 bg-[#7c3aed]"></div>
-          <span className="text-[9px] sm:text-[10px] font-black text-[#7c3aed] uppercase tracking-[0.4em] sm:tracking-[0.5em] italic">Daily Readiness</span>
+          <span className="text-[9px] sm:text-[10px] font-black text-[#7c3aed] uppercase tracking-[0.4em] sm:tracking-[0.5em] italic">Sabah hazırlık</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-[0.9]">
-          GÜNE <br/><span className="text-[#7c3aed]">HAZIRLIK</span>
+        <h1 className="text-2xl font-black uppercase italic leading-tight tracking-tighter sm:text-3xl">
+          Güne <span className="text-[#7c3aed]">hazırlık</span>
         </h1>
-        <p className="text-gray-600 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] italic max-w-sm">
-          Performans optimizasyonu için sabah verilerini sisteme işle.
+        <p className="max-w-sm text-[10px] font-bold uppercase tracking-wide text-gray-600 italic">
+          İyi oluş ve hazırlık durumu için sabah verilerini kaydedin.
         </p>
         <p className="text-gray-500 text-[10px] sm:text-[11px] font-bold tracking-wide mt-1 border-l-2 border-[#7c3aed]/40 pl-2 sm:pl-3">
           Rapor tarihi: <span className="text-white">{todayDisplay}</span> (bugün)
@@ -126,9 +173,20 @@ export default function SporcuWellnessGiris() {
       {orgResolveError && (
         <Notification message={orgResolveError} variant="error" />
       )}
+      {draftQueued ? (
+        <Notification
+          message="Rapor cihazınıza kaydedildi. Bağlantı gelince otomatik senkron denenecek."
+          variant="info"
+        />
+      ) : null}
+      {!online && !draftQueued ? (
+        <Notification message="Çevrimdışısınız; kayıt güvenli kuyruğa alınır." variant="info" />
+      ) : null}
+      {hasFormDraft && !submitted ? (
+        <Notification message="Taslak otomatik kaydedildi." variant="info" />
+      ) : null}
 
-      {/* RHR (RESTING HEART RATE) CARD */}
-      <div className="bg-[#121215] border border-[#7c3aed]/20 p-4 sm:p-5 md:p-6 rounded-2xl sm:rounded-[1.75rem] md:rounded-[2rem] shadow-xl relative overflow-hidden group">
+      <div className="relative overflow-hidden rounded-2xl border border-[#7c3aed]/20 bg-[#121215] p-4 shadow-lg sm:p-5">
         <div className="flex justify-between items-center gap-3 mb-4 sm:mb-5 relative z-10">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2.5 sm:p-3 bg-[#7c3aed]/10 rounded-xl sm:rounded-2xl text-[#7c3aed] shrink-0">
@@ -136,7 +194,7 @@ export default function SporcuWellnessGiris() {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-wider sm:tracking-widest italic">Sabah Nabzı</span>
-              <span className="text-[8px] sm:text-[9px] font-bold text-[#7c3aed] uppercase truncate">Resting Heart Rate</span>
+              <span className="truncate text-[8px] font-bold uppercase text-[#7c3aed] sm:text-[9px]">Dinlenik nabız</span>
             </div>
           </div>
           <div className="text-xl sm:text-2xl md:text-3xl font-black italic text-white tracking-tighter shrink-0 tabular-nums">
@@ -150,7 +208,7 @@ export default function SporcuWellnessGiris() {
           placeholder="--" 
           className="w-full min-w-0 bg-black border border-white/5 py-3 px-3 sm:py-3.5 sm:px-4 rounded-xl sm:rounded-2xl text-2xl sm:text-3xl md:text-[2rem] font-black text-center text-[#7c3aed] outline-none focus:border-[#7c3aed] focus:ring-2 sm:focus:ring-4 focus:ring-[#7c3aed]/10 transition-all max-h-[4.5rem] sm:max-h-none touch-manipulation"
           value={form.resting_heart_rate || ""}
-          onChange={(e) => setForm({...form, resting_heart_rate: parseInt(e.target.value, 10) || 0})}
+          onChange={(e) => setValue({ resting_heart_rate: parseInt(e.target.value, 10) || 0 })}
         />
         
         <p className="text-[8px] sm:text-[9px] text-gray-600 font-bold uppercase mt-3 sm:mt-4 text-center italic tracking-wide sm:tracking-widest opacity-60 leading-relaxed px-1">
@@ -166,27 +224,27 @@ export default function SporcuWellnessGiris() {
       <div className="grid gap-3 sm:gap-4">
         <WellnessSlider 
           label="YORGUNLUK" icon={<Battery/>} value={form.fatigue} 
-          onChange={(val: number) => setForm({...form, fatigue: val})} 
+          onChange={(val: number) => setValue({ fatigue: val })} 
           low="TÜKENMİŞ" high="ZİNDE" 
         />
         <WellnessSlider 
           label="UYKU KALİTESİ" icon={<Moon/>} value={form.sleep_quality} 
-          onChange={(val: number) => setForm({...form, sleep_quality: val})} 
+          onChange={(val: number) => setValue({ sleep_quality: val })} 
           low="YETERSİZ" high="DERİN" 
         />
         <WellnessSlider 
           label="KAS AĞRISI" icon={<Activity/>} value={form.muscle_soreness} 
-          onChange={(val: number) => setForm({...form, muscle_soreness: val})} 
+          onChange={(val: number) => setValue({ muscle_soreness: val })} 
           low="DOMS+" high="TEMİZ" 
         />
         <WellnessSlider 
           label="STRES SEVİYESİ" icon={<Brain/>} value={form.stress_level} 
-          onChange={(val: number) => setForm({...form, stress_level: val})} 
+          onChange={(val: number) => setValue({ stress_level: val })} 
           low="YOĞUN" high="RAHAT" 
         />
         <WellnessSlider 
           label="ENERJİ MODU" icon={<Zap/>} value={form.energy_level} 
-          onChange={(val: number) => setForm({...form, energy_level: val})} 
+          onChange={(val: number) => setValue({ energy_level: val })} 
           low="DÜŞÜK" high="ZİRVE" 
         />
       </div>

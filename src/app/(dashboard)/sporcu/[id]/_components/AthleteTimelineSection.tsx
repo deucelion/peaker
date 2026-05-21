@@ -6,7 +6,7 @@ import { LoadMoreButton } from "@/components/ui/data-display";
 
 export type TimelineEvent = {
   id: string;
-  type: "lesson" | "payment" | "injury" | "note";
+  type: "lesson" | "payment" | "injury" | "note" | "finance_movement";
   at: string;
   title: string;
   detail: string;
@@ -37,16 +37,16 @@ export function AthleteTimelineSection({
       className="rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7"
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-wide text-white">Operasyon timeline</h2>
+        <h2 className="text-sm font-black uppercase tracking-wide text-white">Operasyon ve finans zaman çizelgesi</h2>
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">
-          Ders · Ödeme · Sakatlık · Not
+          Ders · Tahsilat · Paket olayları · Görüşme
         </span>
       </div>
       {events.length === 0 ? (
         <EmptyState
           variant="no_data"
           title="Timeline boş"
-          description="Sporcu için ders, ödeme veya sakatlık aktivitesi kaydedilmemiş."
+          description="Sporcu için ders, tahsilat kaydı veya sakatlık aktivitesi kaydedilmemiş."
           primaryAction={{ label: "Ders planla", href: "/dersler" }}
           secondaryAction={{ label: "Finans ekranı", href: emptyFinanceHref || "/finans" }}
           compact

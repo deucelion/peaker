@@ -32,6 +32,13 @@ const LESSON_STATUS_LABELS: Record<string, string> = {
   cancelled: "İptal Edildi",
 };
 
+import { PACKAGE_LIFECYCLE_LABEL, type PackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
+
+export function getPackageLifecycleLabel(status: PackageLifecycleStatus | null | undefined): string {
+  if (!status) return "—";
+  return PACKAGE_LIFECYCLE_LABEL[status] ?? status;
+}
+
 export function getAccountingPaymentKindLabel(paymentKind: string | null | undefined): string {
   const key = String(paymentKind || "").trim().toLowerCase();
   if (PAYMENT_KIND_LABELS[key]) return PAYMENT_KIND_LABELS[key];

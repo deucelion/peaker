@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
+import { MoneyAmountInput } from "@/components/privateLessons/MoneyAmountInput";
+import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { createAthleteWithPackageAndPayment } from "@/lib/actions/athleteOnboardingActions";
 import { createTeamAction, listTeamsForActor } from "@/lib/actions/teamActions";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
@@ -47,14 +49,14 @@ export default function NewAthleteOnboardingPage() {
   });
 
   const derivedTotalAmount = useMemo(() => {
-    if (mode === "private_lesson") return Number(form.packageTotalPrice || "0");
-    if (mode === "monthly_subscription") return Number(form.monthlyAmount || "0");
+    if (mode === "private_lesson") return parseTRYMoneyInput(form.packageTotalPrice) ?? 0;
+    if (mode === "monthly_subscription") return parseTRYMoneyInput(form.monthlyAmount) ?? 0;
     return 0;
   }, [mode, form.packageTotalPrice, form.monthlyAmount]);
 
   const paymentRemaining = useMemo(() => {
     const total = derivedTotalAmount;
-    const paid = Number(form.paymentPaid || "0");
+    const paid = parseTRYMoneyInput(form.paymentPaid) ?? 0;
     const rem = Number.isFinite(total) && Number.isFinite(paid) ? total - paid : 0;
     return Math.max(rem, 0);
   }, [form.paymentPaid, derivedTotalAmount]);
@@ -320,13 +322,25 @@ export default function NewAthleteOnboardingPage() {
             {mode === "private_lesson" ? (
               <>
                 <label className="ui-field"><span className="ui-label">Toplam ders sayısı</span><input className="ui-input" type="number" value={form.totalLessons} onChange={(e) => setForm((p) => ({ ...p, totalLessons: e.target.value }))} /></label>
-                <label className="ui-field"><span className="ui-label">Toplam ücret</span><input className="ui-input" type="number" step="0.01" value={form.packageTotalPrice} onChange={(e) => setForm((p) => ({ ...p, packageTotalPrice: e.target.value }))} /></label>
+                <MoneyAmountInput
+                  label="Toplam ücret"
+                  required
+                  value={form.packageTotalPrice}
+                  onChange={(v) => setForm((p) => ({ ...p, packageTotalPrice: v }))}
+                  className="ui-input min-h-10 pl-10"
+                />
                 <label className="ui-field sm:col-span-2"><span className="ui-label">Başlangıç tarihi</span><input className="ui-input" type="date" value={form.packageStartDate} onChange={(e) => setForm((p) => ({ ...p, packageStartDate: e.target.value }))} /></label>
               </>
             ) : null}
             {mode === "monthly_subscription" ? (
               <>
-                <label className="ui-field"><span className="ui-label">Aylık ücret</span><input className="ui-input" type="number" step="0.01" value={form.monthlyAmount} onChange={(e) => setForm((p) => ({ ...p, monthlyAmount: e.target.value }))} /></label>
+                <MoneyAmountInput
+                  label="Aylık ücret"
+                  required
+                  value={form.monthlyAmount}
+                  onChange={(v) => setForm((p) => ({ ...p, monthlyAmount: v }))}
+                  className="ui-input min-h-10 pl-10"
+                />
                 <label className="ui-field"><span className="ui-label">Yenileme tipi</span><input className="ui-input" value="Aylık (v1)" readOnly /></label>
                 <label className="ui-field sm:col-span-2"><span className="ui-label">Başlangıç tarihi</span><input className="ui-input" type="date" value={form.monthlyStartDate} onChange={(e) => setForm((p) => ({ ...p, monthlyStartDate: e.target.value }))} /></label>
               </>

@@ -9,7 +9,8 @@ import {
 
 describe("private lesson package math", () => {
   it("normalizes money to non-negative 2 decimals", () => {
-    expect(normalizeMoney("10.235")).toBe(10.24);
+    expect(normalizeMoney("10.24")).toBe(10.24);
+    expect(normalizeMoney("10.000")).toBe(10000);
     expect(normalizeMoney(-5)).toBe(0);
     expect(normalizeMoney(undefined)).toBe(0);
   });

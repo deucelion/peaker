@@ -8,7 +8,30 @@ import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
-import { computePaymentStatus, normalizeMoney } from "@/lib/privateLessons/packageMath";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { appendPrivateLessonPackageEvent } from "@/lib/privateLessons/appendPrivateLessonPackageEvent";
+import { assertValidTRYMoneyAmount, calculatePackageFinanceSummary } from "@/lib/privateLessons/packageFinance";
+import { computePaymentStatus, normalizeMoney, parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
+import { parseInstallmentFieldsFromForm } from "@/lib/privateLessons/parseInstallmentFields";
+import {
+  packageAllowsPayment,
+  packageAllowsUsage,
+  resolvePackageLifecycleStatus,
+} from "@/lib/privateLessons/packageStatus";
+import { buildPackageUsageLessonRows } from "@/lib/privateLessons/packageUsageLessonRows";
+import {
+  getSchemaCapabilities,
+  mapPackageRowCompat,
+  runPackageSelectWithCompat,
+  runPackageLifecycleProbeWithCompat,
+  runPackagePaymentGuardWithCompat,
+  packageCompletedUpdatePayload,
+  packageLifecycleUpdatePayload,
+  applyPrivateLessonPaymentActiveFilter,
+  userFacingDataError,
+  type RawPackageRow,
+} from "@/lib/schemaCompat";
+import { appendOperationalTimeline } from "@/lib/operational/timeline";
 import {
   applyPrivateLessonPackagePaymentWithPaymentRow,
   paymentBookkeepingFromPaidAtIso,
@@ -17,10 +40,11 @@ import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
+  PrivateLessonPackageEventRow,
   PrivateLessonPayment,
-  PrivateLessonPaymentStatus,
   PrivateLessonUsage,
 } from "@/lib/types";
+import type { PackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
@@ -33,48 +57,48 @@ type Actor = {
   is_active: boolean | null;
 };
 
-const PACKAGE_SELECT =
-  "id, organization_id, athlete_id, coach_id, package_type, package_name, total_lessons, used_lessons, remaining_lessons, total_price, amount_paid, payment_status, is_active, created_at, updated_at, athlete_profile:profiles!private_lesson_packages_athlete_id_fkey(full_name, email), coach_profile:profiles!private_lesson_packages_coach_id_fkey(full_name, email)";
+function mapPackage(raw: RawPackageRow): PrivateLessonPackage {
+  return mapPackageRowCompat(raw);
+}
 
-function mapPackage(raw: {
-  id: string;
-  organization_id: string;
-  athlete_id: string;
-  coach_id: string | null;
-  package_type: string;
-  package_name: string;
-  total_lessons: number;
-  used_lessons: number;
-  remaining_lessons: number;
-  total_price: number;
-  amount_paid: number;
-  payment_status: PrivateLessonPaymentStatus;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  athlete_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
-  coach_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
-}): PrivateLessonPackage {
-  const athlete = Array.isArray(raw.athlete_profile) ? raw.athlete_profile[0] : raw.athlete_profile;
-  const coach = Array.isArray(raw.coach_profile) ? raw.coach_profile[0] : raw.coach_profile;
+async function markPackageCompletedIfNeeded(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  packageId: string,
+  organizationId: string,
+  nextRemaining: number
+): Promise<void> {
+  if (nextRemaining > 0) return;
+  const caps = await getSchemaCapabilities();
+  const payload = packageCompletedUpdatePayload(caps, nextRemaining);
+  if (!Object.keys(payload).length) return;
+  await adminClient
+    .from("private_lesson_packages")
+    .update(payload)
+    .eq("id", packageId)
+    .eq("organization_id", organizationId);
+}
+
+type PackageListResult = { packages: PrivateLessonPackage[]; schemaWarnings?: string[] } | { error: string };
+
+async function fetchPackageList(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  buildQuery: (
+    select: string
+  ) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+): Promise<PackageListResult> {
+  const caps = await getSchemaCapabilities();
+  const result = await runPackageSelectWithCompat(caps, async (select) => {
+    const { data, error } = await buildQuery(select);
+    return { data, error };
+  });
+  if (result.error) {
+    return { error: userFacingDataError("Paketler alınamadı", result.error.message) };
+  }
+  const warnings =
+    result.usedCompatFallback || caps.driftWarnings.length ? [...caps.driftWarnings] : undefined;
   return {
-    id: raw.id,
-    organizationId: raw.organization_id,
-    athleteId: raw.athlete_id,
-    athleteName: toDisplayName(athlete?.full_name, athlete?.email, "Sporcu"),
-    coachId: raw.coach_id,
-    coachName: coach ? toDisplayName(coach?.full_name, coach?.email, "Koc") : null,
-    packageType: raw.package_type,
-    packageName: raw.package_name,
-    totalLessons: raw.total_lessons,
-    usedLessons: raw.used_lessons,
-    remainingLessons: raw.remaining_lessons,
-    totalPrice: normalizeMoney(raw.total_price),
-    amountPaid: normalizeMoney(raw.amount_paid),
-    paymentStatus: raw.payment_status,
-    isActive: raw.is_active,
-    createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
+    packages: ((result.data || []) as RawPackageRow[]).map((row) => mapPackage(row)),
+    schemaWarnings: warnings,
   };
 }
 
@@ -127,7 +151,7 @@ async function assertManagementActor(actor: Actor): Promise<{ ok: true } | { ok:
 }
 
 export async function listPrivateLessonPackagesForManagement(): Promise<
-  { packages: PrivateLessonPackage[] } | { error: string }
+  { packages: PrivateLessonPackage[]; schemaWarnings?: string[] } | { error: string }
 > {
   const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "coach_permissions"]);
   if (schemaError) return { error: schemaError };
@@ -140,21 +164,20 @@ export async function listPrivateLessonPackagesForManagement(): Promise<
   const role = getSafeRole(actor.role);
 
   const adminClient = createSupabaseAdminClient();
-  let packagesQuery = adminClient
-    .from("private_lesson_packages")
-    .select(PACKAGE_SELECT)
-    .eq("organization_id", actor.organization_id!)
-    .order("created_at", { ascending: false });
-  if (role === "coach") {
-    const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
-    if (!permissions.can_view_all_organization_lessons) {
-      packagesQuery = packagesQuery.eq("coach_id", actor.id);
+  return fetchPackageList(adminClient, async (select) => {
+    let packagesQuery = adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("organization_id", actor.organization_id!)
+      .order("created_at", { ascending: false });
+    if (role === "coach") {
+      const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
+      if (!permissions.can_view_all_organization_lessons) {
+        packagesQuery = packagesQuery.eq("coach_id", actor.id);
+      }
     }
-  }
-  const { data, error } = await packagesQuery;
-
-  if (error) return { error: `Paketler alinamadi: ${error.message}` };
-  return { packages: (data || []).map((row) => mapPackage(row as never)) };
+    return packagesQuery;
+  });
 }
 
 export async function listPrivateLessonPackagesForAthlete(): Promise<
@@ -172,15 +195,61 @@ export async function listPrivateLessonPackagesForAthlete(): Promise<
   if (!actor.organization_id) return { error: "Organizasyon bilgisi eksik." };
 
   const adminClient = createSupabaseAdminClient();
-  const { data, error } = await adminClient
-    .from("private_lesson_packages")
-    .select(PACKAGE_SELECT)
-    .eq("organization_id", actor.organization_id)
-    .eq("athlete_id", actor.id)
-    .order("created_at", { ascending: false });
+  return fetchPackageList(adminClient, async (select) =>
+    adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("organization_id", actor.organization_id)
+      .eq("athlete_id", actor.id)
+      .order("created_at", { ascending: false })
+  );
+}
 
-  if (error) return { error: `Paketler alinamadi: ${error.message}` };
-  return { packages: (data || []).map((row) => mapPackage(row as never)) };
+export async function listPrivateLessonPackagesForAthleteId(
+  athleteId: string
+): Promise<{ packages: PrivateLessonPackage[] } | { error: string }> {
+  const schemaError = await assertCriticalSchemaReady(["private_lesson_packages_ready", "coach_permissions"]);
+  if (schemaError) return { error: schemaError };
+
+  const resolved = await resolvePackageActor();
+  if ("error" in resolved) return { error: resolved.error };
+  const { actor } = resolved;
+  const guard = await assertManagementActor(actor);
+  if (!guard.ok) return { error: guard.error };
+  const role = getSafeRole(actor.role);
+
+  const id = athleteId.trim();
+  if (!id) return { error: "Sporcu seçimi zorunludur." };
+
+  const adminClient = createSupabaseAdminClient();
+  const { data: athlete } = await adminClient
+    .from("profiles")
+    .select("id, role, organization_id")
+    .eq("id", id)
+    .eq("organization_id", actor.organization_id!)
+    .maybeSingle();
+  if (!athlete || getSafeRole(athlete.role) !== "sporcu") return { error: "Sporcu bulunamadı." };
+
+  return fetchPackageList(adminClient, async (select) => {
+    let packagesQuery = adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("organization_id", actor.organization_id!)
+      .eq("athlete_id", id)
+      .order("created_at", { ascending: false });
+    if (role === "coach") {
+      const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
+      if (!permissions.can_view_all_organization_lessons) {
+        packagesQuery = packagesQuery.eq("coach_id", actor.id);
+      }
+    }
+    return packagesQuery;
+  });
+}
+
+/** Faz 17 — Mevcut sporcuya paket tanımlama (createPrivateLessonPackage ile aynı). */
+export async function createPrivateLessonPackageForAthlete(formData: FormData) {
+  return createPrivateLessonPackage(formData);
 }
 
 export async function listPrivateLessonFormOptions(): Promise<
@@ -245,13 +314,25 @@ export async function createPrivateLessonPackage(formData: FormData) {
   const packageType = formData.get("packageType")?.toString().trim() || "";
   const packageName = formData.get("packageName")?.toString().trim() || "";
   const totalLessons = Math.floor(Number(formData.get("totalLessons")?.toString() || "0"));
-  const totalPrice = normalizeMoney(formData.get("totalPrice")?.toString() || "0");
-  const amountPaid = normalizeMoney(formData.get("amountPaid")?.toString() || "0");
+  const totalPrice = parseTRYMoneyInput(formData.get("totalPrice")?.toString());
+  const initialPayment = parseTRYMoneyInput(formData.get("amountPaid")?.toString() || "0") ?? 0;
   const role = getSafeRole(actor.role);
 
   if (!athleteId || !packageType || !packageName) return { error: "Sporcu, paket tipi ve paket adi zorunludur." };
   if (!Number.isFinite(totalLessons) || totalLessons <= 0) return { error: "Toplam ders sayisi 1 veya daha buyuk olmali." };
-  if (totalPrice < 0 || amountPaid < 0) return { error: "Fiyat alanlari negatif olamaz." };
+  if (totalPrice == null || totalPrice <= 0) return { error: "Toplam ücret geçerli ve sıfırdan büyük olmalıdır." };
+  const totalPriceValid = assertValidTRYMoneyAmount(totalPrice, "Toplam ücret");
+  if (!totalPriceValid.ok) return { error: totalPriceValid.error };
+  if (initialPayment > 0) {
+    const initialValid = assertValidTRYMoneyAmount(initialPayment, "İlk ödeme");
+    if (!initialValid.ok) return { error: initialValid.error };
+  }
+  if (initialPayment < 0 || initialPayment > totalPriceValid.amount) {
+    return { error: "İlk ödeme negatif olamaz ve toplam ücreti aşamaz." };
+  }
+
+  const installmentParsed = parseInstallmentFieldsFromForm(formData);
+  if ("error" in installmentParsed) return { error: installmentParsed.error };
 
   const adminClient = createSupabaseAdminClient();
 
@@ -282,28 +363,107 @@ export async function createPrivateLessonPackage(formData: FormData) {
     coachId = actor.id;
   }
 
-  const paymentStatus = computePaymentStatus(totalPrice, amountPaid);
+  const caps = await getSchemaCapabilities();
+  const insertPayload: Record<string, unknown> = {
+    organization_id: actor.organization_id,
+    athlete_id: athleteId,
+    coach_id: coachId,
+    package_type: packageType,
+    package_name: packageName,
+    total_lessons: totalLessons,
+    used_lessons: 0,
+    remaining_lessons: totalLessons,
+    total_price: totalPriceValid.amount,
+    amount_paid: 0,
+    payment_status: "unpaid",
+    is_active: true,
+    created_by: actor.id,
+  };
+  if (caps.packages.lifecycleStatus) insertPayload.lifecycle_status = "active";
+  if (caps.packages.installmentFields) {
+    insertPayload.installment_count = installmentParsed.installmentCount;
+    insertPayload.installment_interval_days = installmentParsed.installmentIntervalDays;
+    insertPayload.next_payment_due_at = installmentParsed.nextPaymentDueAt;
+  }
+
   const { data: insertedRow, error } = await adminClient
     .from("private_lesson_packages")
-    .insert({
-      organization_id: actor.organization_id,
-      athlete_id: athleteId,
-      coach_id: coachId,
-      package_type: packageType,
-      package_name: packageName,
-      total_lessons: totalLessons,
-      used_lessons: 0,
-      remaining_lessons: totalLessons,
-      total_price: totalPrice,
-      amount_paid: amountPaid,
-      payment_status: paymentStatus,
-      is_active: true,
-      created_by: actor.id,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 
   if (error || !insertedRow?.id) return { error: `Paket olusturulamadi: ${error?.message || "unknown"}` };
+
+  const packageId = insertedRow.id as string;
+  let paymentStatus = computePaymentStatus(totalPriceValid.amount, 0);
+
+  if (initialPayment > 0) {
+    const paidAt = new Date().toISOString();
+    const orgTimeZone = await resolveOrganizationTimeZone(actor.organization_id!);
+    const { dueDateKey, monthName, yearInt } = paymentBookkeepingFromPaidAtIso(paidAt, orgTimeZone);
+    const sync = await applyPrivateLessonPackagePaymentWithPaymentRow({
+      organizationId: actor.organization_id!,
+      packageId,
+      athleteProfileId: athleteId,
+      amount: initialPayment,
+      paidAtIso: paidAt,
+      dueDateKey,
+      monthName,
+      yearInt,
+      rpcActorProfileId: actor.id,
+      paymentsDescription: "Paket oluşturma — ilk tahsilat",
+      rpcNote: "Paket oluşturma — ilk tahsilat",
+    });
+    if (!sync.ok) {
+      await adminClient.from("private_lesson_packages").delete().eq("id", packageId);
+      return { error: sync.error };
+    }
+    paymentStatus = sync.paymentStatus;
+  }
+
+  try {
+    await logAuditEvent({
+      organizationId: actor.organization_id,
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "private_lesson_package.create",
+      entityType: "private_lesson_package",
+      entityId: packageId,
+      metadata: {
+        athleteId,
+        coachId,
+        packageName,
+        totalLessons,
+        totalPrice,
+        initialPayment,
+        paymentStatus,
+      },
+    });
+  } catch {
+    /* audit best-effort */
+  }
+
+  await appendPrivateLessonPackageEvent(adminClient, {
+    packageId,
+    organizationId: actor.organization_id!,
+    actorId: actor.id,
+    eventType: "package_created",
+    title: "Paket oluşturuldu",
+    description: `${packageName} — ${totalLessons} ders, ₺${totalPriceValid.amount}`,
+    metadata: { totalLessons, totalPrice: totalPriceValid.amount, initialPayment },
+  });
+
+  if (initialPayment > 0) {
+    await appendPrivateLessonPackageEvent(adminClient, {
+      packageId,
+      organizationId: actor.organization_id!,
+      actorId: actor.id,
+      eventType: "payment_added",
+      title: "İlk ödeme alındı",
+      description: `₺${initialPayment}`,
+      metadata: { amount: initialPayment },
+    });
+  }
 
   try {
     await insertNotificationsForUsers(
@@ -317,7 +477,10 @@ export async function createPrivateLessonPackage(formData: FormData) {
 
   revalidatePath("/ozel-ders-paketleri");
   revalidatePath("/ozel-ders-paketlerim");
-  return { success: true as const, packageId: insertedRow.id as string };
+  revalidatePath(`/sporcu/${athleteId}`);
+  revalidatePath("/muhasebe-finans");
+  revalidatePath("/finans");
+  return { success: true as const, packageId };
   });
 }
 
@@ -337,14 +500,20 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
     const packageName = formData.get("packageName")?.toString().trim() || "";
     const coachIdInput = formData.get("coachId")?.toString().trim() || "";
     const totalLessons = Math.floor(Number(formData.get("totalLessons")?.toString() || "0"));
-    const totalPrice = normalizeMoney(formData.get("totalPrice")?.toString() || "0");
+    const totalPriceParsed = parseTRYMoneyInput(formData.get("totalPrice")?.toString());
     const isActiveInput = formData.get("isActive")?.toString().trim() || "true";
     const isActive = isActiveInput === "true";
 
     if (!packageId) return { error: "Paket secimi zorunludur." };
     if (!packageName) return { error: "Paket adi zorunludur." };
     if (!Number.isFinite(totalLessons) || totalLessons <= 0) return { error: "Toplam ders sayisi pozitif tamsayi olmalidir." };
-    if (totalPrice < 0) return { error: "Toplam ucret negatif olamaz." };
+    if (totalPriceParsed == null || totalPriceParsed < 0) return { error: "Toplam ücret geçerli olmalıdır." };
+    const totalPriceCheck = assertValidTRYMoneyAmount(totalPriceParsed, "Toplam ücret");
+    if (!totalPriceCheck.ok) return { error: totalPriceCheck.error };
+    const totalPrice = totalPriceCheck.amount;
+
+    const installmentParsed = parseInstallmentFieldsFromForm(formData);
+    if ("error" in installmentParsed) return { error: installmentParsed.error };
 
     const adminClient = createSupabaseAdminClient();
     const { data: pkg, error: pkgErr } = await adminClient
@@ -404,27 +573,90 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
 
     const nextRemaining = totalLessons - (pkg.used_lessons || 0);
     const nextPaymentStatus = computePaymentStatus(totalPrice, normalizeMoney(pkg.amount_paid || 0));
+    const currentLifecycle = resolvePackageLifecycleStatus({
+      lifecycleStatus: (pkg as { lifecycle_status?: string }).lifecycle_status,
+      isActive: Boolean(pkg.is_active),
+      remainingLessons: pkg.remaining_lessons ?? 0,
+      totalLessons: pkg.total_lessons ?? 0,
+      usedLessons: pkg.used_lessons ?? 0,
+    });
+    let nextLifecycle: PackageLifecycleStatus = currentLifecycle;
+    if (isActive && currentLifecycle === "paused") nextLifecycle = "active";
+    else if (!isActive && currentLifecycle === "active") nextLifecycle = "paused";
+    else if (nextRemaining <= 0) nextLifecycle = "completed";
 
+    const caps = await getSchemaCapabilities();
+    const updatePayload: Record<string, unknown> = {
+      package_name: packageName,
+      coach_id: coachId,
+      total_lessons: totalLessons,
+      total_price: totalPrice,
+      is_active: isActive,
+      remaining_lessons: nextRemaining,
+      payment_status: nextPaymentStatus,
+      updated_at: new Date().toISOString(),
+      ...packageLifecycleUpdatePayload(caps, nextLifecycle, isActive),
+    };
+    if (caps.packages.installmentFields) {
+      updatePayload.installment_count = installmentParsed.installmentCount;
+      updatePayload.installment_interval_days = installmentParsed.installmentIntervalDays;
+      updatePayload.next_payment_due_at = installmentParsed.nextPaymentDueAt;
+    }
     const { error: updateErr } = await adminClient
       .from("private_lesson_packages")
-      .update({
-        package_name: packageName,
-        coach_id: coachId,
-        total_lessons: totalLessons,
-        total_price: totalPrice,
-        is_active: isActive,
-        remaining_lessons: nextRemaining,
-        payment_status: nextPaymentStatus,
-      })
+      .update(updatePayload)
       .eq("id", packageId)
       .eq("organization_id", actor.organization_id!);
-    if (updateErr) return { error: `Paket güncellenemedi: ${updateErr.message}` };
+    if (updateErr) return { error: userFacingDataError("Paket güncellenemedi", updateErr.message) };
+
+    try {
+      await logAuditEvent({
+        organizationId: actor.organization_id,
+        actorUserId: actor.id,
+        actorRole: actor.role,
+        action: "private_lesson_package.update",
+        entityType: "private_lesson_package",
+        entityId: packageId,
+        metadata: {
+          packageName,
+          totalLessons,
+          totalPrice,
+          isActive,
+          coachId,
+          previous: {
+            package_name: pkg.package_name,
+            total_lessons: pkg.total_lessons,
+            total_price: pkg.total_price,
+            is_active: pkg.is_active,
+            coach_id: pkg.coach_id,
+          },
+        },
+      });
+    } catch {
+      /* audit best-effort */
+    }
+
+    await appendPrivateLessonPackageEvent(adminClient, {
+      packageId,
+      organizationId: actor.organization_id!,
+      actorId: actor.id,
+      eventType: "package_updated",
+      title: "Paket güncellendi",
+      description: packageName,
+      metadata: { totalLessons, totalPrice, isActive, nextLifecycle },
+    });
 
     revalidatePath("/ozel-ders-paketleri");
     revalidatePath(`/ozel-ders-paketleri/${packageId}`);
+    revalidatePath(`/sporcu/${pkg.athlete_id}`);
     revalidatePath("/antrenman-yonetimi");
     return { success: true as const, packageId };
   });
+}
+
+/** Faz 17 — Paket düzenleme (updatePrivateLessonPackageCore alias). */
+export async function updatePrivateLessonPackage(formData: FormData) {
+  return updatePrivateLessonPackageCore(formData);
 }
 
 export async function listPrivateLessonUsageForPackage(
@@ -515,17 +747,40 @@ export async function addPrivateLessonUsage(formData: FormData) {
     }
   }
 
-  const { data: pkg } = await adminClient
-    .from("private_lesson_packages")
-    .select(
-      "id, organization_id, athlete_id, coach_id, used_lessons, total_lessons, remaining_lessons, is_active, package_name"
-    )
-    .eq("id", packageId)
-    .eq("organization_id", actor.organization_id!)
-    .maybeSingle();
-
-  if (!pkg) return { error: "Paket bulunamadi." };
-  if (!pkg.is_active) return { error: "Pasif paket icin kullanim eklenemez." };
+  const caps = await getSchemaCapabilities();
+  const pkgFetch = await runPackageLifecycleProbeWithCompat(caps, async (select) => {
+    const { data, error } = await adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("id", packageId)
+      .eq("organization_id", actor.organization_id!)
+      .maybeSingle();
+    return { data, error };
+  });
+  if (pkgFetch.error || !pkgFetch.data) {
+    return { error: userFacingDataError("Paket bulunamadı", pkgFetch.error?.message) };
+  }
+  const pkg = pkgFetch.data as unknown as {
+    organization_id: string;
+    athlete_id: string;
+    coach_id: string | null;
+    used_lessons: number;
+    total_lessons: number;
+    remaining_lessons: number;
+    is_active: boolean;
+    lifecycle_status?: string | null;
+    package_name?: string;
+  };
+  const lifecycle = resolvePackageLifecycleStatus({
+    lifecycleStatus: pkg.lifecycle_status,
+    isActive: Boolean(pkg.is_active),
+    remainingLessons: pkg.remaining_lessons ?? 0,
+    totalLessons: pkg.total_lessons ?? 0,
+    usedLessons: pkg.used_lessons ?? 0,
+  });
+  if (!packageAllowsUsage(lifecycle)) {
+    return { error: "Bu paket durumunda ders kullanımı yapılamaz." };
+  }
   if (pkg.remaining_lessons <= 0 || pkg.used_lessons >= pkg.total_lessons) {
     return { error: "Paket dersi bitmis; yeni kullanim eklenemez." };
   }
@@ -557,6 +812,24 @@ export async function addPrivateLessonUsage(formData: FormData) {
     return { error: "Kullanim islemi tamamlanamadi." };
   }
   const nextRemaining = Number((atomicRows[0] as { next_remaining?: number }).next_remaining ?? 0);
+
+  await markPackageCompletedIfNeeded(adminClient, packageId, actor.organization_id!, nextRemaining);
+  await appendPrivateLessonPackageEvent(adminClient, {
+    packageId,
+    organizationId: actor.organization_id!,
+    actorId: actor.id,
+    eventType: "lesson_used",
+    title: "Ders hakkı kullanıldı",
+    description: note || "Manuel kullanım",
+    metadata: { nextRemaining },
+  });
+  await appendOperationalTimeline(adminClient, {
+    organizationId: actor.organization_id,
+    eventType: "private_lesson_package.lesson_used",
+    summary: `Paket kullanımı: kalan ${nextRemaining}`,
+    payload: { packageId },
+    actorUserId: actor.id,
+  });
 
   const label = (pkg as { package_name?: string }).package_name || "Ozel ders paketi";
   try {
@@ -600,10 +873,13 @@ export async function updatePrivateLessonPayment(formData: FormData) {
   if (!guard.ok) return { error: guard.error };
 
   const packageId = formData.get("packageId")?.toString().trim() || "";
-  const paymentAmount = normalizeMoney(formData.get("paymentAmount")?.toString() || "0");
+  const paymentAmountParsed = parseTRYMoneyInput(formData.get("paymentAmount")?.toString());
   const note = formData.get("note")?.toString().trim() || null;
   if (!packageId) return { error: "Paket secimi zorunludur." };
-  if (paymentAmount <= 0) return { error: "Tahsilat tutari sifirdan buyuk olmali." };
+  if (paymentAmountParsed == null) return { error: "Tahsilat tutarı geçersiz." };
+  const paymentValid = assertValidTRYMoneyAmount(paymentAmountParsed, "Tahsilat tutarı");
+  if (!paymentValid.ok) return { error: paymentValid.error };
+  const paymentAmount = paymentValid.amount;
 
   const adminClient = createSupabaseAdminClient();
   const { data: pkgRow } = await adminClient
@@ -613,6 +889,36 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     .eq("organization_id", actor.organization_id!)
     .maybeSingle();
   if (!pkgRow?.athlete_id) return { error: "Paket bulunamadi." };
+
+  const payCaps = await getSchemaCapabilities();
+  const pkgFullFetch = await runPackagePaymentGuardWithCompat(payCaps, async (select) => {
+    const { data, error } = await adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("id", packageId)
+      .eq("organization_id", actor.organization_id!)
+      .maybeSingle();
+    return { data, error };
+  });
+  const pkgFull = pkgFullFetch.data as unknown as {
+    is_active: boolean;
+    lifecycle_status?: string | null;
+    remaining_lessons: number;
+    total_lessons: number;
+    used_lessons: number;
+  } | null;
+  if (pkgFull) {
+    const lifecycle = resolvePackageLifecycleStatus({
+      lifecycleStatus: pkgFull.lifecycle_status,
+      isActive: Boolean(pkgFull.is_active),
+      remainingLessons: pkgFull.remaining_lessons ?? 0,
+      totalLessons: pkgFull.total_lessons ?? 0,
+      usedLessons: pkgFull.used_lessons ?? 0,
+    });
+    if (!packageAllowsPayment(lifecycle)) {
+      return { error: "Bu paket durumunda tahsilat alınamaz." };
+    }
+  }
 
   const paidAt = new Date().toISOString();
   const orgTimeZone = await resolveOrganizationTimeZone(actor.organization_id!);
@@ -665,7 +971,18 @@ export async function updatePrivateLessonPayment(formData: FormData) {
     /* bildirim opsiyonel */
   }
 
+  await appendPrivateLessonPackageEvent(adminClient, {
+    packageId,
+    organizationId: actor.organization_id!,
+    actorId: actor.id,
+    eventType: "payment_added",
+    title: "Tahsilat kaydı eklendi",
+    description: `₺${paymentAmount}`,
+    metadata: { amount: paymentAmount, paymentStatus },
+  });
+
   revalidatePath("/ozel-ders-paketlerim");
+  revalidatePath(`/ozel-ders-paketleri/${packageId}`);
   return { success: true as const };
   });
 }
@@ -697,13 +1014,19 @@ export async function getPrivateLessonPackageDetail(
   if (!id) return { error: "Paket secimi zorunludur." };
 
   const adminClient = createSupabaseAdminClient();
-  const { data: pkgRow, error: pkgErr } = await adminClient
-    .from("private_lesson_packages")
-    .select(PACKAGE_SELECT)
-    .eq("id", id)
-    .eq("organization_id", actor.organization_id)
-    .maybeSingle();
-  if (pkgErr || !pkgRow) return { error: "Paket bulunamadi." };
+  const caps = await getSchemaCapabilities();
+  const pkgFetch = await runPackageSelectWithCompat(caps, async (select) =>
+    adminClient
+      .from("private_lesson_packages")
+      .select(select)
+      .eq("id", id)
+      .eq("organization_id", actor.organization_id)
+      .maybeSingle()
+  );
+  if (pkgFetch.error || !pkgFetch.data) {
+    return { error: userFacingDataError("Paket bulunamadı", pkgFetch.error?.message) };
+  }
+  const pkgRow = pkgFetch.data;
 
   const mappedPackage = mapPackage(pkgRow as never);
   if (role === "sporcu" && mappedPackage.athleteId !== actor.id) {
@@ -717,12 +1040,14 @@ export async function getPrivateLessonPackageDetail(
     .order("used_at", { ascending: false });
   if (usageErr) return { error: `Kullanim gecmisi alinamadi: ${usageErr.message}` };
 
-  const { data: paymentRows, error: paymentErr } = await adminClient
+  let paymentQuery = adminClient
     .from("private_lesson_payments")
     .select("id, package_id, athlete_id, coach_id, amount, paid_at, note, created_by, created_at")
     .eq("package_id", id)
     .order("paid_at", { ascending: false });
-  if (paymentErr) return { error: `Odeme gecmisi alinamadi: ${paymentErr.message}` };
+  paymentQuery = applyPrivateLessonPaymentActiveFilter(paymentQuery, caps);
+  const { data: paymentRows, error: paymentErr } = await paymentQuery;
+  if (paymentErr) return { error: userFacingDataError("Ödeme geçmişi alınamadı", paymentErr.message) };
 
   const mappedUsage: PrivateLessonUsage[] = (usageRows || []).map((row) => ({
     id: row.id as string,
@@ -764,10 +1089,62 @@ export async function getPrivateLessonPackageDetail(
     }
   }
 
+  const mappedPayments = (paymentRows || []).map((row) => mapPaymentRow(row as never));
+  const financeSummary = calculatePackageFinanceSummary({
+    pkg: mappedPackage,
+    payments: mappedPayments,
+  });
+
+  let eventRows: PrivateLessonPackageEventRow[] = [];
+  const { data: eventData } = await adminClient
+    .from("private_lesson_package_events")
+    .select("id, package_id, organization_id, actor_id, event_type, title, description, metadata, created_at")
+    .eq("package_id", id)
+    .eq("organization_id", actor.organization_id)
+    .order("created_at", { ascending: false })
+    .limit(80);
+  if (eventData?.length) {
+    eventRows = eventData.map((row) => ({
+      id: row.id as string,
+      packageId: row.package_id as string,
+      organizationId: row.organization_id as string,
+      actorId: (row.actor_id as string | null) ?? null,
+      eventType: row.event_type as string,
+      title: row.title as string,
+      description: (row.description as string | null) ?? null,
+      metadata: (row.metadata as Record<string, unknown>) ?? {},
+      createdAt: row.created_at as string,
+    }));
+  }
+
+  let completedSessions: Parameters<typeof buildPackageUsageLessonRows>[0]["completedSessions"] = [];
+  if (!sessionsSchemaError) {
+    const { data: sessionRows } = await adminClient
+      .from("private_lesson_sessions")
+      .select(
+        "id, starts_at, completed_at, status, location, note, athlete_id, coach_id, athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email)"
+      )
+      .eq("package_id", id)
+      .eq("organization_id", actor.organization_id)
+      .eq("status", "completed")
+      .order("starts_at", { ascending: false })
+      .limit(80);
+    completedSessions = (sessionRows || []) as never;
+  }
+
+  const usageLessonRows = buildPackageUsageLessonRows({
+    packageAthleteName: mappedPackage.athleteName,
+    usageRows: (usageRows || []) as never,
+    completedSessions,
+  });
+
   return {
     package: mappedPackage,
     usageRows: mappedUsage,
-    paymentRows: (paymentRows || []).map((row) => mapPaymentRow(row as never)),
+    usageLessonRows,
+    paymentRows: mappedPayments,
+    eventRows,
+    financeSummary,
     plannedSessionPreview,
     plannedPrivateSessionCount,
     viewerRole: role,

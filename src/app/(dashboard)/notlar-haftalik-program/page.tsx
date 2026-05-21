@@ -16,6 +16,16 @@ import { mapAthleteProgram, type RawProgram } from "@/lib/mappers";
 import type { AthleteProgram } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import { buildOfflineScopeKey } from "@/lib/offline/scope";
+import { coachNoteDraftKey, coachNoteIdempotencyKey } from "@/lib/offline/draftKeys";
+import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
+import {
+  clearScopedFormDraft,
+  loadScopedFormDraft,
+  saveScopedFormDraft,
+} from "@/lib/offline/scopedFormDrafts";
 
 interface CoachOption {
   id: string;
@@ -55,6 +65,9 @@ export default function ProgramNotesPage() {
     weekStart: "",
     coachId: "",
   });
+  const online = useOnlineStatus();
+  const [scopeKey, setScopeKey] = useState("");
+  const [noteDraftRestored, setNoteDraftRestored] = useState(false);
 
   function isImageAsset(url: string | null) {
     if (!url) return false;
@@ -109,6 +122,45 @@ export default function ProgramNotesPage() {
   useEffect(() => {
     void fetchData();
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) return;
+      setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
+    })();
+  }, []);
+
+  const noteDraftKey = useMemo(() => {
+    const athleteScope = selectedAthletes.length === 1 ? selectedAthletes[0] : "batch";
+    const coach = form.coachId || actorUserId;
+    if (!coach) return "";
+    return coachNoteDraftKey(athleteScope, coach);
+  }, [selectedAthletes, form.coachId, actorUserId]);
+
+  useEffect(() => {
+    if (!scopeKey || !noteDraftKey) return;
+    const id = window.setTimeout(() => {
+      saveScopedFormDraft(scopeKey, noteDraftKey, {
+        form,
+        selectedAthletes,
+        hasAttachment: Boolean(attachment),
+      });
+    }, 600);
+    return () => clearTimeout(id);
+  }, [scopeKey, noteDraftKey, form, selectedAthletes, attachment]);
+
+  useEffect(() => {
+    if (!scopeKey || !noteDraftKey || noteDraftRestored) return;
+    const draft = loadScopedFormDraft(scopeKey, noteDraftKey);
+    if (!draft?.payload) return;
+    const savedForm = draft.payload.form as typeof form | undefined;
+    const savedAthletes = draft.payload.selectedAthletes as string[] | undefined;
+    if (savedForm) setForm((prev) => ({ ...prev, ...savedForm }));
+    if (savedAthletes?.length) setSelectedAthletes(savedAthletes);
+    setNoteDraftRestored(true);
+    setMessage("Taslak not geri yüklendi.");
+  }, [scopeKey, noteDraftKey, noteDraftRestored]);
 
   const filteredAthletes = useMemo(() => {
     const q = athleteSearch.trim().toLowerCase();
@@ -167,6 +219,57 @@ export default function ProgramNotesPage() {
     setSaving(true);
     setMessage(null);
 
+    if (attachment && !online) {
+      setMessage("Dosya ekli not çevrimdışı gönderilemez. Bağlantı gelince tekrar deneyin.");
+      setSaving(false);
+      return;
+    }
+
+    if (!online) {
+      if (!scopeKey) {
+        setMessage("Çevrimdışı kayıt için oturum doğrulanamadı.");
+        setSaving(false);
+        return;
+      }
+      if (selectedAthletes.length === 0) {
+        setMessage("En az bir sporcu seçin.");
+        setSaving(false);
+        return;
+      }
+      const draftId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `cn-${Date.now()}`;
+      const athleteName =
+        selectedAthletes.length === 1
+          ? athletes.find((a) => a.id === selectedAthletes[0])?.full_name
+          : `${selectedAthletes.length} sporcu`;
+      const queued = enqueueOfflineAction({
+        kind: "coach_note_draft",
+        scopeKey,
+        draftId,
+        idempotencyKey: coachNoteIdempotencyKey(draftId),
+        payload: {
+          draftId,
+          title: form.title,
+          content: form.content,
+          weekStart: form.weekStart,
+          coachId: form.coachId,
+          athleteIds: selectedAthletes,
+          athleteName,
+        },
+        title: form.title?.trim() || "Koç sporcu notu",
+        subjectLabel: athleteName,
+      });
+      if ("error" in queued) {
+        setMessage(queued.error);
+      } else {
+        setMessage("Not kuyruğa alındı. Senkron merkezinden onaylayarak gönderebilirsiniz.");
+      }
+      setSaving(false);
+      return;
+    }
+
     const fd = new FormData();
     fd.append("title", form.title);
     fd.append("content", form.content);
@@ -181,6 +284,10 @@ export default function ProgramNotesPage() {
       setForm((prev) => ({ ...prev, title: "", content: "", weekStart: "" }));
       setSelectedAthletes([]);
       setAttachment(null);
+      if (scopeKey && noteDraftKey) {
+        clearScopedFormDraft(scopeKey, noteDraftKey);
+        setNoteDraftRestored(false);
+      }
       await fetchData();
     } else {
       setMessage(result?.error || "Program kaydedilemedi.");
@@ -303,6 +410,15 @@ export default function ProgramNotesPage() {
           <Notification message="Koç listesi boş. Önce bir koç oluşturun." variant="info" />
         </div>
       )}
+
+      {!error && !online ? (
+        <div className="min-w-0 break-words">
+          <Notification
+            message="Çevrimdışısınız; not metni taslağa kaydedilir. Dosya eki çevrimdışı desteklenmez."
+            variant="info"
+          />
+        </div>
+      ) : null}
 
       {!error && (
         <form

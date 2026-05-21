@@ -5,7 +5,11 @@ import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { cancelLesson, createLesson, hardDeleteLesson } from "@/lib/actions/lessonActions";
-import { createPrivateLessonSession, cancelPrivateLessonSession } from "@/lib/actions/privateLessonSessionActions";
+import {
+  createPrivateLessonSession,
+  cancelPrivateLessonSession,
+  markPrivateLessonSessionCompletedFromSchedule,
+} from "@/lib/actions/privateLessonSessionActions";
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import { listLessonsSnapshot, listWeeklyLessonScheduleSnapshot } from "@/lib/actions/snapshotActions";
@@ -648,6 +652,30 @@ export default function WeeklyLessonSchedulePage() {
     []
   );
 
+  async function handleMarkCompleted(item: WeeklyLessonScheduleItem) {
+    if (item.sourceType !== "private") return;
+    setActionBusy(item.id);
+    const res = await markPrivateLessonSessionCompletedFromSchedule(item.id);
+    if ("error" in res) {
+      setActionMessage(res.error || "Ders tamamlanamadı.");
+    } else {
+      setActionMessage(
+        ("message" in res && res.message) ||
+          ("alreadyCompleted" in res && res.alreadyCompleted
+            ? "Bu ders zaten yapıldı olarak işaretlenmiş."
+            : "Ders tamamlandı ve paket hakkı düşüldü.")
+      );
+      await fetchSnapshot();
+      if (selected?.id === item.id) setSelected(null);
+    }
+    setActionBusy(null);
+  }
+
+  const handleMarkCompletedAsync = useCallback((item: WeeklyLessonScheduleItem) => {
+    void handleMarkCompleted(item);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleQuickCancel(item: WeeklyLessonScheduleItem) {
     const ok = window.confirm("Bu dersi iptal etmek istiyor musunuz?");
     if (!ok) return;
@@ -794,6 +822,7 @@ export default function WeeklyLessonSchedulePage() {
           onClose={() => setSelected(null)}
           onCancel={(item) => void handleQuickCancel(item)}
           onHardDelete={(item) => void handleQuickHardDelete(item)}
+          onMarkCompleted={handleMarkCompletedAsync}
         />
       ) : null}
 

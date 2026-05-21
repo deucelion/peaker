@@ -49,6 +49,7 @@ function WeeklyLessonCardImpl({
 }: WeeklyLessonCardProps) {
   const { top, height } = itemTopAndHeight(item, appTz);
   const isGroup = item.sourceType === "group";
+  const isCompleted = (item.status || "").toLowerCase() === "completed";
   const coachLabel = item.coachName || "Koç atanmadı";
   const locationLabel = item.location || "Lokasyon belirtilmedi";
   const isCompactCard = isCompactCardHint || laneCount > 1 || height < 11;
@@ -69,12 +70,14 @@ function WeeklyLessonCardImpl({
         }
       }}
       title={`${isGroup ? "Grup Dersi" : "Özel Ders"} | ${item.title} | ${formatLessonTimeTr(item.startsAt, appTz)} - ${formatLessonTimeTr(item.endsAt, appTz)} | Koç: ${coachLabel}${item.location ? ` | Lokasyon: ${item.location}` : ""}`}
-      className={`group absolute min-h-[60px] overflow-hidden rounded-2xl border px-2 py-2 text-left shadow-[0_12px_28px_-16px_rgba(0,0,0,0.95)] transition-all duration-150 sm:hover:-translate-y-0.5 ${
-        locationStyle
-          ? "text-white"
-          : isGroup
-            ? "border-indigo-400/55 bg-gradient-to-b from-indigo-500/22 to-indigo-500/14 text-indigo-50 sm:hover:shadow-[0_0_0_1px_rgba(129,140,248,0.55),0_18px_30px_-16px_rgba(99,102,241,0.9)]"
-            : "border-emerald-400/55 border-dashed bg-gradient-to-b from-emerald-500/22 to-emerald-500/14 text-emerald-50 sm:hover:shadow-[0_0_0_1px_rgba(52,211,153,0.55),0_18px_30px_-16px_rgba(16,185,129,0.9)]"
+      className={`group absolute min-h-[52px] overflow-hidden rounded-xl border px-2 py-1.5 text-left shadow-[0_12px_28px_-16px_rgba(0,0,0,0.95)] transition-all duration-150 sm:min-h-[60px] sm:rounded-2xl sm:py-2 sm:hover:-translate-y-0.5 ${
+        isCompleted
+          ? "border-emerald-500/40 bg-emerald-950/50 text-emerald-100 opacity-90"
+          : locationStyle
+            ? "text-white"
+            : isGroup
+              ? "border-indigo-400/55 bg-gradient-to-b from-indigo-500/22 to-indigo-500/14 text-indigo-50 sm:hover:shadow-[0_0_0_1px_rgba(129,140,248,0.55),0_18px_30px_-16px_rgba(99,102,241,0.9)]"
+              : "border-emerald-400/55 border-dashed bg-gradient-to-b from-emerald-500/22 to-emerald-500/14 text-emerald-50 sm:hover:shadow-[0_0_0_1px_rgba(52,211,153,0.55),0_18px_30px_-16px_rgba(16,185,129,0.9)]"
       }`}
       style={{
         top: `${top}%`,

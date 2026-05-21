@@ -34,16 +34,28 @@ import type {
   PrivateLessonSessionListItem,
 } from "@/lib/types";
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
-import { parseMoneyInput } from "@/lib/privateLessons/packageMath";
+import { PrivateLessonPackageEditModal } from "@/components/privateLessons/PrivateLessonPackageEditModal";
+import { formatCurrencyTRY, parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
+import {
+  PACKAGE_LIFECYCLE_LABEL,
+  PACKAGE_LIFECYCLE_TONE,
+  packageAllowsNewSessions,
+  packageAllowsPayment,
+  packageAllowsUsage,
+} from "@/lib/privateLessons/packageStatus";
+import {
+  PackageEventTimelineCard,
+  PackageFinanceCards,
+  PackageLifecycleActions,
+  PackageLifecycleBanner,
+  PackageUsedLessonsCard,
+} from "@/components/privateLessons/PackageDetailFaz18Panels";
 import { hrefTahsilatMerkezi } from "@/lib/finance/tahsilatMerkeziLinks";
 
 const INPUT =
   "min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20";
 
-function formatTry(n: number): string {
-  const v = Math.round(n * 100) / 100;
-  return `₺${v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+const formatTry = formatCurrencyTRY;
 
 function paymentLabel(status: PrivateLessonPackage["paymentStatus"]): string {
   if (status === "paid") return "Ödendi";
@@ -82,6 +94,7 @@ export default function PrivateLessonPackageDetailPage() {
   const [usageNote, setUsageNote] = useState("");
   const [usageSaving, setUsageSaving] = useState(false);
 
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
@@ -208,8 +221,8 @@ export default function PrivateLessonPackageDetailPage() {
 
   const pkg = snapshot?.package;
   const remainingBalance = useMemo(
-    () => (pkg ? Math.max(pkg.totalPrice - pkg.amountPaid, 0) : 0),
-    [pkg]
+    () => snapshot?.financeSummary?.remainingBalance ?? (pkg ? Math.max(pkg.totalPrice - pkg.amountPaid, 0) : 0),
+    [pkg, snapshot?.financeSummary]
   );
 
   const lastUsage = snapshot?.usageRows[0];
@@ -229,13 +242,19 @@ export default function PrivateLessonPackageDetailPage() {
     [sessions, nowMs]
   );
 
-  const usageBlocked = pkg ? !pkg.isActive || pkg.remainingLessons <= 0 : true;
+  const usageBlocked = pkg
+    ? !packageAllowsUsage(pkg.lifecycleStatus) || pkg.remainingLessons <= 0
+    : true;
+  const paymentBlocked = pkg ? !packageAllowsPayment(pkg.lifecycleStatus) : true;
+  const canManageLifecycle = snapshot?.viewerRole === "admin" || snapshot?.viewerRole === "coach";
   const plannedPrivateSessionCount = snapshot?.plannedPrivateSessionCount ?? 0;
   const manualBlockedByOpenPlan = plannedPrivateSessionCount > 0;
   const manualUnplannedUsageBlocked = usageBlocked;
-  const manualUsageDisabledTitle = usageBlocked ? "Pasif paket veya kalan ders hakkı yok." : undefined;
+  const manualUsageDisabledTitle = usageBlocked
+    ? "Paket durumu veya kalan ders hakkı kullanımı engelliyor."
+    : undefined;
 
-  const parsedPaymentAdd = parseMoneyInput(paymentAmount);
+  const parsedPaymentAdd = parseTRYMoneyInput(paymentAmount);
   const parsedPaymentAddValue = parsedPaymentAdd ?? Number.NaN;
   const paymentPreviewNewPaid = pkg && Number.isFinite(parsedPaymentAddValue) ? pkg.amountPaid + Math.max(parsedPaymentAddValue, 0) : null;
   const paymentPreviewRemaining =
@@ -252,10 +271,11 @@ export default function PrivateLessonPackageDetailPage() {
       }
       return "Açık özel ders planı var: tamamlandığında kullanım düşer. Gerekirse manuel kullanım eklenebilir; aynı dersi iki kez düşmemeye dikkat edin.";
     }
-    if (usageBlocked && remainingBalance > 0) return "Paket dersleri tamamlanmış veya pasif; kalan bakiye için ödeme kaydı ekleyebilirsiniz.";
+    if (usageBlocked && remainingBalance > 0)
+      return "Paket dersleri tamamlanmış veya pasif; kalan bakiye için tahsilat kaydı ekleyebilirsiniz.";
     if (usageBlocked && remainingBalance <= 0) return "Paket tamamlanmış görünüyor. Gerekirse yeni paket oluşturun.";
     if (remainingBalance > 0 && pkg.remainingLessons > 0) return "Ders kullanımını işleyin ve tahsilatı güncel tutun.";
-    if (remainingBalance > 0) return "Ödeme bakiyesini kapatmak için ödeme kaydı ekleyin.";
+    if (remainingBalance > 0) return "Kalan bakiye için tahsilat kaydı ekleyin (online ödeme yok; manuel kayıt).";
     if (pkg.remainingLessons > 0)
       return "Kalan plansız dersler için “Plansız / geçmiş ders kaydı” ekleyin veya önce özel ders planı oluşturun.";
     return "Paket dengede. Gerekirse geçmişi sekmelerden kontrol edin.";
@@ -304,13 +324,13 @@ export default function PrivateLessonPackageDetailPage() {
       if (n) fd.append("note", n);
       const res = await updatePrivateLessonPayment(fd);
       if ("success" in res && res.success) {
-        setMessage("Ödeme kaydı eklendi.");
+        setMessage("Tahsilat kaydı eklendi.");
         setPaymentModalOpen(false);
         setPaymentAmount("");
         setPaymentNote("");
         await loadDetail();
       } else {
-        setMessage(("error" in res && res.error) || "Ödeme kaydı eklenemedi.");
+        setMessage(("error" in res && res.error) || "Tahsilat kaydı eklenemedi.");
       }
     } finally {
       paymentSubmitInFlightRef.current = false;
@@ -355,7 +375,7 @@ export default function PrivateLessonPackageDetailPage() {
 
   const planBlocked =
     !pkg ||
-    !pkg.isActive ||
+    !packageAllowsNewSessions(pkg.lifecycleStatus) ||
     pkg.remainingLessons <= 0 ||
     snapshot?.viewerRole === "sporcu";
 
@@ -463,11 +483,27 @@ export default function PrivateLessonPackageDetailPage() {
             </p>
             <p className="max-w-2xl text-sm font-bold leading-relaxed text-gray-400">Özel Dersler bağlamı · {nextActionText}</p>
           </div>
-          <div
-            className={`shrink-0 rounded-2xl border px-4 py-3 text-center text-[10px] font-black uppercase tracking-wider ${paymentTone(pkg.paymentStatus)}`}
-          >
-            Ödeme durumu
-            <span className="mt-1 block text-sm tracking-normal text-white">{paymentLabel(pkg.paymentStatus)}</span>
+          <div className="flex flex-col items-stretch gap-2 shrink-0 sm:items-end">
+            {snapshot.viewerRole !== "sporcu" ? (
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(true)}
+                className="rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-[#7c3aed]/40"
+              >
+                Paketi düzenle
+              </button>
+            ) : null}
+            <span
+              className={`rounded-md border px-2 py-0.5 text-center text-[9px] font-black uppercase tracking-widest ${PACKAGE_LIFECYCLE_TONE[pkg.lifecycleStatus]}`}
+            >
+              {PACKAGE_LIFECYCLE_LABEL[pkg.lifecycleStatus]}
+            </span>
+            <div
+              className={`rounded-2xl border px-4 py-3 text-center text-[10px] font-black uppercase tracking-wider ${paymentTone(pkg.paymentStatus)}`}
+            >
+              Tahsilat / vade durumu
+              <span className="mt-1 block text-sm tracking-normal text-white">{paymentLabel(pkg.paymentStatus)}</span>
+            </div>
           </div>
         </div>
 
@@ -552,15 +588,17 @@ export default function PrivateLessonPackageDetailPage() {
               {viewerIsCoach ? (
                 <button
                   type="button"
+                  disabled={paymentBlocked}
+                  title={paymentBlocked ? "Bu paket durumunda tahsilat kaydı eklenemez." : undefined}
                   onClick={() => {
                     setPaymentAmount("");
                     setPaymentNote("");
                     setPaymentModalOpen(true);
                   }}
-                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition sm:hover:bg-[#7c3aed]/25"
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition disabled:cursor-not-allowed disabled:opacity-40 sm:hover:bg-[#7c3aed]/25"
                 >
                   <CircleDollarSign size={18} aria-hidden />
-                  Ödeme kaydı ekle
+                  Tahsilat kaydı ekle
                 </button>
               ) : (
                 <Link
@@ -589,6 +627,22 @@ export default function PrivateLessonPackageDetailPage() {
         ) : null}
       </header>
 
+      {snapshot && pkg ? (
+        <div className="space-y-4">
+          <PackageLifecycleBanner status={pkg.lifecycleStatus} />
+          <PackageLifecycleActions
+            pkg={pkg}
+            canManage={canManageLifecycle}
+            onRefresh={() => void loadDetail()}
+          />
+          <PackageFinanceCards pkg={pkg} snapshot={snapshot} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PackageEventTimelineCard snapshot={snapshot} pkg={snapshot.package} />
+            <PackageUsedLessonsCard snapshot={snapshot} />
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2 border-b border-white/5 pb-1">
         {tabs.map((t) => (
           <button
@@ -615,7 +669,7 @@ export default function PrivateLessonPackageDetailPage() {
               <span className="text-white">{pkg.isActive ? "Aktif" : "Pasif"}</span>
             </li>
             <li className="flex flex-wrap gap-2">
-              <span className="text-gray-600">Ödeme:</span>
+              <span className="text-gray-600">Tahsilat durumu:</span>
               <span className="text-white">{paymentLabel(pkg.paymentStatus)}</span>
             </li>
             <li className="flex flex-wrap gap-2">
@@ -1033,7 +1087,7 @@ export default function PrivateLessonPackageDetailPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <h3 id="payment-dialog-title" className="text-lg font-black italic uppercase text-white">
-                Ödeme kaydı
+                Tahsilat kaydı
               </h3>
               <button
                 type="button"
@@ -1056,11 +1110,11 @@ export default function PrivateLessonPackageDetailPage() {
                 <span className="tabular-nums text-white">{formatTry(pkg.totalPrice)}</span>
               </div>
               <div className="flex justify-between gap-4 text-gray-500">
-                <span>Şu ana kadar ödenen</span>
+                <span>Şu ana kadar alınan</span>
                 <span className="tabular-nums text-white">{formatTry(pkg.amountPaid)}</span>
               </div>
               <div className="flex justify-between gap-4 border-t border-white/5 pt-2 text-gray-500">
-                <span>Bu ödeme sonrası ödenen</span>
+                <span>Bu tahsilat sonrası alınan toplam</span>
                 <span className={`tabular-nums ${paymentPreviewNewPaid != null ? "text-white" : "text-gray-600"}`}>
                   {paymentPreviewNewPaid != null ? formatTry(paymentPreviewNewPaid) : "—"}
                 </span>
@@ -1079,7 +1133,7 @@ export default function PrivateLessonPackageDetailPage() {
 
             <label className="mt-5 block">
               <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-500">
-                Ödeme tutarı (₺) <span className="text-rose-400">*</span>
+                Tahsilat tutarı (₺) <span className="text-rose-400">*</span>
               </span>
               <input
                 type="number"
@@ -1120,11 +1174,23 @@ export default function PrivateLessonPackageDetailPage() {
                 aria-busy={paymentSaving}
                 className="min-h-12 rounded-2xl bg-[#7c3aed] px-5 text-[11px] font-black uppercase text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-45 sm:hover:bg-[#6d28d9]"
               >
-                {paymentSaving ? "Kaydediliyor..." : "Ödeme ekle"}
+                {paymentSaving ? "Kaydediliyor..." : "Tahsilat kaydı ekle"}
               </button>
             </div>
           </div>
         </div>
+      ) : null}
+
+      {snapshot && snapshot.viewerRole !== "sporcu" && editModalOpen ? (
+        <PrivateLessonPackageEditModal
+          key={snapshot.package.id}
+          open
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={() => void loadDetail()}
+          pkg={snapshot.package}
+          coaches={coachOptions}
+          viewerRole={snapshot.viewerRole === "admin" ? "admin" : "coach"}
+        />
       ) : null}
     </div>
   );

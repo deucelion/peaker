@@ -23,7 +23,7 @@ export default function GlobalError({
             <p className="break-words text-[11px] font-bold uppercase leading-relaxed text-gray-400">
               Kök şablon yüklenemedi. Sayfayı yenileyin veya daha sonra tekrar deneyin.
             </p>
-            {error?.message ? (
+            {process.env.NODE_ENV === "development" && error?.message ? (
               <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/50 p-3 text-left text-[10px] text-red-300/90">
                 {error.message}
               </pre>

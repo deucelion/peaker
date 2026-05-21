@@ -135,7 +135,8 @@ export default function AthleteFinanceDetailPage() {
   const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
-  const primaryActionLabel = snapshot.summary.tone === "overdue" ? "Ödemeyi Tamamla" : "Erken Ödeme Yap";
+  const primaryActionLabel =
+    snapshot.summary.tone === "overdue" ? "Tahsilat durumunu görüntüle" : "Tahsilat özetini görüntüle";
 
   return (
     <div className="space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
@@ -148,22 +149,22 @@ export default function AthleteFinanceDetailPage() {
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ana Finans Bilgisi</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <p className="text-[10px] font-black uppercase text-gray-500">Ödenecek Tutar</p>
+            <p className="text-[10px] font-black uppercase text-gray-500">Ödenmesi gereken tutar</p>
             <p className="mt-1 text-xl font-black text-white">{dueAmountLabel}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <p className="text-[10px] font-black uppercase text-gray-500">Son Ödeme Tarihi</p>
+            <p className="text-[10px] font-black uppercase text-gray-500">Planlanan vade tarihi</p>
             <p className="mt-1 text-xl font-black text-white">{dueDateLabel}</p>
           </div>
         </div>
       </section>
 
       <section className={`rounded-2xl border p-5 ${summaryPresentation.cardClass}`}>
-        <p className="text-[9px] font-black uppercase tracking-widest">Ödeme Durumu</p>
+        <p className="text-[9px] font-black uppercase tracking-widest">Tahsilat durumu</p>
         <p className="mt-2 text-2xl font-black uppercase italic">{summaryPresentation.label}</p>
         <p className="mt-2 text-[11px] font-semibold text-white/90">{summaryPresentation.supportText}</p>
         <p className="mt-2 text-[10px] font-semibold text-white/80">
-          Sonraki ödeme: {dueDateLabel} - {dueAmountLabel}
+          Sonraki vade (takip): {dueDateLabel} - {dueAmountLabel}
         </p>
         <div className="mt-3 rounded-xl border border-white/20 bg-black/20 px-3 py-2 text-[11px] font-bold leading-relaxed text-white/90">
           {summaryActionMessage(snapshot.summary)}
@@ -182,7 +183,7 @@ export default function AthleteFinanceDetailPage() {
       <section className="rounded-2xl border border-white/10 bg-[#121215] p-4">
         <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Özel Ders Toplamı</p>
         <p className="mt-2 text-lg font-black text-[#c4b5fd]">{formatCurrency(snapshot.totals.privateLessonPaidTotal)}</p>
-        <p className="text-xs font-semibold text-gray-400">{snapshot.privateLessonPackages.length} paket • {ozelDersPaymentCount} ödeme</p>
+        <p className="text-xs font-semibold text-gray-400">{snapshot.privateLessonPackages.length} paket • {ozelDersPaymentCount} tahsilat kaydı</p>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-[#121215] p-2 sm:p-3">

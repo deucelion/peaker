@@ -4,18 +4,17 @@
  * Faz 14.7 — Operational replay tooling (admin/super_admin, audit + tenant-safe).
  */
 
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { assertOperationalReplayCooldown } from "@/lib/operational/replayCooldown";
 import { isUuid } from "@/lib/validation/uuid";
 import { createJobContext } from "@/lib/jobs/createJobContext";
 import { enqueueJob } from "@/lib/jobs/enqueueJob";
 import { getSystemOperationsSnapshot } from "@/lib/actions/systemOperationsActions";
-
-type Ok<T> = { ok: true } & T;
-type Err = { ok: false; error: string; errorKind?: "auth" | "permission" | "validation" | "fetch" };
-export type OperationalReplayResult<T = Record<string, unknown>> = Ok<T> | Err;
+import type { OperationalReplayResult } from "@/lib/actions/operationalReplayTypes";
 
 export async function replayOperationalAlertEvaluation(input?: {
   replayReason?: string | null;
@@ -27,6 +26,11 @@ export async function replayOperationalAlertEvaluation(input?: {
     if (role !== "admin" && role !== "super_admin") {
       return { ok: false, error: "Yetkisiz.", errorKind: "permission" };
     }
+    const adminClient = createSupabaseAdminClient();
+    const cooldown = await assertOperationalReplayCooldown(adminClient, resolved.actor.id, [
+      "operational.replay.evaluate_alerts",
+    ]);
+    if (!cooldown.ok) return { ok: false, error: cooldown.error, errorKind: "validation" };
     const snap = await getSystemOperationsSnapshot();
     if ("error" in snap) return { ok: false, error: snap.error, errorKind: "fetch" };
     await logAuditEvent({
@@ -65,6 +69,11 @@ export async function replayEnqueueAuditExport(input: {
     if (role === "admin" && !orgId) {
       return { ok: false, error: "Organizasyon gerekli.", errorKind: "validation" };
     }
+    const adminClient = createSupabaseAdminClient();
+    const cooldown = await assertOperationalReplayCooldown(adminClient, resolved.actor.id, [
+      "operational.replay.export_audit",
+    ]);
+    if (!cooldown.ok) return { ok: false, error: cooldown.error, errorKind: "validation" };
     if (role === "super_admin" && input.organizationId) {
       if (!isUuid(input.organizationId)) {
         return { ok: false, error: "Geçersiz organizasyon.", errorKind: "validation" };
@@ -113,6 +122,11 @@ export async function replayEnqueueRetentionAudit(input?: {
     if (role !== "super_admin") {
       return { ok: false, error: "Yalnızca super_admin tetikleyebilir.", errorKind: "permission" };
     }
+    const adminClient = createSupabaseAdminClient();
+    const cooldown = await assertOperationalReplayCooldown(adminClient, resolved.actor.id, [
+      "operational.replay.retention_audit",
+    ]);
+    if (!cooldown.ok) return { ok: false, error: cooldown.error, errorKind: "validation" };
     const ctx = createJobContext({
       kind: "retention.auditLogs",
       initiator: { kind: "user", id: resolved.actor.id, role: resolved.actor.role },

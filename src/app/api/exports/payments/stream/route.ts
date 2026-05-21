@@ -26,6 +26,7 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { csvFilename } from "@/lib/export/csv";
+import { buildCsvDownloadHeaders } from "@/lib/export/exportHttpHeaders";
 import { streamCsvToResponse, chunkedCsvIterable } from "@/lib/export/csvStreamIterable";
 import {
   getAccountingPaymentKindLabel,
@@ -308,14 +309,10 @@ export async function GET(request: Request) {
 
   return new Response(stream, {
     status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store, max-age=0",
-      "X-Peaker-Row-Count": String(rows.length),
-      "X-Peaker-Cap": String(PAYMENTS_EXPORT_HARD_CAP),
-      "X-Peaker-Truncated": willTruncate ? "1" : "0",
-      "X-Accel-Buffering": "no",
-    },
+    headers: buildCsvDownloadHeaders(filename, {
+      rowCount: rows.length,
+      cap: PAYMENTS_EXPORT_HARD_CAP,
+      truncated: willTruncate,
+    }),
   });
 }

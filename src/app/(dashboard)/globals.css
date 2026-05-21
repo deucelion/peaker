@@ -100,6 +100,12 @@
   .ui-badge-danger {
     @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border border-red-500/30 bg-red-500/10 text-red-300;
   }
+  .ui-table-scroll {
+    @apply -mx-4 w-[calc(100%+2rem)] overflow-x-auto px-4 sm:mx-0 sm:w-full sm:px-0;
+  }
+  .ui-compact-card {
+    @apply rounded-xl border border-white/10 bg-[#121215] p-4 sm:rounded-2xl sm:p-5;
+  }
 }
 @media print {
   /* Sidebar, Header ve Navigasyon gibi gereksiz elemanları gizle */

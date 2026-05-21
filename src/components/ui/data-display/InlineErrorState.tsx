@@ -28,7 +28,7 @@ export function InlineErrorState({
   const tone = toneForErrorKind(errorKind);
   const Icon = (() => {
     if (errorKind === "permission_denied" || errorKind === "auth_required") return ShieldCheck;
-    if (errorKind === "invalid_input") return AlertTriangle;
+    if (errorKind === "invalid_input" || errorKind === "timeout") return AlertTriangle;
     return ShieldOff;
   })();
   const toneClass = QUERY_TONE_CLASS[tone];

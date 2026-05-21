@@ -282,6 +282,31 @@ export function reportExportRun(params: {
 }
 
 /* -------------------------------------------------------------------------- */
+/* 6b) Audit list fetch                                                        */
+/* -------------------------------------------------------------------------- */
+
+export function reportAuditListFetch(params: {
+  ok: boolean;
+  errorKind: string | null;
+  organizationId: string | null;
+  durationMs: number;
+  rowCount: number;
+}): void {
+  const duration = Math.max(0, params.durationMs);
+  const level: LevelDecision = !params.ok
+    ? params.errorKind === "timeout"
+      ? "warn"
+      : "warn"
+    : "info";
+  emit(level, "telemetry.audit.list", params.ok ? "ok" : params.errorKind ?? "error", {
+    organizationId: params.organizationId,
+    durationMs: duration,
+    rowCount: params.rowCount,
+    errorKind: params.errorKind,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* 7) Slow chart render (client-side helper)                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -356,3 +381,8 @@ export const __thresholds = {
   RETRY_STORM_WARN_COUNT,
   RETRY_STORM_ERROR_COUNT,
 };
+
+/**
+ * FAZ 20 — İstemci tarafı realtime ölçümleri `getClientRealtimeStatsSnapshot` ile oturum-local tutulur;
+ * sunucu `advancedTelemetry` ile birleştirme bilinçli olarak ertelendi (LR-31).
+ */

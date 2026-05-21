@@ -277,7 +277,8 @@ export default function FinanceAthleteDetailPage() {
   const summaryPresentation = getFinanceStatusPresentation(snapshot.summary);
   const ozelDersPaymentCount = snapshot.privateLessonPayments.length;
   const showPrimaryAction = snapshot.summary.tone !== "paid";
-  const primaryActionLabel = snapshot.summary.tone === "overdue" ? "Ödemeyi Tamamla" : "Erken Ödeme Yap";
+  const primaryActionLabel =
+    snapshot.summary.tone === "overdue" ? "Tahsilat durumunu yönet" : "Tahsilat özetini aç";
   const accountingOrgId =
     snapshot.aidatPayments[0]?.organization_id ??
     snapshot.privateLessonPackages[0]?.organizationId ??
@@ -586,7 +587,7 @@ export default function FinanceAthleteDetailPage() {
               onClick={() => void handleMarkPlannedPaid()}
               className="min-h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-[10px] font-black uppercase text-emerald-300"
             >
-              {markingPlannedPaid ? "İşleniyor..." : "Ödemeyi Tamamlandı Olarak İşle"}
+              {markingPlannedPaid ? "İşleniyor..." : "Planlı aidatı tamamlandı olarak işaretle"}
             </button>
           </form>
           {canOpenAccountingPanel ? (

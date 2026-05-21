@@ -122,7 +122,24 @@ type PrivateScheduleRow = {
   coach_id: string;
   coach_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
   athlete_profile?: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
-  pkg?: { package_name?: string | null } | { package_name?: string | null }[] | null;
+  pkg?:
+    | {
+        package_name?: string | null;
+        remaining_lessons?: number | null;
+        total_lessons?: number | null;
+        used_lessons?: number | null;
+        is_active?: boolean | null;
+        lifecycle_status?: string | null;
+      }
+    | {
+        package_name?: string | null;
+        remaining_lessons?: number | null;
+        total_lessons?: number | null;
+        used_lessons?: number | null;
+        is_active?: boolean | null;
+        lifecycle_status?: string | null;
+      }[]
+    | null;
 };
 
 function firstJoined<T>(value: T | T[] | null | undefined): T | undefined {
@@ -239,7 +256,7 @@ export async function listWeeklyLessonScheduleSnapshot(
     let privateQuery = adminClient
       .from("private_lesson_sessions")
       .select(
-        "id, package_id, starts_at, ends_at, location, note, status, coach_id, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name)"
+        "id, package_id, starts_at, ends_at, location, note, status, coach_id, coach_profile:profiles!private_lesson_sessions_coach_id_fkey(full_name, email), athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name, remaining_lessons, total_lessons, used_lessons, is_active, lifecycle_status)"
       )
       .eq("organization_id", actor.organizationId)
       .gte("starts_at", weekStartIso)
@@ -277,6 +294,12 @@ export async function listWeeklyLessonScheduleSnapshot(
           note: row.note?.trim() || null,
           detailHref: `${PATHS.ozelDersPaketleri}/${row.package_id}`,
           status: row.status || "planned",
+          packageId: row.package_id,
+          packageLifecycleStatus: pkg?.lifecycle_status ?? null,
+          packageRemainingLessons: pkg?.remaining_lessons ?? 0,
+          packageTotalLessons: pkg?.total_lessons ?? 0,
+          packageUsedLessons: pkg?.used_lessons ?? 0,
+          packageIsActive: pkg?.is_active ?? true,
         } satisfies WeeklyLessonScheduleItem;
       })
     );

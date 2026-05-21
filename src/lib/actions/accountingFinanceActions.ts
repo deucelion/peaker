@@ -7,6 +7,11 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { isUuid } from "@/lib/validation/uuid";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMath";
+import { assertValidTRYMoneyAmount } from "@/lib/privateLessons/packageFinance";
+import {
+  resolvePackageLifecycleStatus,
+  type PackageLifecycleStatus,
+} from "@/lib/privateLessons/packageStatus";
 import { applyPrivateLessonPackagePaymentWithPaymentRow } from "@/lib/privateLessons/packagePaymentSync";
 import {
   istanbulCustomRangeToPayoutDateInclusiveBounds,
@@ -16,6 +21,8 @@ import {
 } from "@/lib/accountingFinance/istanbulQueryRange";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
+import { applyPrivateLessonPaymentActiveFilter, getSchemaCapabilities } from "@/lib/schemaCompat";
+import { diagnosticsCode, operationalError } from "@/lib/ui/operationalErrors";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import { csvFilename } from "@/lib/export/csv";
 import { buildCsvFromRows } from "@/lib/export/csvStream";
@@ -46,10 +53,16 @@ export type AccountingFinanceFilters = {
   paymentStatus?: PaymentStatusFilter;
   /** true: yalnızca ders/koç raporu; payments ve tahsilat KPI sorgulanmaz */
   lessonsOnly?: boolean;
+  /** Faz 18 — özel ders paketi lifecycle filtresi */
+  packageLifecycle?: "all" | PackageLifecycleStatus;
+  /** Faz 18 — paket ödeme tamamlandı / bekliyor */
+  packagePaymentState?: "all" | "payment_complete" | "payment_pending";
 };
 
 export type AccountingFinancePaymentRow = {
   id: string;
+  /** `plp-*` tamamlayıcı satırlar için `private_lesson_payments.id` */
+  ledgerRowId: string | null;
   athleteId: string | null;
   athleteName: string;
   amount: number;
@@ -65,6 +78,7 @@ export type AccountingFinancePaymentRow = {
   descriptionText: string;
   channelLabel: string;
   packageId: string | null;
+  packageLifecycleStatus: PackageLifecycleStatus | null;
 };
 
 export type AccountingFinanceLessonRow = {
@@ -314,12 +328,16 @@ async function loadSupplementalPrivateLessonLedgerRows(args: {
   const PKG_EMBED =
     "pkg:private_lesson_packages!private_lesson_payments_package_id_fkey(organization_id, package_name, total_price, amount_paid)";
 
-  const { data: ledgerRows, error } = await adminClient
-    .from("private_lesson_payments")
-    .select(`id, package_id, athlete_id, amount, paid_at, note, created_at, ${PAY_EMBED}, ${PKG_EMBED}`)
-    .eq("organization_id", organizationId)
-    .gte("paid_at", range.from)
-    .lt("paid_at", range.toExclusive);
+  const caps = await getSchemaCapabilities();
+  const { data: ledgerRows, error } = await applyPrivateLessonPaymentActiveFilter(
+    adminClient
+      .from("private_lesson_payments")
+      .select(`id, package_id, athlete_id, amount, paid_at, note, created_at, ${PAY_EMBED}, ${PKG_EMBED}`)
+      .eq("organization_id", organizationId)
+      .gte("paid_at", range.from)
+      .lt("paid_at", range.toExclusive),
+    caps
+  );
 
   if (error || !ledgerRows?.length) return [];
 
@@ -372,19 +390,56 @@ async function enrichPaymentRowsWithPackageBalance(
 ): Promise<void> {
   const pkgIds = [...new Set(rows.map((r) => r.packageId).filter(Boolean))] as string[];
   if (!pkgIds.length) return;
-  const { data: pkgs } = await adminClient
+  const caps = await getSchemaCapabilities();
+  let selectCols = "id, total_price, amount_paid, payment_status, is_active";
+  if (caps.packages.lifecycleStatus) selectCols += ", lifecycle_status";
+  const { data: pkgs, error: pkgErr } = await adminClient
     .from("private_lesson_packages")
-    .select("id, total_price, amount_paid")
+    .select(selectCols)
     .eq("organization_id", organizationId)
     .in("id", pkgIds);
-  const byId = new Map((pkgs || []).map((p) => [String(p.id), p]));
+  if (pkgErr) return;
+  type PkgBalanceRow = {
+    id: string;
+    total_price: number | string;
+    amount_paid: number | string;
+    is_active?: boolean;
+    lifecycle_status?: string | null;
+  };
+  const byId = new Map(((pkgs || []) as unknown as PkgBalanceRow[]).map((p) => [String(p.id), p]));
   for (const row of rows) {
     if (!row.packageId) continue;
     const p = byId.get(row.packageId);
     if (!p) continue;
     const rem = normalizeMoney(Number(p.total_price) || 0) - normalizeMoney(Number(p.amount_paid) || 0);
     row.remainingBalance = rem > 0.001 ? rem : 0;
+    row.packageLifecycleStatus = resolvePackageLifecycleStatus({
+      lifecycleStatus: (p as { lifecycle_status?: string | null }).lifecycle_status,
+      isActive: Boolean((p as { is_active?: boolean }).is_active),
+      remainingLessons: rem > 0.001 ? 1 : 0,
+      totalLessons: 1,
+      usedLessons: 0,
+    });
   }
+}
+
+function filterPaymentsByPackageState(
+  rows: AccountingFinancePaymentRow[],
+  packageLifecycle: AccountingFinanceFilters["packageLifecycle"],
+  packagePaymentState: AccountingFinanceFilters["packagePaymentState"]
+): AccountingFinancePaymentRow[] {
+  return rows.filter((row) => {
+    if (packageLifecycle && packageLifecycle !== "all") {
+      if (!row.packageId || row.packageLifecycleStatus !== packageLifecycle) return false;
+    }
+    if (packagePaymentState && packagePaymentState !== "all") {
+      if (!row.packageId) return false;
+      const complete = (row.remainingBalance ?? 0) <= 0.001;
+      if (packagePaymentState === "payment_complete" && !complete) return false;
+      if (packagePaymentState === "payment_pending" && complete) return false;
+    }
+    return true;
+  });
 }
 
 /**
@@ -879,7 +934,14 @@ export async function loadAccountingFinanceDashboard(
     .select("id, full_name, email, role")
     .eq("organization_id", organizationId)
     .order("full_name", { ascending: true });
-  if (coachErr) return { error: `Koç listesi alınamadı: ${coachErr.message}` };
+  if (coachErr) {
+    return {
+      error: operationalError("Koç listesi alınamadı", {
+        rawMessage: coachErr.message,
+        code: diagnosticsCode("FIN", "coach_list"),
+      }),
+    };
+  }
   const allProfiles = coachRows || [];
   const coaches = allProfiles
     .filter((row) => getSafeRole(row.role) === "coach")
@@ -927,11 +989,15 @@ export async function loadAccountingFinanceDashboard(
     const normalizedScope = inferPaymentScopeFromLegacyRow(row);
     const amt = normalizeMoney(Number(row.amount) || 0);
     const pkgId = String(row.package_id || "").trim();
+    const rawId = String(row.id || "");
+    const plpMatch = /^plp-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(rawId);
+    const ledgerRowId = plpMatch?.[1] && isUuid(plpMatch[1]) ? plpMatch[1] : null;
     const desc = String(row.description || "").trim();
     const disp = String(row.display_name || "").trim();
     const descriptionText = desc || disp || "—";
     return {
-      id: String(row.id || ""),
+      id: rawId,
+      ledgerRowId,
       athleteId: (row.profile_id as string | null) || null,
       athleteName: toDisplayName(athlete?.full_name ?? null, athlete?.email ?? null, "Sporcu"),
       amount: amt,
@@ -947,6 +1013,7 @@ export async function loadAccountingFinanceDashboard(
       descriptionText,
       channelLabel: buildPaymentChannelLabel(row, normalizedKind, status),
       packageId: pkgId && isUuid(pkgId) ? pkgId : null,
+      packageLifecycleStatus: null,
     };
   };
 
@@ -956,6 +1023,14 @@ export async function loadAccountingFinanceDashboard(
   if (!lessonsOnly && mappedPaymentsFiltered.length) {
     await enrichPaymentRowsWithPackageBalance(adminClient, organizationId, mappedPaymentsFiltered);
   }
+
+  const packageLifecycleFilter = rawFilters.packageLifecycle || "all";
+  const packagePaymentStateFilter = rawFilters.packagePaymentState || "all";
+  const mappedPaymentsAfterPackageFilter = filterPaymentsByPackageState(
+    mappedPaymentsFiltered,
+    packageLifecycleFilter,
+    packagePaymentStateFilter
+  );
 
   let groupLessons: AccountingFinanceLessonRow[] = [];
   if (lessonType !== "private") {
@@ -974,7 +1049,14 @@ export async function loadAccountingFinanceDashboard(
       else groupQuery = groupQuery.eq("status", lessonStatus);
     }
     const { data: rows, error } = await groupQuery;
-    if (error) return { error: `Grup dersleri alınamadı: ${error.message}` };
+    if (error) {
+      return {
+        error: operationalError("Grup dersleri alınamadı", {
+          rawMessage: error.message,
+          code: diagnosticsCode("FIN", "group_lessons"),
+        }),
+      };
+    }
     groupLessons = (rows || []).map((row: Record<string, unknown>) => {
       const coachRaw = Array.isArray(row.coach_profile) ? row.coach_profile[0] : row.coach_profile;
       const coach = coachRaw as { full_name?: string | null; email?: string | null } | null;
@@ -1008,7 +1090,14 @@ export async function loadAccountingFinanceDashboard(
     if (safeCoachId) privateQuery = privateQuery.eq("coach_id", safeCoachId);
     if (lessonStatus !== "all") privateQuery = privateQuery.eq("status", lessonStatus);
     const { data: rows, error } = await privateQuery;
-    if (error) return { error: `Özel dersler alınamadı: ${error.message}` };
+    if (error) {
+      return {
+        error: operationalError("Özel dersler alınamadı", {
+          rawMessage: error.message,
+          code: diagnosticsCode("FIN", "private_lessons"),
+        }),
+      };
+    }
     privateLessons = (rows || []).map((row: Record<string, unknown>) => {
       const coachRaw = Array.isArray(row.coach_profile) ? row.coach_profile[0] : row.coach_profile;
       const coach = coachRaw as { full_name?: string | null; email?: string | null } | null;
@@ -1127,7 +1216,7 @@ export async function loadAccountingFinanceDashboard(
     dateToExclusiveUtc: timeRange.toExclusive,
     paymentRawCount: paymentLoad.rows?.length ?? 0,
     mergedPaymentCount: mergedPaymentRows.length,
-    filteredPaymentCount: mappedPaymentsFiltered.length,
+    filteredPaymentCount: mappedPaymentsAfterPackageFilter.length,
     lessonCount: lessons.length,
     kpiTotalCollectedInput: totalCollected,
     kpiPendingInput: pendingCollection,
@@ -1161,7 +1250,7 @@ export async function loadAccountingFinanceDashboard(
         cancelledLessons,
         activeCoachCount,
       },
-      payments: mappedPaymentsFiltered,
+      payments: mappedPaymentsAfterPackageFilter,
       lessons,
       coachAggregates,
       options: {
@@ -1246,7 +1335,14 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
     .eq("is_active", true)
     .order("created_at", { ascending: false });
 
-  if (error) return { error: `Paketler alınamadı: ${error.message}` };
+  if (error) {
+    return {
+      error: operationalError("Paketler alınamadı", {
+        rawMessage: error.message,
+        code: diagnosticsCode("FIN", "packages"),
+      }),
+    };
+  }
 
   const packages: AccountingFinancePackageOption[] = (rows || [])
     .map((row) => ({
@@ -1283,8 +1379,11 @@ export async function createAccountingPayment(formData: FormData) {
 
   const profileId = formData.get("profileId")?.toString().trim() || "";
   if (!isUuid(profileId)) return { error: "Geçersiz sporcu seçimi." };
-  const amount = parseMoneyInput(formData.get("amount")?.toString());
-  if (amount == null || amount <= 0) return { error: "Geçersiz tahsilat tutarı." };
+  const amountParsed = parseMoneyInput(formData.get("amount")?.toString());
+  if (amountParsed == null) return { error: "Geçersiz tahsilat tutarı." };
+  const amountCheck = assertValidTRYMoneyAmount(amountParsed, "Tahsilat tutarı");
+  if (!amountCheck.ok) return { error: amountCheck.error };
+  const amount = amountCheck.amount;
 
   const paymentKindInput = String(formData.get("paymentKind") || "monthly_membership");
   const paymentDate = String(formData.get("paymentDate") || "").trim();

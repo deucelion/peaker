@@ -31,6 +31,16 @@ import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import { buildOfflineScopeKey } from "@/lib/offline/scope";
+import { fieldTestDraftKey, fieldTestIdempotencyKey } from "@/lib/offline/draftKeys";
+import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
+import {
+  clearScopedFormDraft,
+  loadScopedFormDraft,
+  saveScopedFormDraft,
+} from "@/lib/offline/scopedFormDrafts";
 
 function metricIsText(m: TestDefinitionRow): boolean {
   const ext = m as TestDefinitionRow & { valueType?: unknown };
@@ -74,6 +84,10 @@ export default function SahaTestleriFinal() {
   });
   const [orderingBusyMetricId, setOrderingBusyMetricId] = useState<string | null>(null);
   const [orderHighlightMetricId, setOrderHighlightMetricId] = useState<string | null>(null);
+  const online = useOnlineStatus();
+  const [scopeKey, setScopeKey] = useState("");
+  const [actorUserId, setActorUserId] = useState("");
+  const [fieldDraftRestored, setFieldDraftRestored] = useState(false);
   const fetchRunRef = useRef(0);
   const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const saveFeedbackRef = useRef(saveFeedback);
@@ -165,6 +179,53 @@ export default function SahaTestleriFinal() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    void (async () => {
+      const me = await fetchMeRoleClient();
+      if (!me.ok) return;
+      setActorUserId(me.userId);
+      setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
+    })();
+  }, []);
+
+  const fieldDraftStorageKey = useMemo(() => {
+    if (!actorUserId || selectedPlayers.length === 0) return "";
+    const athleteScope = selectedPlayers.length === 1 ? selectedPlayers[0] : "batch";
+    return fieldTestDraftKey(athleteScope, globalDate, actorUserId);
+  }, [actorUserId, selectedPlayers, globalDate]);
+
+  useEffect(() => {
+    if (!scopeKey || !fieldDraftStorageKey) return;
+    const id = window.setTimeout(() => {
+      saveScopedFormDraft(scopeKey, fieldDraftStorageKey, {
+        testDate: globalDate,
+        selectedProfileIds: selectedPlayers,
+        testValues,
+        generalNotes,
+        metricSnapshot: metrics.map((m) => ({
+          id: m.id,
+          valueType: metricIsText(m) ? "text" : "number",
+        })),
+      });
+    }, 700);
+    return () => clearTimeout(id);
+  }, [scopeKey, fieldDraftStorageKey, globalDate, selectedPlayers, testValues, generalNotes, metrics]);
+
+  useEffect(() => {
+    if (!scopeKey || !fieldDraftStorageKey || fieldDraftRestored) return;
+    const draft = loadScopedFormDraft(scopeKey, fieldDraftStorageKey);
+    if (!draft?.payload) return;
+    if (String(draft.payload.testDate) !== globalDate) return;
+    const ids = draft.payload.selectedProfileIds as string[] | undefined;
+    const values = draft.payload.testValues as Record<string, string | number> | undefined;
+    const notes = draft.payload.generalNotes as Record<string, string> | undefined;
+    if (ids?.length) setSelectedPlayers(ids);
+    if (values) setTestValues(values);
+    if (notes) setGeneralNotes(notes);
+    setFieldDraftRestored(true);
+    setSaveFeedback("dirty");
+  }, [scopeKey, fieldDraftStorageKey, globalDate, fieldDraftRestored]);
 
   useEffect(() => {
     if (saveFeedback !== "saved") return;
@@ -375,20 +436,63 @@ export default function SahaTestleriFinal() {
         }
       }
 
+      const notesPayload = selectedPlayers.map((profileId) => ({
+        profileId,
+        note: generalNotes[profileId]?.trim() || null,
+      }));
+
+      if (!online) {
+        if (!scopeKey) {
+          setSaveMessage("Çevrimdışı kayıt için oturum doğrulanamadı.");
+          setSaveFeedback("error");
+          setSaveLoading(false);
+          return;
+        }
+        const draftId =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `ft-${Date.now()}`;
+        const queued = enqueueOfflineAction({
+          kind: "field_test_draft",
+          scopeKey,
+          draftId,
+          idempotencyKey: fieldTestIdempotencyKey(globalDate, draftId),
+          payload: {
+            testDate: globalDate,
+            selectedProfileIds: selectedPlayers,
+            cells,
+            notes: notesPayload,
+          },
+          title: `Saha testi · ${globalDate}`,
+        });
+        if ("error" in queued) {
+          setSaveMessage(queued.error);
+          setSaveFeedback("error");
+        } else {
+          setSaveMessage(
+            "Saha testi kuyruğa alındı. Senkron merkezinden onaylayarak gönderebilirsiniz."
+          );
+          setSaveFeedback("saved");
+        }
+        setSaveLoading(false);
+        return;
+      }
+
       const result = await saveAthleticFieldResults({
         testDate: globalDate,
         selectedProfileIds: selectedPlayers,
         cells,
-        notes: selectedPlayers.map((profileId) => ({
-          profileId,
-          note: generalNotes[profileId]?.trim() || null,
-        })),
+        notes: notesPayload,
       });
 
       if ("error" in result && result.error) {
         setSaveMessage(result.error);
         setSaveFeedback("error");
       } else {
+        if (scopeKey && fieldDraftStorageKey) {
+          clearScopedFormDraft(scopeKey, fieldDraftStorageKey);
+          setFieldDraftRestored(false);
+        }
         setSelectedPlayers([]);
         setSaveMessage("Sonuçlar başarıyla kaydedildi.");
         setSaveFeedback("saved");
@@ -476,6 +580,12 @@ export default function SahaTestleriFinal() {
           <p className="text-[11px] font-bold text-gray-500">
             Sporcu seçin, tarih belirleyin, test verisi girin ve kaydedin.
           </p>
+          {!online ? (
+            <Notification
+              message="Çevrimdışı: değerler taslağa kaydedilir; gönderim senkron merkezinden onaylıdır."
+              variant="info"
+            />
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">

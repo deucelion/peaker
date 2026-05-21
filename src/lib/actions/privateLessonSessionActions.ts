@@ -7,6 +7,22 @@ import { getCoachPermissions, hasCoachPermission } from "@/lib/auth/coachPermiss
 import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
+import {
+  packageAllowsNewSessions,
+  packageAllowsUsage,
+  resolvePackageLifecycleStatus,
+} from "@/lib/privateLessons/packageStatus";
+import { appendPrivateLessonPackageEvent } from "@/lib/privateLessons/appendPrivateLessonPackageEvent";
+import { mapRpcCompleteErrorToUserMessage } from "@/lib/privateLessons/completeSessionPolicy";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { appendOperationalTimeline } from "@/lib/operational/timeline";
+import {
+  getSchemaCapabilities,
+  packageCompletedUpdatePayload,
+  runPackageLifecycleProbeWithCompat,
+  userFacingDataError,
+} from "@/lib/schemaCompat";
+import { diagnosticsCode, operationalError } from "@/lib/ui/operationalErrors";
 import { insertNotificationsForUsers } from "@/lib/notifications/serverInsert";
 import { wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import type { PrivateLessonSessionListItem, PrivateLessonSessionStatus } from "@/lib/types";
@@ -142,7 +158,14 @@ export async function listPrivateLessonSessionsForPackage(
     .order("starts_at", { ascending: false })
     .limit(120);
 
-  if (error) return { error: `Planlar alınamadı: ${error.message}` };
+  if (error) {
+    return {
+      error: operationalError("Planlar alınamadı", {
+        rawMessage: error.message,
+        code: diagnosticsCode("PLN", "list"),
+      }),
+    };
+  }
   return { sessions: (data || []).map((row) => mapSessionRow(row as never)) };
 }
 
@@ -167,7 +190,14 @@ export async function listPrivateLessonSessionsForAthlete(): Promise<
     .order("starts_at", { ascending: false })
     .limit(80);
 
-  if (error) return { error: `Planlar alınamadı: ${error.message}` };
+  if (error) {
+    return {
+      error: operationalError("Planlar alınamadı", {
+        rawMessage: error.message,
+        code: diagnosticsCode("PLN", "list"),
+      }),
+    };
+  }
   return { sessions: (data || []).map((row) => mapSessionRow(row as never)) };
 }
 
@@ -198,7 +228,14 @@ export async function listUpcomingPrivateLessonSessionsForCoach(
     .order("starts_at", { ascending: true })
     .limit(Math.min(Math.max(limit, 1), 30));
 
-  if (error) return { error: `Planlar alınamadı: ${error.message}` };
+  if (error) {
+    return {
+      error: operationalError("Planlar alınamadı", {
+        rawMessage: error.message,
+        code: diagnosticsCode("PLN", "list"),
+      }),
+    };
+  }
   return { sessions: (data || []).map((row) => mapSessionRow(row as never)) };
 }
 
@@ -227,15 +264,41 @@ export async function createPrivateLessonSession(formData: FormData) {
     }
 
     const adminClient = createSupabaseAdminClient();
-    const { data: pkg } = await adminClient
-      .from("private_lesson_packages")
-      .select("id, organization_id, athlete_id, coach_id, is_active, remaining_lessons, total_lessons, used_lessons, package_name")
-      .eq("id", packageId)
-      .eq("organization_id", actor.organization_id!)
-      .maybeSingle();
-
-    if (!pkg) return { error: "Paket bulunamadı." };
-    if (!pkg.is_active) return { error: "Pasif paket için yeni ders planlanamaz." };
+    const caps = await getSchemaCapabilities();
+    const pkgFetch = await runPackageLifecycleProbeWithCompat(caps, async (select) => {
+      const { data, error } = await adminClient
+        .from("private_lesson_packages")
+        .select(select)
+        .eq("id", packageId)
+        .eq("organization_id", actor.organization_id!)
+        .maybeSingle();
+      return { data, error };
+    });
+    if (pkgFetch.error || !pkgFetch.data) {
+      return { error: userFacingDataError("Paket bulunamadı", pkgFetch.error?.message) };
+    }
+    const pkg = pkgFetch.data as unknown as {
+      id: string;
+      organization_id: string;
+      athlete_id: string;
+      coach_id: string | null;
+      package_name: string;
+      is_active: boolean;
+      lifecycle_status?: string | null;
+      remaining_lessons: number;
+      total_lessons: number;
+      used_lessons: number;
+    };
+    const lifecycle = resolvePackageLifecycleStatus({
+      lifecycleStatus: pkg.lifecycle_status,
+      isActive: Boolean(pkg.is_active),
+      remainingLessons: pkg.remaining_lessons ?? 0,
+      totalLessons: pkg.total_lessons ?? 0,
+      usedLessons: pkg.used_lessons ?? 0,
+    });
+    if (!packageAllowsNewSessions(lifecycle)) {
+      return { error: "Bu paket durumunda yeni ders planlanamaz." };
+    }
     if (pkg.remaining_lessons <= 0) return { error: "Aktif pakette kalan ders hakkı yok; plan oluşturulamaz." };
 
     const { count: plannedCount, error: countErr } = await adminClient
@@ -243,7 +306,14 @@ export async function createPrivateLessonSession(formData: FormData) {
       .select("id", { count: "exact", head: true })
       .eq("package_id", packageId)
       .eq("status", "planned");
-    if (countErr) return { error: `Plan kontrolü başarısız: ${countErr.message}` };
+    if (countErr) {
+      return {
+        error: operationalError("Plan kontrolü başarısız", {
+          rawMessage: countErr.message,
+          code: diagnosticsCode("PLN", "count"),
+        }),
+      };
+    }
     const planned = plannedCount ?? 0;
     if (planned >= pkg.remaining_lessons) {
       return { error: "Açık plan sayısı kalan ders hakkı kadar; önce bir planı tamamlayın veya iptal edin." };
@@ -280,7 +350,14 @@ export async function createPrivateLessonSession(formData: FormData) {
       .lt("starts_at", end.toISOString())
       .gt("ends_at", start.toISOString())
       .limit(1);
-    if (conflictErr) return { error: `Plan kontrolü başarısız: ${conflictErr.message}` };
+    if (conflictErr) {
+      return {
+        error: operationalError("Plan kontrolü başarısız", {
+          rawMessage: conflictErr.message,
+          code: diagnosticsCode("PLN", "conflict"),
+        }),
+      };
+    }
     if ((conflictRows || []).length > 0) {
       return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
     }
@@ -301,7 +378,12 @@ export async function createPrivateLessonSession(formData: FormData) {
       if (insertErr.message.includes("private_lesson_sessions_no_overlap_planned")) {
         return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
       }
-      return { error: `Plan oluşturulamadı: ${insertErr.message}` };
+      return {
+        error: operationalError("Plan oluşturulamadı", {
+          rawMessage: insertErr.message,
+          code: diagnosticsCode("PLN", "create"),
+        }),
+      };
     }
 
     const label = (pkg as { package_name?: string }).package_name || "Özel ders";
@@ -338,9 +420,24 @@ export async function createPrivateLessonSession(formData: FormData) {
   });
 }
 
+async function revalidatePrivateLessonCompletionPaths(packageId: string, athleteId?: string | null) {
+  revalidatePath("/haftalik-ders-programi");
+  revalidatePath("/antrenman-yonetimi");
+  revalidatePath("/ozel-ders-paketleri");
+  revalidatePath("/ozel-ders-paketlerim");
+  revalidatePath(`/ozel-ders-paketleri/${packageId}`);
+  revalidatePath("/muhasebe-finans");
+  revalidatePath("/bildirimler");
+  revalidatePath("/");
+  if (athleteId) revalidatePath(`/sporcu/${athleteId}`);
+}
+
 export async function completePrivateLessonSession(sessionId: string) {
   return withServerActionGuard("privateLesson.completePrivateLessonSession", async () => {
-    const schemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready", "private_lesson_packages_ready"]);
+    const schemaError = await assertCriticalSchemaReady([
+      "private_lesson_sessions_ready",
+      "private_lesson_packages_ready",
+    ]);
     if (schemaError) return { error: schemaError };
 
     const resolved = await resolveActor();
@@ -355,16 +452,73 @@ export async function completePrivateLessonSession(sessionId: string) {
     const adminClient = createSupabaseAdminClient();
     const { data: sess, error: sErr } = await adminClient
       .from("private_lesson_sessions")
-      .select("id, organization_id, coach_id, status, package_id")
+      .select("id, organization_id, coach_id, athlete_id, status, package_id, usage_record_id")
       .eq("id", sid)
       .eq("organization_id", actor.organization_id!)
       .maybeSingle();
     if (sErr || !sess) return { error: "Oturum bulunamadı." };
-    if (sess.status !== "planned") return { error: "Yalnızca planlanmış oturum tamamlanabilir." };
 
     const role = getSafeRole(actor.role);
     if (role === "coach" && sess.coach_id !== actor.id) {
       return { error: "Bu oturumu tamamlama yetkiniz yok." };
+    }
+
+    if (sess.status === "cancelled") {
+      return { error: "İptal edilmiş oturum tamamlanamaz." };
+    }
+
+    if (sess.status === "completed" || sess.usage_record_id) {
+      await revalidatePrivateLessonCompletionPaths(sess.package_id as string, sess.athlete_id as string | null);
+      return {
+        success: true as const,
+        alreadyCompleted: true as const,
+        message: "Bu ders zaten yapıldı olarak işaretlenmiş.",
+      };
+    }
+
+    if (sess.status !== "planned") {
+      return { error: "Yalnızca planlanmış oturum tamamlanabilir." };
+    }
+
+    const caps = await getSchemaCapabilities();
+    const pkgFetch = await runPackageLifecycleProbeWithCompat(caps, async (select) => {
+      const { data, error } = await adminClient
+        .from("private_lesson_packages")
+        .select(select)
+        .eq("id", sess.package_id as string)
+        .eq("organization_id", actor.organization_id!)
+        .maybeSingle();
+      return { data, error };
+    });
+    if (pkgFetch.error || !pkgFetch.data) {
+      return { error: userFacingDataError("Paket bulunamadı", pkgFetch.error?.message) };
+    }
+    const pkg = pkgFetch.data as unknown as {
+      athlete_id: string;
+      coach_id: string | null;
+      package_name?: string;
+      used_lessons: number;
+      total_lessons: number;
+      remaining_lessons: number;
+      is_active: boolean;
+      lifecycle_status?: string | null;
+    };
+    if (pkg.athlete_id && sess.athlete_id && pkg.athlete_id !== sess.athlete_id) {
+      return { error: "Oturum sporcu bilgisi paketle uyuşmuyor." };
+    }
+
+    const lifecycle = resolvePackageLifecycleStatus({
+      lifecycleStatus: pkg.lifecycle_status,
+      isActive: Boolean(pkg.is_active),
+      remainingLessons: pkg.remaining_lessons ?? 0,
+      totalLessons: pkg.total_lessons ?? 0,
+      usedLessons: pkg.used_lessons ?? 0,
+    });
+    if (!packageAllowsUsage(lifecycle)) {
+      return { error: "Bu paket durumunda ders kullanımı yapılamaz." };
+    }
+    if (pkg.remaining_lessons <= 0 || pkg.used_lessons >= pkg.total_lessons) {
+      return { error: "Pakette kullanılacak ders kalmadı." };
     }
 
     const { data: rpcData, error: rpcErr } = await adminClient.rpc("complete_private_lesson_session", {
@@ -378,10 +532,15 @@ export async function completePrivateLessonSession(sessionId: string) {
         organizationId: actor.organization_id,
         errorMessage: rpcErr.message,
       });
-      return { error: `Tamamlama başarısız: ${rpcErr.message}` };
+      return {
+        error: operationalError("Ders tamamlanamadı", {
+          rawMessage: rpcErr.message,
+          code: diagnosticsCode("PLN", "complete"),
+        }),
+      };
     }
 
-    const payload = rpcData as { ok?: boolean; error?: string } | null;
+    const payload = rpcData as { ok?: boolean; error?: string; usage_id?: string } | null;
     if (!payload?.ok) {
       captureServerActionSignal("privateLesson.completePrivateLessonSession", "complete_session_rpc_rejected", {
         sessionId: sid,
@@ -389,33 +548,112 @@ export async function completePrivateLessonSession(sessionId: string) {
         organizationId: actor.organization_id,
         rpcPayload: payload,
       });
-      return { error: typeof payload?.error === "string" ? payload.error : "Tamamlama reddedildi." };
+      return { error: mapRpcCompleteErrorToUserMessage(payload?.error) };
     }
 
-    const { data: pkgRow } = await adminClient
+    const { data: pkgAfter } = await adminClient
       .from("private_lesson_packages")
-      .select("athlete_id, package_name")
+      .select("remaining_lessons, used_lessons, total_lessons, is_active, lifecycle_status")
       .eq("id", sess.package_id as string)
       .maybeSingle();
-    const pName = (pkgRow as { package_name?: string } | null)?.package_name || "Özel ders paketi";
+    const nextRemaining = Number((pkgAfter as { remaining_lessons?: number } | null)?.remaining_lessons ?? 0);
+    const completedPayload = packageCompletedUpdatePayload(caps, nextRemaining);
+    if (Object.keys(completedPayload).length > 0) {
+      await adminClient
+        .from("private_lesson_packages")
+        .update(completedPayload)
+        .eq("id", sess.package_id as string)
+        .eq("organization_id", actor.organization_id!);
+    }
+
+    await appendPrivateLessonPackageEvent(adminClient, {
+      packageId: sess.package_id as string,
+      organizationId: actor.organization_id!,
+      actorId: actor.id,
+      eventType: "lesson_used",
+      title: "Ders hakkı kullanıldı",
+      description: "Özel ders yapıldı olarak işaretlendi",
+      metadata: { sessionId: sid, usageId: payload.usage_id ?? null, nextRemaining },
+    });
+
+    await logAuditEvent({
+      organizationId: actor.organization_id,
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "private_lesson_session.complete",
+      entityType: "private_lesson_session",
+      entityId: sid,
+      metadata: { packageId: sess.package_id, usageId: payload.usage_id ?? null },
+    });
+    await logAuditEvent({
+      organizationId: actor.organization_id,
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "private_lesson_package.lesson_used",
+      entityType: "private_lesson_package",
+      entityId: sess.package_id as string,
+      metadata: { sessionId: sid, nextRemaining },
+    });
+
+    await appendOperationalTimeline(adminClient, {
+      organizationId: actor.organization_id,
+      eventType: "private_lesson.completed",
+      summary: `Özel ders tamamlandı · kalan ${nextRemaining}`,
+      payload: { sessionId: sid, packageId: sess.package_id },
+      actorUserId: actor.id,
+    });
+
+    const pName = pkg.package_name || "Özel ders paketi";
+    const athleteId = (pkg.athlete_id || sess.athlete_id) as string | undefined;
     try {
-      if (pkgRow?.athlete_id) {
+      if (athleteId) {
         await insertNotificationsForUsers(
-          [pkgRow.athlete_id as string],
-          `${pName}: Planlanan özel ders tamamlandı; paketten 1 ders düşüldü.`,
+          [athleteId],
+          "Özel dersiniz yapıldı olarak işaretlendi.",
           "private_lesson.updated"
         );
       }
+      const coachNotifyId = (sess.coach_id as string | null) || pkg.coach_id;
+      if (coachNotifyId && coachNotifyId !== athleteId) {
+        await insertNotificationsForUsers(
+          [coachNotifyId],
+          "Özel ders tamamlandı olarak kaydedildi.",
+          "private_lesson.updated"
+        );
+      }
+      if (role === "admin") {
+        const { data: admins } = await adminClient
+          .from("profiles")
+          .select("id")
+          .eq("organization_id", actor.organization_id!)
+          .eq("role", "admin")
+          .neq("id", actor.id)
+          .limit(8);
+        const adminIds = (admins || []).map((r) => r.id as string).filter(Boolean);
+        if (adminIds.length > 0) {
+          await insertNotificationsForUsers(
+            adminIds,
+            `${pName}: Özel ders tamamlandı ve paket hakkı düşüldü.`,
+            "private_lesson.updated"
+          );
+        }
+      }
     } catch {
-      /* opsiyonel */
+      /* bildirim opsiyonel */
     }
 
-    revalidatePath("/ozel-ders-paketleri");
-    revalidatePath("/ozel-ders-paketlerim");
-    revalidatePath(`/ozel-ders-paketleri/${sess.package_id as string}`);
-    revalidatePath("/");
-    return { success: true as const };
+    await revalidatePrivateLessonCompletionPaths(sess.package_id as string, athleteId ?? null);
+    return {
+      success: true as const,
+      message: "Ders tamamlandı ve paket hakkı düşüldü.",
+      nextRemaining,
+    };
   });
+}
+
+/** Haftalık çizelge modalından özel dersi tamamla (aynı atomik RPC + senkron). */
+export async function markPrivateLessonSessionCompletedFromSchedule(sessionId: string) {
+  return completePrivateLessonSession(sessionId);
 }
 
 export async function cancelPrivateLessonSession(sessionId: string) {
@@ -456,7 +694,14 @@ export async function cancelPrivateLessonSession(sessionId: string) {
       })
       .eq("id", sid)
       .eq("status", "planned");
-    if (uErr) return { error: `İptal başarısız: ${uErr.message}` };
+    if (uErr) {
+      return {
+        error: operationalError("Plan iptal edilemedi", {
+          rawMessage: uErr.message,
+          code: diagnosticsCode("PLN", "cancel"),
+        }),
+      };
+    }
 
     const when = new Date(sess.starts_at as string).toLocaleString("tr-TR", {
       day: "numeric",

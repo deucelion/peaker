@@ -38,7 +38,9 @@ import {
   type AuditAction,
   type AuditEntityType,
 } from "@/lib/audit/types";
+import { auditDateEndIso, auditDateStartIso } from "@/lib/audit/auditQueryRange";
 import { csvFilename } from "@/lib/export/csv";
+import { buildCsvDownloadHeaders } from "@/lib/export/exportHttpHeaders";
 import { streamCsvToResponse, chunkedCsvIterable } from "@/lib/export/csvStreamIterable";
 import { ensureRateLimitSetup } from "@/lib/rateLimit";
 import { checkExportRateLimitAsync, formatRateLimitRetryMessage } from "@/lib/rateLimit/exportRateLimit";
@@ -158,8 +160,8 @@ export async function GET(request: Request) {
   if (scopeOrg) q = q.eq("organization_id", scopeOrg);
   if (wantedAction) q = q.eq("action", wantedAction);
   if (wantedEntity) q = q.eq("entity_type", wantedEntity);
-  if (wantedFrom) q = q.gte("created_at", new Date(wantedFrom).toISOString());
-  if (wantedTo) q = q.lte("created_at", new Date(wantedTo).toISOString());
+  if (wantedFrom) q = q.gte("created_at", auditDateStartIso(wantedFrom));
+  if (wantedTo) q = q.lte("created_at", auditDateEndIso(wantedTo));
 
   const { data, error } = await q;
   if (error) {
@@ -298,15 +300,10 @@ export async function GET(request: Request) {
 
   return new Response(stream, {
     status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store, max-age=0",
-      "X-Peaker-Row-Count": String(rows.length),
-      "X-Peaker-Cap": String(AUDIT_EXPORT_HARD_CAP),
-      "X-Peaker-Truncated": willTruncate ? "1" : "0",
-      // Streaming yardımcı (proxy buffering engelle):
-      "X-Accel-Buffering": "no",
-    },
+    headers: buildCsvDownloadHeaders(filename, {
+      rowCount: rows.length,
+      cap: AUDIT_EXPORT_HARD_CAP,
+      truncated: willTruncate,
+    }),
   });
 }

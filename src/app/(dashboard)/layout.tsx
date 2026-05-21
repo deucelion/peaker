@@ -21,10 +21,13 @@ import {
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
-import { getUnreadNotificationCount } from "@/lib/actions/notificationActions";
+import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import type { CoachPermissions, AthletePermissions } from "@/lib/types";
 import { PeakerDebugInstaller } from "@/components/dev/PeakerDebugInstaller";
+import { DashboardOfflineShell } from "@/components/offline";
+import { CoachMobileQuickStrip } from "@/components/mobile/CoachMobileQuickStrip";
+import { clearAllOfflineActions } from "@/lib/offline/offlineActionQueue";
 
 const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
@@ -54,10 +57,12 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { unreadCount, badgePulse } = useUnreadNotificationsLive();
   const [coachPermissions, setCoachPermissions] = useState<CoachPermissions | null>(null);
   const [athletePermissions, setAthletePermissions] = useState<AthletePermissions | null>(null);
   const [organizationName, setOrganizationName] = useState("PEAKER");
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
 
   useEffect(() => {
@@ -106,6 +111,8 @@ export default function DashboardLayout({
         if (!cancelled) {
           setRole(payload.role);
           setUserName(payload.fullName || "Peaker User");
+          setOrganizationId(payload.organizationId ?? null);
+          setUserId(payload.userId ?? null);
           setPermissionsLoading(true);
           setCoachPermissions(null);
           setAthletePermissions(null);
@@ -141,52 +148,8 @@ export default function DashboardLayout({
     };
   }, [router]);
 
-  useEffect(() => {
-    let active = true;
-    let currentUserId = "";
-
-    async function fetchUnreadCount() {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
-      if (!user) {
-        if (active) setUnreadCount(0);
-        return;
-      }
-      currentUserId = user.id;
-
-      const res = await getUnreadNotificationCount();
-      if (active) setUnreadCount("count" in res ? res.count : 0);
-    }
-
-    void fetchUnreadCount();
-    const channel = supabase
-      .channel("notifications-unread")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        (payload) => {
-          const nextUserId =
-            (payload.new as { user_id?: string } | null)?.user_id ||
-            (payload.old as { user_id?: string } | null)?.user_id ||
-            "";
-          if (nextUserId && nextUserId === currentUserId) {
-            void fetchUnreadCount();
-          }
-        }
-      )
-      .subscribe();
-    const interval = setInterval(() => {
-      void fetchUnreadCount();
-    }, 15000);
-
-    return () => {
-      active = false;
-      void supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
-  }, [pathname]);
-
   const handleLogout = async () => {
+    await clearAllOfflineActions();
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -363,7 +326,7 @@ export default function DashboardLayout({
           
           <div className="flex items-center gap-2 sm:gap-3 ml-auto text-white text-right min-w-0">
             {quickActions.length > 0 ? (
-              <div className="relative hidden sm:block">
+              <div className="relative hidden md:block">
                 <details className="group">
                   <summary className="list-none cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white/90">
                     <span className="inline-flex items-center gap-1.5">
@@ -391,7 +354,7 @@ export default function DashboardLayout({
               <div className="flex items-center gap-1 mt-1">
                 <Trophy size={8} className="text-[#7c3aed]" />
                 <span className="text-[7px] font-black italic uppercase tracking-[0.15em] text-gray-500">
-                  {safeRole === "super_admin" ? "PLATFORM OWNER" : safeRole === "admin" ? "ORG ADMIN" : safeRole === "coach" ? "HEAD COACH" : "ELITE ATHLETE"}
+                  {safeRole === "super_admin" ? "PLATFORM OWNER" : safeRole === "admin" ? "ORG ADMIN" : safeRole === "coach" ? "KOÇ" : "SPORCU"}
                 </span>
               </div>
             </div>
@@ -403,7 +366,9 @@ export default function DashboardLayout({
             >
               <Bell size={16} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-[#7c3aed] text-white rounded-full ring-2 ring-[#09090b] text-[8px] font-black flex items-center justify-center">
+                <span
+                  className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-[#7c3aed] text-white rounded-full ring-2 ring-[#09090b] text-[8px] font-black flex items-center justify-center transition-transform ${badgePulse ? "animate-pulse scale-110 ring-violet-400/80" : ""}`}
+                >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -414,6 +379,12 @@ export default function DashboardLayout({
         {/* ANA İÇERİK - children'ın kendi padding yapısına saygı duyan kapsayıcı */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto animate-in fade-in duration-500">
+            <DashboardOfflineShell organizationId={organizationId} userId={userId} />
+            {isCoachOrAdmin && !permissionsLoading ? (
+              <div className="mb-4">
+                <CoachMobileQuickStrip />
+              </div>
+            ) : null}
             {children}
             {process.env.NODE_ENV === "development" ? <PeakerDebugInstaller /> : null}
           </div>

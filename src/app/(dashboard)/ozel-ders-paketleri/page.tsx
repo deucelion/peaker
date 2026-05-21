@@ -6,6 +6,7 @@ import { Loader2, PlusCircle, UserRound, Package, CircleDollarSign, ChevronDown,
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { createPrivateLessonPackage, listPrivateLessonFormOptions, listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
+import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import type { PrivateLessonPackage } from "@/lib/types";
 import { PackageCard } from "./_components/PackageCard";
 
@@ -44,17 +45,16 @@ export default function PrivateLessonPackagesPage() {
     return athletes.filter((athlete) => athlete.full_name.toLowerCase().includes(q));
   }, [athletes, athleteSearch]);
   const parsedTotalLessons = Number(form.totalLessons);
-  const parsedTotalPrice = Number(form.totalPrice);
-  const parsedAmountPaid = Number(form.amountPaid);
+  const parsedTotalPrice = parseTRYMoneyInput(form.totalPrice);
+  const parsedAmountPaid = parseTRYMoneyInput(form.amountPaid) ?? 0;
   const isFormValid =
     Boolean(form.athleteId) &&
     Boolean(form.packageType.trim()) &&
     Boolean(form.packageName.trim()) &&
     Number.isFinite(parsedTotalLessons) &&
     parsedTotalLessons > 0 &&
-    Number.isFinite(parsedTotalPrice) &&
-    parsedTotalPrice >= 0 &&
-    Number.isFinite(parsedAmountPaid) &&
+    parsedTotalPrice != null &&
+    parsedTotalPrice > 0 &&
     parsedAmountPaid >= 0 &&
     parsedAmountPaid <= parsedTotalPrice;
 
@@ -65,9 +65,8 @@ export default function PrivateLessonPackagesPage() {
     parsedTotalLessons > 0 &&
     Boolean(form.packageType.trim());
   const step3Done =
-    Number.isFinite(parsedTotalPrice) &&
-    parsedTotalPrice >= 0 &&
-    Number.isFinite(parsedAmountPaid) &&
+    parsedTotalPrice != null &&
+    parsedTotalPrice > 0 &&
     parsedAmountPaid >= 0 &&
     parsedAmountPaid <= parsedTotalPrice;
 

@@ -1,12 +1,25 @@
 import type { PrivateLessonPaymentStatus } from "@/lib/types";
 
+/** DB / hesap için güvenli sayı (zaten parse edilmiş değerler). Ham form string'i için `parseTRYMoneyInput` kullanın. */
 export function normalizeMoney(value: number | string | null | undefined): number {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) {
+      const parsed = parseTRYMoneyInput(trimmed);
+      if (parsed != null) return parsed;
+    }
+  }
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.round(n * 100) / 100;
 }
 
-// Parses human-entered money safely for both tr-TR and en-US styles.
+/** Türkiye para girişi: 10000, 10.000, 10.000,50, 10000.50 */
+export function parseTRYMoneyInput(value: string | number | null | undefined): number | null {
+  return parseMoneyInput(value);
+}
+
+/** @deprecated `parseTRYMoneyInput` ile aynı; geriye dönük importlar için. */
 export function parseMoneyInput(value: string | number | null | undefined): number | null {
   if (typeof value === "number") {
     if (!Number.isFinite(value) || value < 0) return null;
@@ -43,6 +56,25 @@ export function parseMoneyInput(value: string | number | null | undefined): numb
   const n = Number(normalized);
   if (!Number.isFinite(n) || n < 0) return null;
   return normalizeMoney(n);
+}
+
+export function requireTRYMoneyInput(
+  value: string | number | null | undefined,
+  fieldLabel = "Tutar"
+): { ok: true; amount: number } | { ok: false; error: string } {
+  const amount = parseTRYMoneyInput(value);
+  if (amount == null || !Number.isFinite(amount)) {
+    return { ok: false, error: `${fieldLabel} geçerli bir tutar olmalıdır.` };
+  }
+  if (amount <= 0) {
+    return { ok: false, error: `${fieldLabel} sıfırdan büyük olmalıdır.` };
+  }
+  return { ok: true, amount };
+}
+
+export function formatCurrencyTRY(value: number | null | undefined): string {
+  const v = normalizeMoney(value);
+  return `₺${v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function computePaymentStatus(totalPriceInput: number, amountPaidInput: number): PrivateLessonPaymentStatus {

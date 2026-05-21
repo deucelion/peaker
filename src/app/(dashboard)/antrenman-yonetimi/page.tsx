@@ -17,6 +17,16 @@ import { listAttendanceSnapshot, listTrainingParticipantsSnapshot } from "@/lib/
 import type { TrainingParticipantRow, TrainingScheduleRow } from "@/types/domain";
 import Notification from "@/components/Notification";
 import { setAttendanceStatus } from "@/lib/actions/attendanceActions";
+import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import { attendanceDraftKey } from "@/lib/offline/draftKeys";
+import {
+  enqueueAttendanceChange,
+  persistAttendanceDraft,
+  type AttendanceDraftPayload,
+} from "@/lib/offline/attendanceOffline";
+import { buildOfflineScopeKey } from "@/lib/offline/scope";
+import { clearScopedFormDraft, loadScopedFormDraft } from "@/lib/offline/scopedFormDrafts";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import WeeklyLessonSchedulePage from "../haftalik-ders-programi/page";
 import LessonsPage from "../dersler/page";
@@ -71,6 +81,10 @@ export default function AntrenmanYonetimi() {
   const [rowSavingIds, setRowSavingIds] = useState<string[]>([]);
   const [lessonMenuOpen, setLessonMenuOpen] = useState(false);
   const lessonMenuRef = useRef<HTMLDivElement>(null);
+  const online = useOnlineStatus();
+  const [scopeKey, setScopeKey] = useState("");
+  const [actorUserId, setActorUserId] = useState("");
+  const [hasAttendanceDraft, setHasAttendanceDraft] = useState(false);
 
   const selectedTraining = trainings.find((t) => t.id === selectedTrainingId);
   const moduleTabs = [
@@ -145,24 +159,53 @@ export default function AntrenmanYonetimi() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [lessonMenuOpen]);
 
-  const loadParticipants = useCallback(async (tId: string) => {
-    const snapshot = await listTrainingParticipantsSnapshot(tId, 1, 300);
-    if ("error" in snapshot) {
-      setActionMessage(snapshot.error || "Katılımcı verisi alınamadı.");
-      setParticipants([]);
-      return;
-    }
-    const data = (snapshot.participants || []) as unknown as TrainingParticipantRow[];
-    if (data) {
-      const normalized = data.map((row) => ({
-        ...row,
-        attendance_status:
-          row.attendance_status ||
-          (row.is_present === true ? "attended" : row.is_present === false ? "missed" : "registered"),
-      }));
-      setParticipants(normalized);
-    } else setParticipants([]);
-  }, []);
+  const applyAttendanceStatuses = useCallback(
+    (
+      rows: TrainingParticipantRow[],
+      statuses: Record<string, "registered" | "attended" | "missed" | "cancelled">
+    ) =>
+      rows.map((row) => {
+        const status = statuses[row.profile_id];
+        if (!status) return row;
+        return {
+          ...row,
+          attendance_status: status,
+          is_present: status === "attended" ? true : status === "missed" ? false : null,
+        };
+      }),
+    []
+  );
+
+  const loadParticipants = useCallback(
+    async (tId: string) => {
+      const snapshot = await listTrainingParticipantsSnapshot(tId, 1, 300);
+      if ("error" in snapshot) {
+        setActionMessage(snapshot.error || "Katılımcı verisi alınamadı.");
+        setParticipants([]);
+        return;
+      }
+      const data = (snapshot.participants || []) as unknown as TrainingParticipantRow[];
+      if (data) {
+        let normalized = data.map((row) => ({
+          ...row,
+          attendance_status:
+            row.attendance_status ||
+            (row.is_present === true ? "attended" : row.is_present === false ? "missed" : "registered"),
+        })) as TrainingParticipantRow[];
+
+        if (scopeKey && actorUserId) {
+          const draft = loadScopedFormDraft(scopeKey, attendanceDraftKey(tId, actorUserId));
+          const payload = draft?.payload as AttendanceDraftPayload | undefined;
+          if (payload?.trainingId === tId && payload.statuses) {
+            normalized = applyAttendanceStatuses(normalized, payload.statuses);
+            setHasAttendanceDraft(true);
+          }
+        }
+        setParticipants(normalized);
+      } else setParticipants([]);
+    },
+    [scopeKey, actorUserId, applyAttendanceStatuses]
+  );
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -176,6 +219,12 @@ export default function AntrenmanYonetimi() {
     const resolvedPermissions = snapshot.permissions ?? DEFAULT_COACH_PERMISSIONS;
     setActorRole(resolvedRole);
     setPermissions(resolvedPermissions);
+
+    const me = await fetchMeRoleClient();
+    if (me.ok) {
+      setActorUserId(me.userId);
+      setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
+    }
 
     const tData = (snapshot.trainings || []) as unknown as TrainingScheduleRow[];
     if (tData && tData.length > 0) {
@@ -231,21 +280,73 @@ export default function AntrenmanYonetimi() {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }
 
-  // YOKLAMA DURUMUNU GÜNCELLEME
-  async function updateAttendance(profileId: string, status: "registered" | "attended" | "missed" | "cancelled") {
+  function saveAttendanceDraftLocal(
+    trainingId: string,
+    nextParticipants: TrainingParticipantRow[]
+  ) {
+    if (!scopeKey || !actorUserId) return;
+    const statuses = nextParticipants.reduce<
+      Record<string, "registered" | "attended" | "missed" | "cancelled">
+    >((acc, p) => {
+      acc[p.profile_id] = normalizedAttendanceStatus(p);
+      return acc;
+    }, {});
+    persistAttendanceDraft(scopeKey, attendanceDraftKey(trainingId, actorUserId), {
+      trainingId,
+      lessonTitle: selectedTraining?.title,
+      statuses,
+      updatedAt: new Date().toISOString(),
+    });
+    setHasAttendanceDraft(true);
+  }
+
+  async function updateAttendance(
+    profileId: string,
+    status: "registered" | "attended" | "missed" | "cancelled"
+  ) {
     if (!selectedTrainingId) return;
+    const participant = participants.find((p) => p.profile_id === profileId);
+    const profileName = participant?.profiles?.full_name;
+
     setRowSavingIds((prev) => [...prev, profileId]);
+    const nextParticipants = participants.map((p) =>
+      p.profile_id === profileId
+        ? {
+            ...p,
+            attendance_status: status,
+            is_present: status === "attended" ? true : status === "missed" ? false : null,
+          }
+        : p
+    );
+    setParticipants(nextParticipants);
+    saveAttendanceDraftLocal(selectedTrainingId, nextParticipants);
+
+    if (!online) {
+      if (!scopeKey) {
+        setActionMessage("Çevrimdışı yoklama için oturum doğrulanamadı.");
+        setRowSavingIds((prev) => prev.filter((id) => id !== profileId));
+        return;
+      }
+      const queued = enqueueAttendanceChange({
+        scopeKey,
+        trainingId: selectedTrainingId,
+        profileId,
+        profileName,
+        status,
+        lessonTitle: selectedTraining?.title,
+      });
+      if ("error" in queued) setActionMessage(queued.error);
+      else setActionMessage("Yoklama kuyruğa alındı. Bağlantı gelince senkronize edilir.");
+      setRowSavingIds((prev) => prev.filter((id) => id !== profileId));
+      return;
+    }
+
     const result = await setAttendanceStatus(selectedTrainingId, profileId, status);
     if (result?.success) {
-      setParticipants((prev) => prev.map((p) => 
-        p.profile_id === profileId
-          ? {
-              ...p,
-              attendance_status: status,
-              is_present: status === "attended" ? true : status === "missed" ? false : null,
-            }
-          : p
-      ));
+      if (scopeKey && actorUserId) {
+        clearScopedFormDraft(scopeKey, attendanceDraftKey(selectedTrainingId, actorUserId));
+        setHasAttendanceDraft(false);
+      }
     } else {
       setActionMessage(result?.error || "Yoklama güncellenemedi.");
     }
@@ -287,6 +388,48 @@ export default function AntrenmanYonetimi() {
       return;
     }
     setBulkSaving(true);
+
+    const nextParticipants = participants.map((p) =>
+      targetIds.includes(p.profile_id)
+        ? {
+            ...p,
+            attendance_status: status,
+            is_present: status === "attended" ? true : status === "missed" ? false : null,
+          }
+        : p
+    );
+    setParticipants(nextParticipants);
+    saveAttendanceDraftLocal(selectedTrainingId, nextParticipants);
+
+    if (!online) {
+      if (!scopeKey) {
+        setActionMessage("Çevrimdışı toplu yoklama için oturum doğrulanamadı.");
+        setBulkSaving(false);
+        return;
+      }
+      let errors = 0;
+      for (const profileId of targetIds) {
+        const p = participants.find((x) => x.profile_id === profileId);
+        const queued = enqueueAttendanceChange({
+          scopeKey,
+          trainingId: selectedTrainingId,
+          profileId,
+          profileName: p?.profiles?.full_name,
+          status,
+          lessonTitle: selectedTraining?.title,
+        });
+        if ("error" in queued) errors += 1;
+      }
+      setSelectedIds([]);
+      setActionMessage(
+        errors > 0
+          ? `${errors} kayıt kuyruğa alınamadı; diğerleri bekliyor.`
+          : "Toplu yoklama kuyruğa alındı. Bağlantı gelince senkronize edilir."
+      );
+      setBulkSaving(false);
+      return;
+    }
+
     const results = await Promise.all(
       targetIds.map(async (profileId) => {
         const res = await setAttendanceStatus(selectedTrainingId, profileId, status);
@@ -317,6 +460,10 @@ export default function AntrenmanYonetimi() {
       setActionMessage(`${failed.length} kayıt güncellenemedi (${failedNames.join(", ")}${suffix}); diğerleri başarılı.`);
     } else {
       setActionMessage("Toplu yoklama başarıyla güncellendi.");
+      if (scopeKey && actorUserId) {
+        clearScopedFormDraft(scopeKey, attendanceDraftKey(selectedTrainingId, actorUserId));
+        setHasAttendanceDraft(false);
+      }
     }
     setBulkSaving(false);
   }
@@ -550,6 +697,19 @@ export default function AntrenmanYonetimi() {
             </div>
           </div>
 
+          {!online ? (
+            <div className="mb-3">
+              <Notification
+                message="Çevrimdışısınız; yoklama seçimleri cihazınızda saklanır ve bağlantı gelince senkronize edilir."
+                variant="info"
+              />
+            </div>
+          ) : null}
+          {hasAttendanceDraft ? (
+            <div className="mb-3">
+              <Notification message="Kaydedilmemiş yoklama taslağı geri yüklendi." variant="info" />
+            </div>
+          ) : null}
           <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-600">Sporcu yoklaması</p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {filteredParticipants.length > 0 ? (

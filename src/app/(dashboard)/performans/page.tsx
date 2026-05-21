@@ -712,8 +712,8 @@ export default function PerformanceAnalytics() {
           icon={<Waves size={14} aria-hidden />}
         />
         <CompactKpi
-          label="Readiness"
-          metricTooltip="Wellness alt skorlarından türetilen hazırlık (en fazla 7 kayıt)."
+          label="Hazırlık"
+          metricTooltip="İyi oluş alt skorlarından türetilen hazırlık puanı (en fazla 7 kayıt)."
           primary={kpiNarratives.readiness.primary}
           unit={readinessHasData ? "/100" : ""}
           statusLine={kpiNarratives.readiness.status}

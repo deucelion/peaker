@@ -1,17 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { TrendingUp } from "lucide-react"; 
-import { 
-  Radar, 
-  RadarChart, 
-  PolarGrid, 
-  PolarAngleAxis, 
-  ResponsiveContainer 
-} from 'recharts';
+import { TrendingUp } from "lucide-react";
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  ResponsiveContainer,
+} from "recharts";
 import {
   listWellnessReportsForAthleteRadar,
   type WellnessRadarRow,
 } from "@/lib/actions/wellnessFormActions";
+import Link from "next/link";
 
 export default function PerformanceRadar() {
   const [reports, setReports] = useState<WellnessRadarRow[]>([]);
@@ -43,8 +44,10 @@ export default function PerformanceRadar() {
     };
   }, []);
 
+  const hasData = reports.length > 0;
+
   const data = useMemo(() => {
-    if (reports.length === 0) {
+    if (!hasData) {
       return [
         { subject: "UYKU", A: 0, fullMark: 100 },
         { subject: "ENERJI", A: 0, fullMark: 100 },
@@ -74,52 +77,74 @@ export default function PerformanceRadar() {
       { subject: "STRES", A: stressScore, fullMark: 100 },
       { subject: "NABIZ", A: heartScore, fullMark: 100 },
     ];
-  }, [reports]);
+  }, [hasData, reports]);
 
-  if (loading) return (
-    <div className="h-[450px] w-full bg-[#121215] rounded-[3.5rem] border border-white/5 animate-pulse" />
-  );
+  if (loading) {
+    return (
+      <div className="h-[180px] w-full min-w-0 animate-pulse rounded-xl border border-white/5 bg-[#121215]" />
+    );
+  }
+
+  if (!hasData) {
+    return (
+      <div className="flex h-[180px] w-full min-w-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 px-4 text-center">
+        <TrendingUp className="mb-3 text-[#7c3aed]/40" size={28} aria-hidden />
+        <p className="text-xs font-black uppercase italic text-gray-300">Henüz yeterli veri yok</p>
+        <p className="mt-2 max-w-xs text-[11px] font-bold text-gray-500">
+          İyi oluş raporu girdikçe beceri radarı ve performans analizi oluşur.
+        </p>
+        <Link
+          href="/sporcu/sabah-raporu"
+          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+        >
+          Sabah raporu gir
+        </Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-[#121215] p-10 rounded-[3.5rem] border border-white/5 h-[450px] w-full group sm:hover:border-[#7c3aed]/30 transition-all shadow-2xl relative overflow-hidden">
-      <div className="flex justify-between items-center mb-8 relative z-10">
-        <div>
-          <h3 className="text-white font-black italic uppercase text-lg tracking-tight">Performans Analizi</h3>
-          <p className="text-[#7c3aed] text-[9px] font-black uppercase tracking-[0.3em]">Son 14 Gun Wellness Verisi</p>
+    <div className="relative h-[180px] w-full min-w-0 overflow-hidden rounded-xl border border-white/5 bg-[#121215] p-3 sm:h-[200px] sm:p-4">
+      <div className="relative z-10 mb-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-black uppercase italic tracking-tight text-white">
+            Performans Analizi
+          </h3>
+          <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#7c3aed]">
+            Son 14 gün iyi oluş verisi
+          </p>
         </div>
-        <div className="w-10 h-10 bg-[#7c3aed]/10 text-[#7c3aed] rounded-xl flex items-center justify-center border border-[#7c3aed]/20">
-          <TrendingUp size={20} />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#7c3aed]/20 bg-[#7c3aed]/10 text-[#7c3aed]">
+          <TrendingUp size={18} aria-hidden />
         </div>
       </div>
 
-      <div className="h-[300px] w-full">
+      <div className="h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
+          <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
             <PolarGrid stroke="#ffffff10" strokeDasharray="3 3" />
-            <PolarAngleAxis 
-              dataKey="subject" 
-              tick={{ 
-                fill: '#6b7280', 
-                fontSize: 10, 
-                fontWeight: '900',
-                letterSpacing: '0.1em'
-              }} 
+            <PolarAngleAxis
+              dataKey="subject"
+              tick={{
+                fill: "#6b7280",
+                fontSize: 9,
+                fontWeight: "900",
+                letterSpacing: "0.08em",
+              }}
             />
             <Radar
               name="Sporcu"
               dataKey="A"
               stroke="#7c3aed"
-              strokeWidth={3}
+              strokeWidth={2}
               fill="#7c3aed"
-              fillOpacity={0.3}
-              animationBegin={180}
-              animationDuration={1500}
+              fillOpacity={0.28}
+              animationBegin={120}
+              animationDuration={900}
             />
           </RadarChart>
         </ResponsiveContainer>
       </div>
-
-      <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-[#7c3aed]/5 rounded-full blur-[100px]" />
     </div>
   );
 }

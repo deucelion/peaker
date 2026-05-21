@@ -27,6 +27,14 @@ export type OperationalAlertMetrics = {
   workerRescued24h: number;
   workerDeadStuck24h: number;
   workerRetryStorms24h: number;
+  /** Son worker tick yaşı (dakika); null = bilinmiyor */
+  workerHeartbeatStaleMinutes: number | null;
+  /** pg_cron / retention job son çalışma failed */
+  cronFailedJobNames: string[];
+  /** Son 60 dk enqueue */
+  queueJobsLast60Min: number;
+  /** Aktif export job sayısı */
+  activeExportJobsCount: number;
 };
 
 const QUEUE_LATENCY_WARN_MIN = 15;
@@ -189,6 +197,46 @@ export function evaluateOperationalAlerts(metrics: OperationalAlertMetrics): Ope
       severity: "warning",
       title: "Retry storm tespitleri",
       detail: { workerRetryStorms24h: metrics.workerRetryStorms24h, threshold: RETRY_STORM_WARN },
+    });
+  }
+
+  if (metrics.workerHeartbeatStaleMinutes != null && metrics.workerHeartbeatStaleMinutes >= 5) {
+    push(out, {
+      ruleKey: "worker:heartbeat_stale",
+      organizationId: null,
+      severity: metrics.workerHeartbeatStaleMinutes >= 15 ? "critical" : "warning",
+      title: "Worker nabzı gecikmiş",
+      detail: { staleMinutes: metrics.workerHeartbeatStaleMinutes },
+    });
+  }
+
+  for (const name of metrics.cronFailedJobNames) {
+    push(out, {
+      ruleKey: `cron:failed:${name}`,
+      organizationId: null,
+      severity: "warning",
+      title: `Cron başarısız: ${name}`,
+      detail: { jobName: name },
+    });
+  }
+
+  if (metrics.queueJobsLast60Min >= 150) {
+    push(out, {
+      ruleKey: "queue:enqueue_spike_60m",
+      organizationId: null,
+      severity: metrics.queueJobsLast60Min >= 300 ? "critical" : "warning",
+      title: "Kuyruk büyüme hızı yüksek",
+      detail: { jobsLast60Min: metrics.queueJobsLast60Min },
+    });
+  }
+
+  if (metrics.activeExportJobsCount >= 4) {
+    push(out, {
+      ruleKey: "export:concurrent_active",
+      organizationId: null,
+      severity: metrics.activeExportJobsCount >= 8 ? "critical" : "warning",
+      title: "Eşzamanlı export yükü",
+      detail: { activeExportJobsCount: metrics.activeExportJobsCount },
     });
   }
 

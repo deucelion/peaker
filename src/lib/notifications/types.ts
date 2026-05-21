@@ -17,6 +17,8 @@ export type NotificationType =
   | "payment.received"
   | "payment.scheduled"
   | "payment.overdue"
+  | "receivable.due_soon"
+  | "receivable.overdue"
   | "private_lesson.created"
   | "private_lesson.updated"
   | "private_lesson.cancelled"
@@ -45,7 +47,7 @@ export type NotificationCategory =
 export const NOTIFICATION_CATEGORY_TYPES: Record<NotificationCategory, ReadonlyArray<NotificationType>> = {
   lesson: ["lesson.created", "lesson.assigned"],
   program: ["program.published"],
-  payment: ["payment.received", "payment.scheduled"],
+  payment: ["payment.received", "payment.scheduled", "receivable.due_soon", "receivable.overdue"],
   private_lesson: ["private_lesson.created", "private_lesson.updated"],
   package: ["package.created", "package.payment_received"],
   wellness: ["wellness.reminder"],
@@ -62,7 +64,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, { title:
   },
   payment: {
     title: "Ödeme bilgileri",
-    description: "Tahsilat alındığında veya yeni ödeme planlandığında bildirim alın.",
+    description: "Tahsilat kaydı eklendiğinde veya vade hatırlatmalarında bildirim alın.",
   },
   private_lesson: {
     title: "Özel ders oturumları",

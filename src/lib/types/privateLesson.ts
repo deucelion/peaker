@@ -1,5 +1,20 @@
 export type PrivateLessonPaymentStatus = "unpaid" | "partial" | "paid";
 
+import type { PackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
+
+export type PackageFinanceSummary = {
+  totalPrice: number;
+  amountPaid: number;
+  remainingBalance: number;
+  paymentCount: number;
+  lastPaymentAt: string | null;
+  paymentComplete: boolean;
+  installmentOverdue: boolean;
+  installmentCount: number | null;
+  installmentIntervalDays: number | null;
+  nextPaymentDueAt: string | null;
+};
+
 export interface PrivateLessonPackage {
   id: string;
   organizationId: string;
@@ -16,8 +31,35 @@ export interface PrivateLessonPackage {
   amountPaid: number;
   paymentStatus: PrivateLessonPaymentStatus;
   isActive: boolean;
+  lifecycleStatus: PackageLifecycleStatus;
+  installmentCount: number | null;
+  installmentIntervalDays: number | null;
+  nextPaymentDueAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PrivateLessonPackageEventRow {
+  id: string;
+  packageId: string;
+  organizationId: string;
+  actorId: string | null;
+  eventType: string;
+  title: string;
+  description: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PrivateLessonPackageUsageLessonRow {
+  id: string;
+  usedAt: string;
+  athleteName: string;
+  coachName: string | null;
+  lessonTitle: string;
+  creditsUsed: number;
+  attendanceStatus: string | null;
+  source: "usage" | "session";
 }
 
 export interface PrivateLessonPayment {
@@ -65,7 +107,10 @@ export interface PrivateLessonSessionListItem {
 export interface PrivateLessonPackageDetailSnapshot {
   package: PrivateLessonPackage;
   usageRows: PrivateLessonUsage[];
+  usageLessonRows: PrivateLessonPackageUsageLessonRow[];
   paymentRows: PrivateLessonPayment[];
+  eventRows: PrivateLessonPackageEventRow[];
+  financeSummary: PackageFinanceSummary;
   plannedSessionPreview: Array<{ id: string; startsAt: string; status: PrivateLessonSessionStatus }>;
   /**
    * Açık (`planned`) özel ders oturumu sayısı.

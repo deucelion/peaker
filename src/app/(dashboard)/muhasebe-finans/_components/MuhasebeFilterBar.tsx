@@ -222,6 +222,33 @@ export function MuhasebeFilterBar(props: MuhasebeFilterBarProps) {
                   ))}
                 </select>
               </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-black uppercase text-gray-500">Paket durumu</span>
+                <select
+                  value={props.draft.packageLifecycle}
+                  onChange={(e) => props.onDraftChange({ ...props.draft, packageLifecycle: e.target.value })}
+                  className="ui-select min-h-11 w-full max-w-full"
+                >
+                  <option value="all">Tüm paket durumları</option>
+                  <option value="active">Aktif</option>
+                  <option value="paused">Dondurulmuş</option>
+                  <option value="cancelled">İptal</option>
+                  <option value="refunded">İade</option>
+                  <option value="completed">Tamamlandı</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-black uppercase text-gray-500">Paket ödemesi</span>
+                <select
+                  value={props.draft.packagePaymentState}
+                  onChange={(e) => props.onDraftChange({ ...props.draft, packagePaymentState: e.target.value })}
+                  className="ui-select min-h-11 w-full max-w-full"
+                >
+                  <option value="all">Tümü</option>
+                  <option value="payment_complete">Ödeme tamamlandı</option>
+                  <option value="payment_pending">Ödeme bekliyor</option>
+                </select>
+              </label>
             </>
           ) : null}
         </div>

@@ -41,6 +41,7 @@ import {
   reportWorkerDuration,
 } from "@/lib/monitoring/advancedTelemetry";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { runReceivableReminderSweepIfDue } from "@/lib/finance/receivableReminderSweep";
 import { appendOperationalTimeline } from "@/lib/operational/timeline";
 import { runStuckJobRescue } from "./rescueStuckJobs";
 import { decideRetry } from "./queueAdapter";
@@ -604,6 +605,13 @@ export async function runWorkerTick(options: WorkerTickOptions = {}): Promise<Wo
     logger.info("worker.tick", "tick complete", { ...out });
     return out;
   } finally {
+    try {
+      await runReceivableReminderSweepIfDue();
+    } catch (e) {
+      logger.warn("worker.tick", "receivable reminder sweep skipped", {
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
     await emitHeartbeat(adminClient, workerId, source, batchSize, heartbeatMetrics());
   }
 }
