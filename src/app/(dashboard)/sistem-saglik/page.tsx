@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseReadClient } from "@/lib/supabase/server-read";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { extractSessionRole } from "@/lib/auth/sessionClaims";
+import { assertSuperAdminPageAccess } from "@/lib/auth/superAdminPageGuard";
 import { getSystemHealthReport } from "@/lib/diagnostics/systemHealth";
 import { scanProfileIntegrity } from "@/lib/diagnostics/profileIntegrity";
 import ProfileIntegrityPanel from "./ProfileIntegrityPanel";
@@ -12,24 +10,7 @@ export default async function SystemHealthPage() {
   const { data: authData } = await sessionClient.auth.getUser();
   if (!authData.user) redirect("/login");
 
-  const { data: profile } = await sessionClient
-    .from("profiles")
-    .select("role")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-  let effectiveProfile = profile;
-  if (!effectiveProfile) {
-    try {
-      const adminClient = createSupabaseAdminClient();
-      const byId = await adminClient.from("profiles").select("role").eq("id", authData.user.id).maybeSingle();
-      effectiveProfile = byId.data ?? null;
-    } catch {
-      effectiveProfile = profile;
-    }
-  }
-
-  const sessionRole = getSafeRole(extractSessionRole(authData.user));
-  if (getSafeRole(effectiveProfile?.role) !== "super_admin" && sessionRole !== "super_admin") redirect("/login");
+  await assertSuperAdminPageAccess(sessionClient, authData.user, "/sistem-saglik");
 
   const report = await getSystemHealthReport();
   const integrity = await scanProfileIntegrity();

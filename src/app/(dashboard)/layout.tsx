@@ -20,6 +20,7 @@ import {
   Shield,
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { extractSessionRole } from "@/lib/auth/sessionClaims";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
@@ -65,6 +66,9 @@ export default function DashboardLayout({
   const [userId, setUserId] = useState<string | null>(null);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
 
+  const isSuperAdminRoute =
+    pathname === PATHS.superAdmin || pathname.startsWith(`${PATHS.superAdmin}/`);
+
   useEffect(() => {
     let cancelled = false;
     async function resolveRoleAndProfile() {
@@ -82,8 +86,26 @@ export default function DashboardLayout({
           if (!cancelled) {
             setPermissionsLoading(false);
             setLoading(false);
-            if (payload.httpStatus === 401) router.replace(PATHS.login);
-            else if (payload.httpStatus === 403) {
+            if (payload.httpStatus === 401) {
+              router.replace(PATHS.login);
+            } else if (payload.httpStatus === 403) {
+              if (isSuperAdminRoute) {
+                const { data: authData } = await supabase.auth.getUser();
+                const authUser = authData.user;
+                if (authUser) {
+                  const claimRole = getSafeRole(extractSessionRole(authUser));
+                  if (claimRole === "super_admin") {
+                    setRole("super_admin");
+                    setUserName(authUser.email ?? "Super Admin");
+                    setOrganizationId(null);
+                    setUserId(authUser.id);
+                    setOrganizationName("SYSTEM");
+                    setPermissionsLoading(false);
+                    setLoading(false);
+                    return;
+                  }
+                }
+              }
               if (payload.error === "admin_inactive") {
                 router.replace(PATHS.adminAccount);
               } else if (payload.error === "coach_inactive") {
@@ -146,7 +168,7 @@ export default function DashboardLayout({
       cancelled = true;
       authSub.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, pathname, isSuperAdminRoute]);
 
   const handleLogout = async () => {
     await clearAllOfflineActions();

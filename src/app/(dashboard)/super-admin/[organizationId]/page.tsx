@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { createServerSupabaseReadClient } from "@/lib/supabase/server-read";
-import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { extractSessionRole } from "@/lib/auth/sessionClaims";
+import { assertSuperAdminPageAccess } from "@/lib/auth/superAdminPageGuard";
 import { asSingleDynamicParam } from "@/lib/navigation/dynamicParams";
 import { fetchOrganizationByIdAdmin } from "@/lib/organization/adminOrganizationQuery";
 import { ORGANIZATION_STATUS_LABELS, parseOrganizationStatus } from "@/lib/organization/lifecycle";
@@ -26,41 +25,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
   const sessionClient = await createServerSupabaseReadClient();
   const { data: authData } = await sessionClient.auth.getUser();
   if (!authData.user) redirect("/login");
-
-  let { data: profile } = await sessionClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-  const sessionRole = getSafeRole(extractSessionRole(authData.user));
-  if (!profile) {
-    try {
-      const adminClient = createSupabaseAdminClient();
-      const byId = await adminClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-      if (byId.data) profile = byId.data;
-    } catch {
-      // ignore: claim fallback asagida denenir
-    }
-  }
-  if (!profile?.role && sessionRole === "super_admin") {
-    try {
-      const adminBootstrap = createSupabaseAdminClient();
-      const { error } = await adminBootstrap.from("profiles").upsert(
-        {
-          id: authData.user.id,
-          email: authData.user.email ?? null,
-          full_name: authData.user.email ?? "Super Admin",
-          role: "super_admin",
-          organization_id: null,
-          is_active: true,
-        },
-        { onConflict: "id" }
-      );
-      if (!error) {
-        const refreshed = await sessionClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-        profile = refreshed.data;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  if (getSafeRole(profile?.role) !== "super_admin" && sessionRole !== "super_admin") redirect("/login");
+  await assertSuperAdminPageAccess(sessionClient, authData.user, `/super-admin/${organizationId}`);
 
   const adminClient = createSupabaseAdminClient();
   const orgFetch = await fetchOrganizationByIdAdmin(adminClient, organizationId);

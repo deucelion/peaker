@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { createServerSupabaseReadClient } from "@/lib/supabase/server-read";
-import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { extractSessionRole } from "@/lib/auth/sessionClaims";
+import { assertSuperAdminPageAccess } from "@/lib/auth/superAdminPageGuard";
 import { getSystemHealthReport } from "@/lib/diagnostics/systemHealth";
 import {
   isMissingOrganizationLifecycleColumnError,
@@ -68,42 +67,7 @@ export default async function SuperAdminPage() {
   const sessionClient = await createServerSupabaseReadClient();
   const { data: authData } = await sessionClient.auth.getUser();
   if (!authData.user) redirect("/login");
-
-  let { data: profile } = await sessionClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-  const sessionRole = getSafeRole(extractSessionRole(authData.user));
-  if (!profile) {
-    try {
-      const adminClient = createSupabaseAdminClient();
-      const byId = await adminClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-      if (byId.data) profile = byId.data;
-    } catch {
-      // guard asagida claim ile de kontrol edilecek
-    }
-  }
-  if (!profile?.role && sessionRole === "super_admin") {
-    // Recovery: super admin auth claim var, profile kaydi eksikse tamamla.
-    try {
-      const adminClient = createSupabaseAdminClient();
-      const { error } = await adminClient.from("profiles").upsert(
-        {
-          id: authData.user.id,
-          email: authData.user.email ?? null,
-          full_name: authData.user.email ?? "Super Admin",
-          role: "super_admin",
-          organization_id: null,
-          is_active: true,
-        },
-        { onConflict: "id" }
-      );
-      if (!error) {
-        const refresh = await sessionClient.from("profiles").select("id, role").eq("id", authData.user.id).maybeSingle();
-        profile = refresh.data;
-      }
-    } catch {
-      // sayfa guard'i aşağıda karar verir
-    }
-  }
-  if (getSafeRole(profile?.role) !== "super_admin" && sessionRole !== "super_admin") redirect("/login");
+  await assertSuperAdminPageAccess(sessionClient, authData.user, "/super-admin");
 
   let health: SystemHealthReport = emptyHealthReport;
   try {

@@ -942,22 +942,22 @@ export default function SahaTestleriFinal() {
       {/* METRİK EDİTÖRÜ MODAL */}
       {showMetricModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 pb-[env(safe-area-inset-bottom,0px)]">
-          <div className="bg-[#121215] border border-white/10 rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-xl max-h-[90dvh] overflow-y-auto p-5 sm:p-7 relative shadow-[0_0_60px_rgba(124,58,237,0.15)] min-w-0">
+          <div className="bg-[#121215] border border-white/10 rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-xl max-h-[90dvh] flex flex-col overflow-hidden p-5 sm:p-7 pt-[max(1.25rem,env(safe-area-inset-top,0px))] relative shadow-[0_0_60px_rgba(124,58,237,0.15)] min-w-0">
             <button 
               type="button"
               onClick={() => setShowMetricModal(false)} 
-              className="absolute top-4 right-4 z-10 min-h-11 min-w-11 flex items-center justify-center text-gray-500 sm:hover:text-white bg-white/5 rounded-full transition-all sm:hover:rotate-90 touch-manipulation"
+              className="absolute top-[max(1rem,env(safe-area-inset-top,0px))] right-[max(1rem,env(safe-area-inset-right,0px))] z-10 min-h-11 min-w-11 flex items-center justify-center text-gray-500 sm:hover:text-white bg-white/5 rounded-full transition-all sm:hover:rotate-90 touch-manipulation"
               aria-label="Kapat"
             >
               <X size={24} aria-hidden />
             </button>
             
-            <div className="mb-5 pr-12 min-w-0">
+            <div className="mb-4 pr-12 shrink-0 min-w-0">
               <h2 className="text-xl font-black uppercase tracking-tight break-words">Metrik ayarları</h2>
               <p className="text-[11px] text-gray-500 font-bold mt-1 break-words">Veri girişi için kullanılan metrikleri buradan yönetin.</p>
             </div>
 
-            <div className="space-y-2 mb-6 max-h-[34vh] overflow-y-auto pr-1 custom-scrollbar min-w-0 [-webkit-overflow-scrolling:touch]">
+            <div className="flex-1 min-h-0 space-y-2 mb-4 overflow-y-auto pr-1 custom-scrollbar min-w-0 [-webkit-overflow-scrolling:touch]">
               {metrics.length === 0 && (
                 <EmptyState
                   variant="onboarding"
@@ -975,85 +975,91 @@ export default function SahaTestleriFinal() {
                 return (
                 <div
                   key={m.id}
-                  className={`grid min-h-[82px] grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-xl border p-3 min-w-0 transition-all duration-200 ease-out group ${
+                  className={`flex flex-col gap-3 rounded-xl border p-3 min-w-0 transition-all duration-200 ease-out group md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-x-3 md:gap-y-2 ${
                     isHighlighted
                       ? "border-[#a78bfa]/70 bg-[#7c3aed]/15 ring-2 ring-[#7c3aed]/50 shadow-[0_0_0_1px_rgba(124,58,237,0.5),0_8px_24px_-14px_rgba(124,58,237,0.9)]"
                       : "border-white/10 bg-white/[0.03] sm:hover:border-[#7c3aed]/35 sm:hover:bg-white/[0.05] sm:hover:shadow-[0_8px_24px_-16px_rgba(124,58,237,0.55)]"
                   }`}
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
-                    {index + 1}
+                  <div className="flex items-start gap-3 min-w-0 md:col-span-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
+                      {index + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-black text-sm uppercase tracking-tight line-clamp-2 break-words text-white">{m.name}</span>
+                      <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-words">
+                        Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="font-black text-sm uppercase tracking-tight break-words text-white">{m.name}</span>
-                    <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-all">
-                      Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
-                    </span>
+                  <div className="flex flex-col gap-2 min-w-0 w-full md:col-span-1">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void moveMetric(m.id, -1)}
+                        disabled={isFirst || Boolean(orderingBusyMetricId)}
+                        className={`min-h-10 flex-1 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition sm:flex-none ${
+                          isFirst || orderingBusyMetricId
+                            ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
+                            : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
+                        }`}
+                      >
+                        Yukarı
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void moveMetric(m.id, 1)}
+                        disabled={isLast || Boolean(orderingBusyMetricId)}
+                        className={`min-h-10 flex-1 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition sm:flex-none ${
+                          isLast || orderingBusyMetricId
+                            ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
+                            : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
+                        }`}
+                      >
+                        {isBusy ? "..." : "Aşağı"}
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:flex-wrap sm:items-center">
+                      <select
+                        value={metricIsText(m) ? "text" : "number"}
+                        onChange={(e) => void handleMetricUpdate(m, { value_type: e.target.value as MetricValueType })}
+                        className="ui-select min-h-10 w-full min-w-0 sm:max-w-[11.5rem] sm:flex-1"
+                      >
+                        <option value="number">Sayısal Değer</option>
+                        <option value="text">Yazılı Not</option>
+                      </select>
+                      {!metricIsText(m) ? (
+                        <select
+                          value={(m.improvement_direction ?? "unknown") as string}
+                          onChange={(e) =>
+                            void handleMetricUpdate(m, {
+                              improvement_direction: e.target.value as "higher_better" | "lower_better" | "unknown",
+                            })
+                          }
+                          className="ui-select min-h-10 w-full min-w-0 sm:max-w-[13rem] sm:flex-1"
+                          title="Bu metrikte iyileşme hangi yönde? (yüksek değer iyi vs. düşük değer iyi)"
+                        >
+                          <option value="unknown">Yön: belirsiz</option>
+                          <option value="higher_better">↑ Yüksek daha iyi</option>
+                          <option value="lower_better">↓ Düşük daha iyi</option>
+                        </select>
+                      ) : null}
+                      <button 
+                        type="button"
+                        onClick={() => handleDeleteMetric(m.id)} 
+                        className="shrink-0 min-h-10 min-w-10 self-end sm:self-auto flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 rounded-xl sm:hover:bg-red-500 sm:hover:text-white transition-all touch-manipulation"
+                        aria-label="Metriği sil"
+                      >
+                        <Trash2 size={16} aria-hidden />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 self-stretch">
-                    <button
-                      type="button"
-                      onClick={() => void moveMetric(m.id, -1)}
-                      disabled={isFirst || Boolean(orderingBusyMetricId)}
-                      className={`min-h-10 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition ${
-                        isFirst || orderingBusyMetricId
-                          ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
-                          : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
-                      }`}
-                    >
-                      Yukarı
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void moveMetric(m.id, 1)}
-                      disabled={isLast || Boolean(orderingBusyMetricId)}
-                      className={`min-h-10 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition ${
-                        isLast || orderingBusyMetricId
-                          ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
-                          : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
-                      }`}
-                    >
-                      {isBusy ? "..." : "Aşağı"}
-                    </button>
-                  </div>
-                  <select
-                    value={metricIsText(m) ? "text" : "number"}
-                    onChange={(e) => void handleMetricUpdate(m, { value_type: e.target.value as MetricValueType })}
-                    className="ui-select min-h-10 w-36"
-                  >
-                    <option value="number">Sayısal Değer</option>
-                    <option value="text">Yazılı Not</option>
-                  </select>
-                  {!metricIsText(m) ? (
-                    <select
-                      value={(m.improvement_direction ?? "unknown") as string}
-                      onChange={(e) =>
-                        void handleMetricUpdate(m, {
-                          improvement_direction: e.target.value as "higher_better" | "lower_better" | "unknown",
-                        })
-                      }
-                      className="ui-select min-h-10 w-44"
-                      title="Bu metrikte iyileşme hangi yönde? (yüksek değer iyi vs. düşük değer iyi)"
-                    >
-                      <option value="unknown">Yön: belirsiz</option>
-                      <option value="higher_better">↑ Yüksek daha iyi</option>
-                      <option value="lower_better">↓ Düşük daha iyi</option>
-                    </select>
-                  ) : null}
-                  <button 
-                    type="button"
-                    onClick={() => handleDeleteMetric(m.id)} 
-                    className="shrink-0 min-h-10 min-w-10 flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 rounded-xl sm:hover:bg-red-500 sm:hover:text-white transition-all touch-manipulation"
-                    aria-label="Metriği sil"
-                  >
-                    <Trash2 size={16} aria-hidden />
-                  </button>
                 </div>
               )})}
             </div>
 
-            <div className="bg-white/5 p-4 rounded-xl space-y-3 min-w-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+            <div className="bg-white/5 p-4 rounded-xl space-y-3 min-w-0 shrink-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
                 <input 
                   placeholder="Metrik adı (örn. 30m Sprint)" 
                   className="col-span-1 sm:col-span-2 min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"

@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { canAccessRoute, getDefaultRouteForRole, isPublicRoute } from "@/lib/auth/roleMatrix";
+import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import {
-  canAccessRoute,
-  getDefaultRouteForRole,
-  getSafeRole,
-  isPublicRoute,
-  ORG_LIFECYCLE_INFO_ROUTE,
-} from "@/lib/auth/roleMatrix";
+  fallbackRouteForDeniedAccess,
+  logRouteRedirectDecision,
+  safeRedirectPath,
+} from "@/lib/auth/routeRedirect";
 import { isRouteBlockedForCoach, normalizeCoachPermissions } from "@/lib/auth/coachPermissions";
 import { isRouteBlockedForAthlete, normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
 
@@ -91,14 +91,31 @@ export async function proxy(request: NextRequest) {
       organizationId = null;
     }
 
-    const role = getSafeRole(roleFromProfile || user.user_metadata?.role || user.app_metadata?.role);
+    const role = resolveRouteRoleFromUser(user, roleFromProfile);
     const roleInput = role || null;
 
     if (!canAccessRoute(roleInput, pathname)) {
       if (isTransportRequest) return jsonError(403, "forbidden");
-      const fallbackPath = role ? getDefaultRouteForRole(role) : ORG_LIFECYCLE_INFO_ROUTE;
-      if (pathname === fallbackPath) return NextResponse.redirect(new URL(ORG_LIFECYCLE_INFO_ROUTE, request.url));
-      return NextResponse.redirect(new URL(fallbackPath, request.url));
+      const fallbackPath = fallbackRouteForDeniedAccess(role);
+      const safeTarget = safeRedirectPath(pathname, fallbackPath);
+      if (!safeTarget) {
+        logRouteRedirectDecision("proxy", {
+          pathname,
+          role,
+          organizationId,
+          target: null,
+          reason: "same_path_guard",
+        });
+        return response;
+      }
+      logRouteRedirectDecision("proxy", {
+        pathname,
+        role,
+        organizationId,
+        target: safeTarget,
+        reason: "forbidden_route",
+      });
+      return NextResponse.redirect(new URL(safeTarget, request.url));
     }
 
     if (role === "coach") {
@@ -112,7 +129,17 @@ export async function proxy(request: NextRequest) {
         const permissions = normalizeCoachPermissions((permsRes.data as Record<string, boolean> | null) || undefined);
         if (isRouteBlockedForCoach(pathname, permissions)) {
           if (isTransportRequest) return jsonError(403, "forbidden");
-          return NextResponse.redirect(new URL(getDefaultRouteForRole(role), request.url));
+          const coachFallback = getDefaultRouteForRole(role);
+          const safeCoachTarget = safeRedirectPath(pathname, coachFallback);
+          if (!safeCoachTarget) return response;
+          logRouteRedirectDecision("proxy", {
+            pathname,
+            role,
+            organizationId,
+            target: safeCoachTarget,
+            reason: "coach_permission_denied",
+          });
+          return NextResponse.redirect(new URL(safeCoachTarget, request.url));
         }
       } catch {
         // Fall back to server action guards on read failure.
@@ -130,7 +157,17 @@ export async function proxy(request: NextRequest) {
         const permissions = normalizeAthletePermissions((permsRes.data as Record<string, boolean> | null) || undefined);
         if (isRouteBlockedForAthlete(pathname, permissions)) {
           if (isTransportRequest) return jsonError(403, "forbidden");
-          return NextResponse.redirect(new URL(getDefaultRouteForRole(role), request.url));
+          const athleteFallback = getDefaultRouteForRole(role);
+          const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);
+          if (!safeAthleteTarget) return response;
+          logRouteRedirectDecision("proxy", {
+            pathname,
+            role,
+            organizationId,
+            target: safeAthleteTarget,
+            reason: "athlete_permission_denied",
+          });
+          return NextResponse.redirect(new URL(safeAthleteTarget, request.url));
         }
       } catch {
         // Fall back to server action guards on read failure.

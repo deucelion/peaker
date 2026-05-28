@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
+import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import { extractSessionFullName, extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { loadSessionProfileWithAdminFallback } from "@/lib/auth/loadSessionProfile";
 import { mergeTenantProfileFromSources } from "@/lib/auth/tenantProfileMerge";
@@ -124,8 +125,8 @@ export default async function OrgDurumuPage({
     );
   }
 
-  if (getSafeRole(effectiveProfile.role) === "super_admin") {
-    redirect("/super-admin");
+  if (resolveRouteRoleFromUser(user, effectiveProfile.role) === "super_admin") {
+    redirect(PATHS.superAdmin);
   }
 
   if (isInactiveAdminProfile(effectiveProfile.role, effectiveProfile.is_active)) {
