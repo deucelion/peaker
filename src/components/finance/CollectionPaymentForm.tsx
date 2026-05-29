@@ -92,6 +92,15 @@ export function CollectionPaymentForm({
     });
   }, [resetKey, initialPrefill?.profileId, initialPrefill?.packageId, initialPrefill?.paymentKind]);
 
+  const fetchPackagesForAthlete = useCallback(
+    async (athleteId: string) =>
+      listPrivateLessonPackagesForAccounting({
+        athleteId,
+        organizationId: organizationIdFromUrl,
+      }),
+    [organizationIdFromUrl]
+  );
+
   const loadPackageOptions = useCallback(async () => {
     if (paymentForm.paymentKind !== "private_lesson_package" || !paymentForm.profileId) {
       setPackageOptions([]);
@@ -103,14 +112,26 @@ export function CollectionPaymentForm({
     setPackageOptionsLoading(true);
     setPackageOptionsError(null);
     try {
-      const res = await withAsyncTimeout(
-        listPrivateLessonPackagesForAccounting({
-          athleteId: paymentForm.profileId,
-          organizationId: organizationIdFromUrl,
-        }),
-        PACKAGE_FETCH_TIMEOUT_MS,
-        "Paket listesi zaman aşımına uğradı."
-      );
+      const request = () =>
+        withAsyncTimeout(
+          fetchPackagesForAthlete(paymentForm.profileId),
+          PACKAGE_FETCH_TIMEOUT_MS,
+          "Paket listesi zaman aşımına uğradı."
+        );
+      let res;
+      try {
+        res = await request();
+      } catch (firstErr) {
+        if (
+          firstErr instanceof Error &&
+          firstErr.message.includes("zaman aşımı") &&
+          gen === packageFetchGenRef.current
+        ) {
+          res = await request();
+        } else {
+          throw firstErr;
+        }
+      }
       if (gen !== packageFetchGenRef.current) return;
       if ("error" in res) {
         setPackageOptions([]);
@@ -140,7 +161,7 @@ export function CollectionPaymentForm({
         setPackageOptionsLoading(false);
       }
     }
-  }, [paymentForm.paymentKind, paymentForm.profileId, organizationIdFromUrl]);
+  }, [paymentForm.paymentKind, paymentForm.profileId, fetchPackagesForAthlete]);
 
   useEffect(() => {
     void loadPackageOptions();

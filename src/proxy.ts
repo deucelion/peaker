@@ -73,9 +73,8 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // Route-level RBAC enforcement (page requests only).
-  // API auth remains action-level to avoid breaking existing endpoints.
-  if (!isApiRoute) {
+  // Route-level RBAC: sayfa navigasyonu + RSC. Server action auth action guard'larda kalır.
+  if (!isApiRoute && !isActionRequest) {
     let roleFromProfile: string | null = null;
     let organizationId: string | null = null;
     try {

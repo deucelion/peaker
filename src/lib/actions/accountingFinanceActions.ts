@@ -1324,14 +1324,15 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
     return { error: "Organizasyon bilgisi alınamadı." };
   }
 
-  const adminClient = createSupabaseAdminClient();
-  const { data: athlete } = await adminClient
-    .from("profiles")
-    .select("id, role, organization_id")
-    .eq("id", athleteId)
-    .maybeSingle();
-  if (!athlete || getSafeRole(athlete.role) !== "sporcu" || athlete.organization_id !== organizationId) {
-    return { error: "Sporcu bu organizasyonda bulunamadı." };
+  let adminClient;
+  try {
+    adminClient = createSupabaseAdminClient();
+  } catch {
+    return {
+      error: operationalError("Paketler şu anda alınamadı.", {
+        code: diagnosticsCode("FIN", "PACKAGES_CONFIG"),
+      }),
+    };
   }
 
   const baseSelect =
@@ -1339,12 +1340,24 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
   let rows: unknown[] | null = null;
   let listError: { message?: string; code?: string } | null = null;
 
-  const extended = await adminClient
+  const athletePromise = adminClient
+    .from("profiles")
+    .select("id, role, organization_id")
+    .eq("id", athleteId)
+    .maybeSingle();
+
+  const extendedPromise = adminClient
     .from("private_lesson_packages")
     .select(`${baseSelect}, lifecycle_status, next_payment_due_at`)
     .eq("organization_id", organizationId)
     .eq("athlete_id", athleteId)
     .order("created_at", { ascending: false });
+
+  const [{ data: athlete }, extended] = await Promise.all([athletePromise, extendedPromise]);
+
+  if (!athlete || getSafeRole(athlete.role) !== "sporcu" || athlete.organization_id !== organizationId) {
+    return { error: "Sporcu bu organizasyonda bulunamadı." };
+  }
 
   if (!extended.error) {
     rows = extended.data;

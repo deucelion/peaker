@@ -7,8 +7,8 @@ import {
   type PackageLifecycleStatus,
 } from "@/lib/privateLessons/packageStatus";
 
-export const PACKAGE_FETCH_TIMEOUT_MS = 10_000;
-export const PAYMENT_SUBMIT_TIMEOUT_MS = 25_000;
+export const PACKAGE_FETCH_TIMEOUT_MS = 20_000;
+export const PAYMENT_SUBMIT_TIMEOUT_MS = 30_000;
 
 export function withAsyncTimeout<T>(
   promise: Promise<T>,
