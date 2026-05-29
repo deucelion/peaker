@@ -11,6 +11,16 @@ describe("resolveRouteRole", () => {
     ).toBe("super_admin");
   });
 
+  it("prefers profile super_admin over tenant admin JWT claim", () => {
+    expect(
+      resolveRouteRole({ profileRole: "super_admin", sessionRole: "admin" })
+    ).toBe("super_admin");
+  });
+
+  it("recognizes messy super admin role strings", () => {
+    expect(resolveRouteRole({ profileRole: "Super Admin", sessionRole: null })).toBe("super_admin");
+  });
+
   it("uses profile role when claim is not super_admin", () => {
     expect(resolveRouteRole({ profileRole: "admin", sessionRole: "admin" })).toBe("admin");
   });
@@ -47,5 +57,9 @@ describe("safeRedirectPath", () => {
 
   it("allows redirect when paths differ", () => {
     expect(safeRedirectPath("/super-admin", "/")).toBe("/");
+  });
+
+  it("prevents org-durumu self redirect loop", () => {
+    expect(safeRedirectPath("/org-durumu", "/org-durumu")).toBeNull();
   });
 });

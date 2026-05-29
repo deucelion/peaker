@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { extractSessionRole } from "@/lib/auth/sessionClaims";
+import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
@@ -67,7 +68,41 @@ export default function DashboardLayout({
   const [permissionsLoading, setPermissionsLoading] = useState(true);
 
   const isSuperAdminRoute =
-    pathname === PATHS.superAdmin || pathname.startsWith(`${PATHS.superAdmin}/`);
+    pathname === PATHS.superAdmin ||
+    pathname.startsWith(`${PATHS.superAdmin}/`) ||
+    pathname === PATHS.sistemSaglik;
+
+  async function tryBootstrapSuperAdminSession(): Promise<boolean> {
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData.user;
+    if (!authUser) return false;
+
+    if (looksLikeSuperAdminRole(extractSessionRole(authUser))) {
+      setRole("super_admin");
+      setUserName(authUser.email ?? "Super Admin");
+      setOrganizationId(null);
+      setUserId(authUser.id);
+      setOrganizationName("SYSTEM");
+      return true;
+    }
+
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("role, full_name")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (looksLikeSuperAdminRole(profileRow?.role) || getSafeRole(profileRow?.role) === "super_admin") {
+      setRole("super_admin");
+      setUserName(profileRow?.full_name || authUser.email || "Super Admin");
+      setOrganizationId(null);
+      setUserId(authUser.id);
+      setOrganizationName("SYSTEM");
+      return true;
+    }
+
+    return false;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -90,21 +125,23 @@ export default function DashboardLayout({
               router.replace(PATHS.login);
             } else if (payload.httpStatus === 403) {
               if (isSuperAdminRoute) {
-                const { data: authData } = await supabase.auth.getUser();
-                const authUser = authData.user;
-                if (authUser) {
-                  const claimRole = getSafeRole(extractSessionRole(authUser));
-                  if (claimRole === "super_admin") {
+                const allowed = await tryBootstrapSuperAdminSession();
+                if (!allowed) {
+                  const { data: authData } = await supabase.auth.getUser();
+                  const authUser = authData.user;
+                  if (authUser) {
                     setRole("super_admin");
                     setUserName(authUser.email ?? "Super Admin");
                     setOrganizationId(null);
                     setUserId(authUser.id);
                     setOrganizationName("SYSTEM");
-                    setPermissionsLoading(false);
-                    setLoading(false);
-                    return;
                   }
                 }
+                if (!cancelled) {
+                  setPermissionsLoading(false);
+                  setLoading(false);
+                }
+                return;
               }
               if (payload.error === "admin_inactive") {
                 router.replace(PATHS.adminAccount);

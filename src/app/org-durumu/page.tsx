@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
+import { getDefaultRouteForRole, getSafeRole } from "@/lib/auth/roleMatrix";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
+import { looksLikeSuperAdminRole, resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
+import { safeRedirectPath } from "@/lib/auth/routeRedirect";
 import { extractSessionFullName, extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { loadSessionProfileWithAdminFallback } from "@/lib/auth/loadSessionProfile";
 import { mergeTenantProfileFromSources } from "@/lib/auth/tenantProfileMerge";
@@ -19,6 +21,7 @@ import {
   type OrganizationStatus,
 } from "@/lib/organization/lifecycle";
 import OrgDurumuLogoutButton from "./OrgDurumuLogoutButton";
+import Link from "next/link";
 import { isUuid } from "@/lib/validation/uuid";
 import { isInactiveAdminProfile } from "@/lib/admin/lifecycle";
 import { isInactiveAthleteProfile } from "@/lib/athlete/lifecycle";
@@ -63,6 +66,12 @@ export default async function OrgDurumuPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const actorResult = await resolveSessionActor();
+  if (!("error" in actorResult) && actorResult.actor.role === "super_admin") {
+    const target = safeRedirectPath(PATHS.orgDurumu, PATHS.superAdmin);
+    if (target) redirect(target);
+  }
+
   const { profile } = await loadSessionProfileWithAdminFallback(user);
   const metaRoleRaw = extractSessionRole(user);
   const metaOrgId = extractSessionOrganizationId(user);
@@ -76,7 +85,7 @@ export default async function OrgDurumuPage({
 
   if (!effectiveProfile?.role || !getSafeRole(effectiveProfile.role)) {
     // Self-heal: auth user var ama profile yoksa metadata'dan güvenli profil tamamlamayı deneriz.
-    const isSuperAdminMeta = !!metaRoleRaw && /super[\s_-]?admin/i.test(metaRoleRaw);
+    const isSuperAdminMeta = looksLikeSuperAdminRole(metaRoleRaw);
     const metaRole = metaRoleRaw ? (isSuperAdminMeta ? "super_admin" : getSafeRole(metaRoleRaw)) : null;
     const canRepair =
       isSuperAdminMeta || (!!metaRole && !isSuperAdminMeta && !!metaOrgId && isUuid(metaOrgId));
@@ -96,8 +105,12 @@ export default async function OrgDurumuPage({
           { onConflict: "id" }
         );
         if (!upsertError) {
-          if (isSuperAdminMeta) redirect("/super-admin");
-          redirect("/");
+          if (isSuperAdminMeta) {
+            const target = safeRedirectPath(PATHS.orgDurumu, PATHS.superAdmin);
+            if (target) redirect(target);
+          }
+          const homeTarget = safeRedirectPath(PATHS.orgDurumu, PATHS.home);
+          if (homeTarget) redirect(homeTarget);
         }
       } catch {
         // info screen'e düşecek
@@ -126,7 +139,8 @@ export default async function OrgDurumuPage({
   }
 
   if (resolveRouteRoleFromUser(user, effectiveProfile.role) === "super_admin") {
-    redirect(PATHS.superAdmin);
+    const target = safeRedirectPath(PATHS.orgDurumu, PATHS.superAdmin);
+    if (target) redirect(target);
   }
 
   if (isInactiveAdminProfile(effectiveProfile.role, effectiveProfile.is_active)) {
@@ -141,7 +155,32 @@ export default async function OrgDurumuPage({
 
   const gate = await evaluateOrganizationProductAccess(supabase, effectiveProfile);
   if (!gate.blocked) {
-    redirect("/");
+    const actorForHome = await resolveSessionActor();
+    if (!("error" in actorForHome)) {
+      const home = getDefaultRouteForRole(actorForHome.actor.role);
+      const target = safeRedirectPath(PATHS.orgDurumu, home);
+      if (target) redirect(target);
+    }
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#09090b] min-w-0">
+        <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/10 bg-[#121215] p-5 sm:p-8 shadow-2xl min-w-0">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[#7c3aed]">Peaker</p>
+            <h1 className="mt-2 text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white break-words">Yonlendirme bekleniyor</h1>
+            <p className="mt-3 text-sm font-bold text-gray-400 leading-relaxed break-words">
+              Hesabiniz aktif gorunuyor ancak panele otomatik gecis tamamlanamadi. Asagidaki baglantidan devam edin veya cikis yapip tekrar giris yapin.
+            </p>
+          </div>
+          <Link
+            href={PATHS.home}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase tracking-wide text-white touch-manipulation"
+          >
+            Panele git
+          </Link>
+          <OrgDurumuLogoutButton />
+        </div>
+      </div>
+    );
   }
 
   const effective = gate.status;

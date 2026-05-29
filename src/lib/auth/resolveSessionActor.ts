@@ -2,6 +2,7 @@ import "server-only";
 
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole, type UserRole } from "@/lib/auth/roleMatrix";
+import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 
 export type SessionActor = {
@@ -59,7 +60,7 @@ export async function resolveSessionActor(
   if (authError || !authData.user) return { error: "Gecersiz oturum." };
 
   const claimRoleRaw = extractSessionRole(authData.user);
-  if (getSafeRole(claimRoleRaw) === "super_admin") {
+  if (looksLikeSuperAdminRole(claimRoleRaw) || getSafeRole(claimRoleRaw) === "super_admin") {
     return {
       actor: {
         id: authData.user.id,
@@ -137,7 +138,9 @@ export async function resolveSessionActor(
     };
   }
 
-  const profileRole = getSafeRole(profile.role);
+  const profileRole = looksLikeSuperAdminRole(profile.role)
+    ? "super_admin"
+    : getSafeRole(profile.role);
   if (!profileRole) return { error: "Gecersiz rol." };
 
   return {
