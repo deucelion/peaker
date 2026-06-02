@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 
 function toLocalDateInput(d: Date) {
   const y = d.getFullYear();
@@ -13,23 +14,18 @@ function toLocalDateInput(d: Date) {
 }
 
 async function resolveAthleteForSurvey() {
-  const sessionClient = await createServerSupabaseClient();
-  const { data: authData, error: authError } = await sessionClient.auth.getUser();
-  if (authError || !authData.user) return { error: "Gecersiz oturum." as const };
+  const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
+  if ("error" in resolved) return { error: resolved.error };
 
-  const adminClient = createSupabaseAdminClient();
-  const { data: actor } = await adminClient
-    .from("profiles")
-    .select("id, role, organization_id, is_active")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-
-  if (!actor?.organization_id) return { error: "Profil dogrulanamadi." as const };
+  const actor = resolved.actor;
+  if (!actor.organizationId) return { error: "Profil dogrulanamadi." as const };
+  if (actor.id == null || actor.id.trim() === "") return { error: "Profil dogrulanamadi." as const };
   if (getSafeRole(actor.role) !== "sporcu") return { error: "Bu form yalnizca sporcu hesabi icindir." as const };
 
-  const block = messageIfAthleteCannotOperate(actor.role, actor.is_active);
+  const block = messageIfAthleteCannotOperate(actor.role, actor.isActive);
   if (block) return { error: block };
 
+  const adminClient = createSupabaseAdminClient();
   const { data: perm } = await adminClient
     .from("athlete_permissions")
     .select("can_view_rpe_entry")
@@ -40,7 +36,71 @@ async function resolveAthleteForSurvey() {
     return { error: "RPE girisi sizin icin kapali." as const };
   }
 
-  return { userId: actor.id, organizationId: actor.organization_id, adminClient };
+  return { userId: actor.id, organizationId: actor.organizationId, adminClient };
+}
+
+async function upsertTrainingLoadCompat(args: {
+  adminClient: ReturnType<typeof createSupabaseAdminClient>;
+  userId: string;
+  duration: number;
+  rpe: number;
+  sessionType: string;
+  totalLoad: number;
+  measurementDate: string;
+}): Promise<{ error?: string }> {
+  const payload = {
+    profile_id: args.userId,
+    duration_minutes: args.duration,
+    rpe_score: args.rpe,
+    session_type: args.sessionType,
+    total_load: args.totalLoad,
+    measurement_date: args.measurementDate,
+  };
+
+  const upsertRes = await args.adminClient
+    .from("training_loads")
+    .upsert(payload, { onConflict: "profile_id,measurement_date" });
+
+  if (!upsertRes.error) return {};
+
+  const conflictMessage = `${upsertRes.error.code || ""} ${upsertRes.error.message || ""}`.toLowerCase();
+  const conflictConstraintMissing =
+    conflictMessage.includes("42p10") ||
+    conflictMessage.includes("no unique") ||
+    conflictMessage.includes("on conflict specification");
+
+  if (!conflictConstraintMissing) {
+    return { error: `Kayit basarisiz: ${upsertRes.error.message}` };
+  }
+
+  const existing = await args.adminClient
+    .from("training_loads")
+    .select("id")
+    .eq("profile_id", args.userId)
+    .eq("measurement_date", args.measurementDate)
+    .maybeSingle();
+
+  if (existing.error) {
+    return { error: `Kayit basarisiz: ${existing.error.message}` };
+  }
+
+  if (existing.data?.id) {
+    const updateRes = await args.adminClient
+      .from("training_loads")
+      .update(payload)
+      .eq("id", existing.data.id);
+    if (updateRes.error) {
+      return { error: `Kayit basarisiz: ${updateRes.error.message}` };
+    }
+    return {};
+  }
+
+  const insertRes = await args.adminClient.from("training_loads").insert(payload);
+  if (insertRes.error) {
+    return { error: `Kayit basarisiz: ${insertRes.error.message}` };
+  }
+
+  return {};
 }
 
 export async function getRpeSurveyEligibility() {
@@ -81,19 +141,16 @@ export async function submitAthleteTrainingLoadSurvey(input: {
   const measurementDate = `${dateStr}T12:00:00.000Z`;
   const totalLoad = duration * rpe;
 
-  const { error } = await resolved.adminClient.from("training_loads").upsert(
-    {
-      profile_id: resolved.userId,
-      duration_minutes: duration,
-      rpe_score: rpe,
-      session_type: sessionType,
-      total_load: totalLoad,
-      measurement_date: measurementDate,
-    },
-    { onConflict: "profile_id,measurement_date" }
-  );
-
-  if (error) return { error: `Kayit basarisiz: ${error.message}` };
+  const save = await upsertTrainingLoadCompat({
+    adminClient: resolved.adminClient,
+    userId: resolved.userId,
+    duration,
+    rpe,
+    sessionType,
+    totalLoad,
+    measurementDate,
+  });
+  if (save.error) return { error: save.error };
 
   revalidatePath("/anket");
   revalidatePath("/performans");

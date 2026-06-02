@@ -3,10 +3,11 @@ import "server-only";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getDefaultRouteForRole, getSafeRole } from "@/lib/auth/roleMatrix";
+import { getDefaultRouteForRole } from "@/lib/auth/roleMatrix";
 import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import { extractSessionRole } from "@/lib/auth/sessionClaims";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { logRouteRedirectDecision } from "@/lib/auth/routeRedirect";
 
 /**
@@ -17,12 +18,15 @@ export async function assertSuperAdminPageAccess(
   user: User,
   pathname: string
 ): Promise<void> {
+  const actor = await resolveSessionActor({ claimRequiresOrganization: false });
+  if (!("error" in actor) && actor.actor.role === "super_admin") return;
+
   let profile: { id: string; role?: string | null } | null = null;
 
   const profileRes = await sessionClient.from("profiles").select("id, role").eq("id", user.id).maybeSingle();
   if (profileRes.data) profile = profileRes.data;
 
-  const sessionRole = getSafeRole(extractSessionRole(user));
+  const sessionRole = extractSessionRole(user);
 
   if (!profile) {
     try {
@@ -34,7 +38,7 @@ export async function assertSuperAdminPageAccess(
     }
   }
 
-  if (!profile?.role && sessionRole === "super_admin") {
+  if (!profile?.role && /super[\s_-]?admin/i.test(sessionRole || "")) {
     try {
       const adminClient = createSupabaseAdminClient();
       const { error } = await adminClient.from("profiles").upsert(

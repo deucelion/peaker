@@ -1,31 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
 const AVATAR_BUCKET = "avatars";
 
 async function resolveActiveAthlete() {
-  const sessionClient = await createServerSupabaseClient();
-  const { data: authData, error: authError } = await sessionClient.auth.getUser();
-  if (authError || !authData.user) return { error: "Gecersiz oturum." as const };
+  const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
+  if ("error" in resolved) return { error: resolved.error };
 
-  const { data: actor } = await sessionClient
-    .from("profiles")
-    .select("id, role, organization_id, is_active, full_name")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-
-  if (!actor?.organization_id) return { error: "Profil dogrulanamadi." as const };
+  const actor = resolved.actor;
+  if (!actor.organizationId) return { error: "Profil dogrulanamadi." as const };
   if (getSafeRole(actor.role) !== "sporcu") return { error: "Bu islem yalnizca sporcu hesabi icindir." as const };
 
-  const block = messageIfAthleteCannotOperate(actor.role, actor.is_active);
+  const block = messageIfAthleteCannotOperate(actor.role, actor.isActive);
   if (block) return { error: block };
 
-  return { userId: actor.id, organizationId: actor.organization_id };
+  return { userId: actor.id, organizationId: actor.organizationId };
 }
 
 function clampStr(s: string | null | undefined, max: number) {
