@@ -95,6 +95,25 @@ export async function proxy(request: NextRequest) {
 
     if (!canAccessRoute(roleInput, pathname)) {
       if (isTransportRequest) return jsonError(403, "forbidden");
+
+      const isSuperAdminOnlyPath =
+        pathname === "/super-admin" ||
+        pathname.startsWith("/super-admin/") ||
+        pathname === "/sistem-saglik";
+
+      // Edge middleware'de role null olabilir (RLS/cookie senkronu). Super-admin sayfa guard'i
+      // server-side daha güçlü actor çözümü yaptığı için bu yolları guard'a bırakıp loop'u kesiyoruz.
+      if (!role && isSuperAdminOnlyPath) {
+        logRouteRedirectDecision("proxy", {
+          pathname,
+          role,
+          organizationId,
+          target: null,
+          reason: "same_path_guard",
+        });
+        return response;
+      }
+
       const fallbackPath = fallbackRouteForDeniedAccess(role);
       const safeTarget = safeRedirectPath(pathname, fallbackPath);
       if (!safeTarget) {
