@@ -225,27 +225,32 @@ export default function SporcuWellnessGiris() {
         <WellnessSlider 
           label="YORGUNLUK" icon={<Battery/>} value={form.fatigue} 
           onChange={(val: number) => setValue({ fatigue: val })} 
-          low="TÜKENMİŞ" high="ZİNDE" 
+          low="DİNÇ" high="TÜKENMİŞ"
+          polarity="negative"
         />
         <WellnessSlider 
           label="UYKU KALİTESİ" icon={<Moon/>} value={form.sleep_quality} 
           onChange={(val: number) => setValue({ sleep_quality: val })} 
-          low="YETERSİZ" high="DERİN" 
+          low="ÇOK KÖTÜ" high="MÜKEMMEL"
+          polarity="positive"
         />
         <WellnessSlider 
           label="KAS AĞRISI" icon={<Activity/>} value={form.muscle_soreness} 
           onChange={(val: number) => setValue({ muscle_soreness: val })} 
-          low="DOMS+" high="TEMİZ" 
+          low="YOK" high="ÇOK FAZLA"
+          polarity="negative"
         />
         <WellnessSlider 
           label="STRES SEVİYESİ" icon={<Brain/>} value={form.stress_level} 
           onChange={(val: number) => setValue({ stress_level: val })} 
-          low="YOĞUN" high="RAHAT" 
+          low="RAHAT" high="ÇOK YÜKSEK"
+          polarity="negative"
         />
         <WellnessSlider 
           label="ENERJİ MODU" icon={<Zap/>} value={form.energy_level} 
           onChange={(val: number) => setValue({ energy_level: val })} 
-          low="DÜŞÜK" high="ZİRVE" 
+          low="ÇOK DÜŞÜK" high="ÇOK YÜKSEK"
+          polarity="positive"
         />
       </div>
 
@@ -278,6 +283,7 @@ function WellnessSlider({
   onChange,
   low,
   high,
+  polarity,
 }: {
   label: string;
   icon: React.ReactNode;
@@ -285,13 +291,32 @@ function WellnessSlider({
   onChange: (value: number) => void;
   low: string;
   high: string;
+  polarity: "positive" | "negative";
 }) {
-  // Değerlere göre renk değişimi
   const getColor = (val: number) => {
-    if (val <= 2) return "text-red-500";
-    if (val <= 3) return "text-[#7c3aed]";
-    return "text-green-500";
+    const isGood = polarity === "positive" ? val >= 4 : val <= 2;
+    const isBad = polarity === "positive" ? val <= 2 : val >= 4;
+    if (isBad) return "text-red-500";
+    if (isGood) return "text-green-500";
+    return "text-[#7c3aed]";
   };
+
+  const lowHighlightClass =
+    polarity === "negative"
+      ? value <= 2
+        ? "text-green-900"
+        : ""
+      : value <= 2
+        ? "text-red-900"
+        : "";
+  const highHighlightClass =
+    polarity === "negative"
+      ? value >= 4
+        ? "text-red-900"
+        : ""
+      : value >= 4
+        ? "text-green-900"
+        : "";
 
   return (
     <div className="bg-[#121215] border border-white/5 p-4 sm:p-5 rounded-xl sm:rounded-2xl space-y-3 sm:space-y-4 transition-all sm:hover:border-white/10 group">
@@ -315,8 +340,8 @@ function WellnessSlider({
       </div>
 
       <div className="flex justify-between text-[8px] sm:text-[9px] font-black text-gray-700 uppercase italic tracking-tight sm:tracking-tighter gap-2">
-        <span className={value <= 2 ? "text-red-900" : ""}>{low}</span>
-        <span className={value >= 4 ? "text-green-900" : ""}>{high}</span>
+        <span className={lowHighlightClass}>{low}</span>
+        <span className={highHighlightClass}>{high}</span>
       </div>
     </div>
   );

@@ -10,6 +10,13 @@ import type { WellnessReportRow } from "@/types/performance";
 import type { ReactNode, SVGProps } from "react";
 import { listWellnessArchiveForManagement } from "@/lib/actions/wellnessFormActions";
 import { WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE } from "@/lib/wellness/archiveConfig";
+import {
+  getWellnessScoreTone,
+  isWellnessReportCritical,
+  wellnessToneToTextClass,
+  WELLNESS_SCALE_MAX,
+} from "@/lib/wellness/wellnessScore";
+import { buildReadinessSparklineSvg } from "@/lib/wellness/wellnessSparkline";
 import Notification from "@/components/Notification";
 import { LoadMoreButton } from "@/components/ui/data-display";
 
@@ -103,19 +110,8 @@ export default function WellnessDetay() {
     void fetchReports();
   }, [fetchReports]);
 
-  // Skorlara göre renk belirleme (1-5 skalası için)
-  const getScoreColor = (value: number, type: 'positive' | 'negative') => {
-    if (!value) return "text-gray-600";
-    if (type === 'positive') { // Enerji, Uyku gibi (Yüksek iyidir)
-      if (value >= 4) return "text-green-400";
-      if (value === 3) return "text-yellow-400";
-      return "text-red-500";
-    } else { // Stres, Yorgunluk, Ağrı gibi (Düşük iyidir)
-      if (value <= 2) return "text-green-400";
-      if (value === 3) return "text-yellow-400";
-      return "text-red-500";
-    }
-  };
+  const metricColor = (key: "fatigue" | "sleep_quality" | "muscle_soreness" | "stress_level" | "energy_level", value: number | null | undefined) =>
+    wellnessToneToTextClass(getWellnessScoreTone(key, value));
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[50dvh] gap-4 bg-black px-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
@@ -160,12 +156,7 @@ export default function WellnessDetay() {
         ).toString()
       : "-";
 
-  const criticalCount = reports.filter(
-    (report) =>
-      (report.stress_level ?? 0) >= 4 ||
-      (report.fatigue ?? 0) >= 4 ||
-      (report.muscle_soreness ?? 0) >= 4
-  ).length;
+  const criticalCount = reports.filter((report) => isWellnessReportCritical(report)).length;
 
   const today = new Date().toISOString().slice(0, 10);
   const todayParticipants = new Set(
@@ -254,6 +245,12 @@ export default function WellnessDetay() {
         <StatsCard label="ORT. NABIZ" value={avgHeartRate} unit="BPM" icon={<Heart size={16}/>} color="text-red-500" />
         <StatsCard label="KRİTİK DURUM" value={criticalCount} unit="SPORCU" icon={<AlertCircle size={16}/>} color="text-orange-500" />
         <StatsCard label="AKTİF KATILIM" value={`%${activeParticipation}`} icon={<Zap size={16}/>} color="text-yellow-400" />
+        <StatsCard
+          label="READINESS TREND"
+          value=""
+          icon={<Activity size={16}/>}
+          sparklineSvg={buildReadinessSparklineSvg(reports)}
+        />
       </div>
 
       {/* RAPOR LİSTESİ */}
@@ -303,11 +300,11 @@ export default function WellnessDetay() {
               {/* Metrik Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6 flex-1 min-w-0 bg-black/20 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-white/5">
                 <MetricBox icon={<Heart size={14}/>} label="NABIZ" value={report.resting_heart_rate} unit="BPM" color="text-red-500" />
-                <MetricBox icon={<Battery size={14}/>} label="YORGUNLUK" value={report.fatigue} unit="/5" color={getScoreColor(report.fatigue ?? 0, 'negative')} />
-                <MetricBox icon={<Moon size={14}/>} label="UYKU" value={report.sleep_quality} unit="/5" color={getScoreColor(report.sleep_quality ?? 0, 'positive')} />
-                <MetricBox icon={<Activity size={14}/>} label="AĞRI" value={report.muscle_soreness} unit="/5" color={getScoreColor(report.muscle_soreness ?? 0, 'negative')} />
-                <MetricBox icon={<Brain size={14}/>} label="STRES" value={report.stress_level} unit="/5" color={getScoreColor(report.stress_level ?? 0, 'negative')} />
-                <MetricBox icon={<Zap size={14}/>} label="ENERJİ" value={report.energy_level} unit="/5" color={getScoreColor(report.energy_level ?? 0, 'positive')} />
+                <MetricBox icon={<Battery size={14}/>} label="YORGUNLUK" value={report.fatigue} unit={`/${WELLNESS_SCALE_MAX}`} color={metricColor("fatigue", report.fatigue)} />
+                <MetricBox icon={<Moon size={14}/>} label="UYKU" value={report.sleep_quality} unit={`/${WELLNESS_SCALE_MAX}`} color={metricColor("sleep_quality", report.sleep_quality)} />
+                <MetricBox icon={<Activity size={14}/>} label="AĞRI" value={report.muscle_soreness} unit={`/${WELLNESS_SCALE_MAX}`} color={metricColor("muscle_soreness", report.muscle_soreness)} />
+                <MetricBox icon={<Brain size={14}/>} label="STRES" value={report.stress_level} unit={`/${WELLNESS_SCALE_MAX}`} color={metricColor("stress_level", report.stress_level)} />
+                <MetricBox icon={<Zap size={14}/>} label="ENERJİ" value={report.energy_level} unit={`/${WELLNESS_SCALE_MAX}`} color={metricColor("energy_level", report.energy_level)} />
               </div>
 
               {/* Sporcu Notu */}
@@ -349,12 +346,14 @@ function StatsCard({
   unit,
   icon,
   color = "text-[#7c3aed]",
+  sparklineSvg,
 }: {
   label: string;
   value: string | number;
   unit?: string;
   icon: ReactNode;
   color?: string;
+  sparklineSvg?: string;
 }) {
   return (
     <div className="bg-[#121215] border border-white/5 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-lg min-w-0">
@@ -362,10 +361,17 @@ function StatsCard({
         <span className={color} aria-hidden>{icon}</span>
         <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-wide sm:tracking-widest italic min-w-0 break-words">{label}</span>
       </div>
-      <div className="flex items-baseline gap-1 flex-wrap">
-        <span className={`text-xl sm:text-2xl font-black italic tracking-tighter break-all ${color}`}>{value}</span>
-        {unit && <span className="text-[10px] font-bold text-gray-700 italic">{unit}</span>}
-      </div>
+      {sparklineSvg ? (
+        <div
+          className="mt-1 flex items-center min-h-[20px]"
+          dangerouslySetInnerHTML={{ __html: sparklineSvg }}
+        />
+      ) : (
+        <div className="flex items-baseline gap-1 flex-wrap">
+          <span className={`text-xl sm:text-2xl font-black italic tracking-tighter break-all ${color}`}>{value}</span>
+          {unit && <span className="text-[10px] font-bold text-gray-700 italic">{unit}</span>}
+        </div>
+      )}
     </div>
   );
 }

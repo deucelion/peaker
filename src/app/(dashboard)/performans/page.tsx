@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   XAxis,
   YAxis,
@@ -26,6 +26,7 @@ import {
   RotateCcw,
   CalendarRange,
   Download,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import { SkeletonCard, SkeletonChart, SkeletonStatGrid } from "@/components/ui/skeletons";
@@ -58,6 +59,14 @@ import {
   processACWRData,
   processEWMAData,
 } from "@/lib/performance/loadSeries";
+import { fatigueStatusLabel } from "@/lib/wellness/wellnessScore";
+import {
+  buildPerformanceAnalysisPdf,
+  performanceAnalysisPdfFilename,
+} from "@/lib/pdf/performancePdf";
+import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { captureSvgChartPng } from "@/lib/pdf/chartSnapshot";
+import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
 import {
   buildKpiNarratives,
   deriveOverallPerformanceDecision,
@@ -142,6 +151,9 @@ export default function PerformanceAnalytics() {
   } = perfDashboard;
   // Page-only state: export ve feedback.
   const [exportBusy, setExportBusy] = useState(false);
+  const [pdfExportBusy, setPdfExportBusy] = useState(false);
+  const acwrChartRef = useRef<HTMLDivElement>(null);
+  const ewmaChartRef = useRef<HTMLDivElement>(null);
   const [exportFeedback, setExportFeedback] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
 
   useEffect(() => {
@@ -513,6 +525,73 @@ export default function PerformanceAnalytics() {
             )}
             CSV indir
           </button>
+          <button
+            type="button"
+            disabled={!orgId || !selectedAthleteId || pdfExportBusy}
+            onClick={async () => {
+              if (!orgId || !selectedAthleteId) return;
+              setPdfExportBusy(true);
+              setExportFeedback(null);
+              try {
+                setExportFeedback({ tone: "ok", text: "Grafikler alınıyor…" });
+                const toKey = appliedTo;
+                const fromKey = addCalendarDaysToYyyyMmDd(toKey, -29);
+                const [acwrImg, ewmaImg, res] = await Promise.all([
+                  captureSvgChartPng(acwrChartRef.current, 640, 280),
+                  captureSvgChartPng(ewmaChartRef.current, 640, 280),
+                  listPerformanceAnalyticsData(orgId, selectedAthleteId, {
+                    dateFrom: fromKey,
+                    dateTo: toKey,
+                  }),
+                ]);
+                if ("error" in res) {
+                  setExportFeedback({ tone: "err", text: res.error ?? "PDF oluşturulamadı." });
+                  return;
+                }
+                setExportFeedback({ tone: "ok", text: "PDF oluşturuluyor…" });
+                const range = res.appliedRange ?? { dateFrom: fromKey, dateTo: toKey };
+                const loads = (res.loads || []) as unknown as TrainingLoadRow[];
+                const tz =
+                  "timeZone" in res && typeof res.timeZone === "string" && res.timeZone
+                    ? res.timeZone
+                    : orgTimeZone;
+                const sorted = [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
+                const filled = fillCalendarDays(sorted, range.dateFrom, range.dateTo, tz);
+                const acwrFull = processACWRData(filled);
+                const ewmaFull = processEWMAData(filled);
+                const acwr30 = filterAcwrPointsByIstanbulInclusiveRange(acwrFull, range.dateFrom, range.dateTo, tz);
+                const ewma30 = filterEwmaPointsByIstanbulInclusiveRange(ewmaFull, range.dateFrom, range.dateTo, tz);
+                const athleteName =
+                  athletes.find((a) => a.id === selectedAthleteId)?.full_name ?? "Sporcu";
+                const bytes = await runPdfTask(() =>
+                  buildPerformanceAnalysisPdf({
+                    athleteName,
+                    periodLabel: formatTrRangeLabel(range.dateFrom, range.dateTo),
+                    acwrSeries: acwr30,
+                    ewmaSeries: ewma30,
+                    loads30: filterTrainingLoadsByIstanbulInclusiveRange(filled, range.dateFrom, range.dateTo, tz),
+                    acwr30,
+                    chartImages: { acwr: acwrImg, ewma: ewmaImg },
+                  })
+                );
+                downloadPdfBytes(bytes, performanceAnalysisPdfFilename(athleteName));
+                setExportFeedback({ tone: "ok", text: "Analiz PDF indirildi." });
+              } catch {
+                setExportFeedback({ tone: "err", text: "PDF oluşturulamadı." });
+              } finally {
+                setPdfExportBusy(false);
+              }
+            }}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-[#7c3aed]/40 hover:text-white disabled:opacity-50 touch-manipulation"
+            aria-label="ACWR EWMA analiz PDF indir"
+          >
+            {pdfExportBusy ? (
+              <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+            ) : (
+              <FileText size={12} className="opacity-80" aria-hidden />
+            )}
+            Analiz PDF
+          </button>
         </div>
       </header>
       {exportFeedback ? (
@@ -801,6 +880,7 @@ export default function PerformanceAnalytics() {
               <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
             </div>
           ) : (
+            <div ref={acwrChartRef} className="min-w-0">
             <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
               <ComposedChart data={acwrData}>
                   <defs>
@@ -863,6 +943,7 @@ export default function PerformanceAnalytics() {
                   <Line yAxisId="ratio" type="monotone" dataKey="ratio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
             </ChartFrame>
+            </div>
           )}
         </div>
 
@@ -894,6 +975,7 @@ export default function PerformanceAnalytics() {
               <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
             </div>
           ) : (
+            <div ref={ewmaChartRef} className="min-w-0">
             <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
               <ComposedChart data={ewmaData}>
                   <ReferenceArea yAxisId="ratio" y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.08} />
@@ -942,6 +1024,7 @@ export default function PerformanceAnalytics() {
                   <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
             </ChartFrame>
+            </div>
           )}
         </div>
 
@@ -968,13 +1051,22 @@ export default function PerformanceAnalytics() {
                       Readiness {dayScore}/100
                     </p>
                   </div>
-                  <div
-                    className={`text-[9px] font-black py-2 px-3 rounded-xl border shrink-0 self-start sm:self-auto ${
-                      (report.fatigue ?? 0) >= 4 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"
-                    }`}
-                  >
-                    {(report.fatigue ?? 0) >= 4 ? "YÜKSEK YORGUNLUK" : "NORMAL"}
-                  </div>
+                  {(() => {
+                    const fatigue = fatigueStatusLabel(report.fatigue);
+                    const shell =
+                      fatigue.tone === "bad"
+                        ? "bg-red-500/10 text-red-500 border-red-500/20"
+                        : fatigue.tone === "mid"
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : fatigue.tone === "good"
+                            ? "bg-green-500/10 text-green-500 border-green-500/20"
+                            : "bg-white/5 text-gray-500 border-white/10";
+                    return (
+                      <div className={`text-[9px] font-black py-2 px-3 rounded-xl border shrink-0 self-start sm:self-auto ${shell}`}>
+                        {fatigue.label}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

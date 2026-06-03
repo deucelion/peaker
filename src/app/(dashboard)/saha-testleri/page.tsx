@@ -42,6 +42,7 @@ import {
   loadScopedFormDraft,
   saveScopedFormDraft,
 } from "@/lib/offline/scopedFormDrafts";
+import { FieldTestPdfExport } from "./_components/FieldTestPdfExport";
 
 function metricIsText(m: TestDefinitionRow): boolean {
   const ext = m as TestDefinitionRow & { valueType?: unknown };
@@ -75,6 +76,12 @@ export default function SahaTestleriFinal() {
   const [generalNotes, setGeneralNotes] = useState<Record<string, string>>({});
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [globalDate, setGlobalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [compareDateFrom, setCompareDateFrom] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().split("T")[0]!;
+  });
+  const [compareDateTo, setCompareDateTo] = useState(new Date().toISOString().split("T")[0]);
   const [newMetric, setNewMetric] = useState<{
     name: string;
     unit: string;
@@ -116,6 +123,8 @@ export default function SahaTestleriFinal() {
       const roster: ProfileBasic[] = dir.athletes.map((a) => ({
         id: a.id,
         full_name: a.full_name || "Sporcu",
+        height: a.height ?? null,
+        weight: a.weight ?? null,
       }));
 
       // 1. Organizasyona özel metrik tanımları (server action -> RLS etkilenmez)
@@ -533,6 +542,7 @@ export default function SahaTestleriFinal() {
       if (!ok) return;
     }
     setGlobalDate(nextDate);
+    setCompareDateTo(nextDate);
   };
 
 
@@ -612,6 +622,18 @@ export default function SahaTestleriFinal() {
               </Link>
             ))}
           </nav>
+          <FieldTestPdfExport
+            globalDate={globalDate}
+            compareDateFrom={compareDateFrom}
+            compareDateTo={compareDateTo}
+            onCompareDateFromChange={setCompareDateFrom}
+            onCompareDateToChange={setCompareDateTo}
+            selectedPlayers={selectedPlayers}
+            players={players}
+            metrics={metrics}
+            testValues={testValues}
+            generalNotes={generalNotes}
+          />
           <button
             type="button"
             disabled={exportBusy}

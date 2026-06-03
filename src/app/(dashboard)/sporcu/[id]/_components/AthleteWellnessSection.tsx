@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import type { WellnessReportRow } from "@/types/performance";
+import {
+  getWellnessMetricLabel,
+  getWellnessScoreTone,
+  wellnessToneToTextClass,
+  WELLNESS_SCALE_MAX,
+} from "@/lib/wellness/wellnessScore";
 
 /**
  * Faz 7.7 — Son wellness aside.
@@ -31,10 +37,26 @@ export function AthleteWellnessSection({ latestWellness }: { latestWellness: Wel
             {new Date(latestWellness.report_date).toLocaleDateString("tr-TR", { dateStyle: "long" })}
           </p>
           <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-gray-400">
-            {latestWellness.fatigue != null ? <span>Yorgunluk: {latestWellness.fatigue}/10</span> : null}
-            {latestWellness.sleep_quality != null ? <span>Uyku: {latestWellness.sleep_quality}/10</span> : null}
-            {latestWellness.energy_level != null ? <span>Enerji: {latestWellness.energy_level}/10</span> : null}
-            {latestWellness.stress_level != null ? <span>Stres: {latestWellness.stress_level}/10</span> : null}
+            {latestWellness.fatigue != null ? (
+              <span className={wellnessToneToTextClass(getWellnessScoreTone("fatigue", latestWellness.fatigue))}>
+                Yorgunluk: {latestWellness.fatigue}/{WELLNESS_SCALE_MAX} · {getWellnessMetricLabel("fatigue", latestWellness.fatigue)}
+              </span>
+            ) : null}
+            {latestWellness.sleep_quality != null ? (
+              <span className={wellnessToneToTextClass(getWellnessScoreTone("sleep_quality", latestWellness.sleep_quality))}>
+                Uyku: {latestWellness.sleep_quality}/{WELLNESS_SCALE_MAX} · {getWellnessMetricLabel("sleep_quality", latestWellness.sleep_quality)}
+              </span>
+            ) : null}
+            {latestWellness.energy_level != null ? (
+              <span className={wellnessToneToTextClass(getWellnessScoreTone("energy_level", latestWellness.energy_level))}>
+                Enerji: {latestWellness.energy_level}/{WELLNESS_SCALE_MAX} · {getWellnessMetricLabel("energy_level", latestWellness.energy_level)}
+              </span>
+            ) : null}
+            {latestWellness.stress_level != null ? (
+              <span className={wellnessToneToTextClass(getWellnessScoreTone("stress_level", latestWellness.stress_level))}>
+                Stres: {latestWellness.stress_level}/{WELLNESS_SCALE_MAX} · {getWellnessMetricLabel("stress_level", latestWellness.stress_level)}
+              </span>
+            ) : null}
           </div>
           <Link
             href="#performans-analitigi"

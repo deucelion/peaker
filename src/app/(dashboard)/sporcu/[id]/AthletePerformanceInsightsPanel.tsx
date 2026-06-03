@@ -37,6 +37,11 @@ import {
   processACWRData,
   processEWMAData,
 } from "@/lib/performance/loadSeries";
+import {
+  getWellnessScoreTone,
+  wellnessToneToTextClass,
+  type WellnessMetricKey,
+} from "@/lib/wellness/wellnessScore";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 
 export type BodyMetricRow = {
@@ -44,6 +49,10 @@ export type BodyMetricRow = {
   weight: number | null;
   body_fat: number | null;
 };
+
+function wellnessCellTone(key: WellnessMetricKey, value: number | null | undefined): string {
+  return wellnessToneToTextClass(getWellnessScoreTone(key, value));
+}
 
 type Visibility = {
   summary: boolean;
@@ -430,11 +439,11 @@ export function AthletePerformanceInsightsPanel({
                   <tr key={r.id} className="border-b border-white/5 text-gray-200">
                     <td className="py-3 pr-3 font-black">{new Date(r.report_date).toLocaleDateString("tr-TR")}</td>
                     <td className="py-3 pr-3 text-[#7c3aed] font-black">{getReadinessScore(r)}</td>
-                    <td className="py-3 pr-3">{r.sleep_quality ?? "—"}</td>
-                    <td className="py-3 pr-3">{r.energy_level ?? "—"}</td>
-                    <td className="py-3 pr-3">{r.stress_level ?? "—"}</td>
-                    <td className="py-3 pr-3">{r.fatigue ?? "—"}</td>
-                    <td className="py-3 pr-3">{r.muscle_soreness ?? "—"}</td>
+                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("sleep_quality", r.sleep_quality)}`}>{r.sleep_quality ?? "—"}</td>
+                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("energy_level", r.energy_level)}`}>{r.energy_level ?? "—"}</td>
+                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("stress_level", r.stress_level)}`}>{r.stress_level ?? "—"}</td>
+                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("fatigue", r.fatigue)}`}>{r.fatigue ?? "—"}</td>
+                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("muscle_soreness", r.muscle_soreness)}`}>{r.muscle_soreness ?? "—"}</td>
                     <td className="py-3">{r.resting_heart_rate ?? "—"}</td>
                   </tr>
                 ))}

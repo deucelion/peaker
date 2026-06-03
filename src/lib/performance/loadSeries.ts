@@ -1,5 +1,6 @@
 import type { AcwrPoint, EwmaPoint, TrainingLoadRow, WellnessReportRow } from "@/types/performance";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE } from "@/lib/schedule/scheduleWallTime";
+import { computeReadinessScore } from "@/lib/wellness/wellnessScore";
 
 export function getLoadDate(item: TrainingLoadRow): Date {
   const raw = item.measurement_date;
@@ -232,25 +233,7 @@ export function filterEwmaPointsByIstanbulInclusiveRange(
   });
 }
 
-export function getReadinessScore(report: WellnessReportRow): number {
-  const sleep = (Number(report.sleep_quality) || 0) * 20;
-  const energy = (Number(report.energy_level) || 0) * 20;
-  const stress = 100 - (Number(report.stress_level) || 0) * 20;
-  const fatigue = 100 - (Number(report.fatigue) || 0) * 20;
-  const soreness = 100 - (Number(report.muscle_soreness) || 0) * 20;
-  const heartRate = Number(report.resting_heart_rate) || 0;
-  const heartComponent = Math.max(0, Math.min(100, Math.round(((95 - heartRate) / 45) * 100)));
-
-  const weighted =
-    sleep * 0.2 +
-    energy * 0.2 +
-    stress * 0.2 +
-    fatigue * 0.15 +
-    soreness * 0.15 +
-    heartComponent * 0.1;
-
-  return Math.round(weighted);
-}
+export { computeReadinessScore as getReadinessScore } from "@/lib/wellness/wellnessScore";
 
 export type RiskStatsSummary = {
   critical: number;
@@ -313,7 +296,7 @@ export function computeRiskStats(
       ? Math.round(weeklyLoad * monotony)
       : null;
 
-  const recentReadiness = reports.slice(0, 7).map(getReadinessScore);
+  const recentReadiness = reports.slice(0, 7).map(computeReadinessScore);
   const readinessReportCount = recentReadiness.length;
   const readiness =
     recentReadiness.length > 0
