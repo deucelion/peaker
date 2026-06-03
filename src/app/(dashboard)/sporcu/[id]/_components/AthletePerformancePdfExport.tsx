@@ -6,7 +6,8 @@ import type { TrainingLoadRow } from "@/types/performance";
 import { getLoadDate } from "@/lib/performance/loadSeries";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
-import { prepareAthletePerformancePdf } from "@/lib/pdf/prepareAthletePerformancePdf";
+import { prepareAthletePerformancePdf, hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
+import { PerformancePdfNoDataError } from "@/lib/pdf/performancePdf";
 import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
 
 type Props = {
@@ -49,6 +50,10 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
       setMessage("Bu aralık için yük verisi yok.");
       return;
     }
+    if (!hasPerformanceDataInRange(loads, dateFrom, dateTo)) {
+      setMessage("Seçilen dönemde idman yükü kaydı yok — PDF oluşturulamaz.");
+      return;
+    }
 
     setBusy(true);
     setMessage("PDF oluşturuluyor…");
@@ -58,8 +63,12 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
       );
       downloadPdfBytes(bytes, filename);
       setMessage("Analiz PDF indirildi.");
-    } catch {
-      setMessage("PDF oluşturulamadı.");
+    } catch (err) {
+      if (err instanceof PerformancePdfNoDataError) {
+        setMessage(err.message);
+      } else {
+        setMessage("PDF oluşturulamadı.");
+      }
     } finally {
       setBusy(false);
     }

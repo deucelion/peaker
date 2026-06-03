@@ -63,7 +63,10 @@ import { fatigueStatusLabel } from "@/lib/wellness/wellnessScore";
 import {
   buildPerformanceAnalysisPdf,
   performanceAnalysisPdfFilename,
+  PerformancePdfNoDataError,
 } from "@/lib/pdf/performancePdf";
+import { hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
+import { isValidPdfChartImage } from "@/lib/pdf/pdfFormat";
 import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
 import { captureSvgChartPng } from "@/lib/pdf/chartSnapshot";
 import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
@@ -561,6 +564,14 @@ export default function PerformanceAnalytics() {
                 const ewmaFull = processEWMAData(filled);
                 const acwr30 = filterAcwrPointsByIstanbulInclusiveRange(acwrFull, range.dateFrom, range.dateTo, tz);
                 const ewma30 = filterEwmaPointsByIstanbulInclusiveRange(ewmaFull, range.dateFrom, range.dateTo, tz);
+                const loads30 = filterTrainingLoadsByIstanbulInclusiveRange(filled, range.dateFrom, range.dateTo, tz);
+                if (!hasPerformanceDataInRange(loads, range.dateFrom, range.dateTo, tz)) {
+                  setExportFeedback({
+                    tone: "err",
+                    text: "Seçilen dönemde idman yükü kaydı yok — PDF oluşturulamaz.",
+                  });
+                  return;
+                }
                 const athleteName =
                   athletes.find((a) => a.id === selectedAthleteId)?.full_name ?? "Sporcu";
                 const bytes = await runPdfTask(() =>
@@ -569,15 +580,22 @@ export default function PerformanceAnalytics() {
                     periodLabel: formatTrRangeLabel(range.dateFrom, range.dateTo),
                     acwrSeries: acwr30,
                     ewmaSeries: ewma30,
-                    loads30: filterTrainingLoadsByIstanbulInclusiveRange(filled, range.dateFrom, range.dateTo, tz),
+                    loads30,
                     acwr30,
-                    chartImages: { acwr: acwrImg, ewma: ewmaImg },
+                    chartImages: {
+                      acwr: isValidPdfChartImage(acwrImg) ? acwrImg : null,
+                      ewma: isValidPdfChartImage(ewmaImg) ? ewmaImg : null,
+                    },
                   })
                 );
                 downloadPdfBytes(bytes, performanceAnalysisPdfFilename(athleteName));
                 setExportFeedback({ tone: "ok", text: "Analiz PDF indirildi." });
-              } catch {
-                setExportFeedback({ tone: "err", text: "PDF oluşturulamadı." });
+              } catch (err) {
+                if (err instanceof PerformancePdfNoDataError) {
+                  setExportFeedback({ tone: "err", text: err.message });
+                } else {
+                  setExportFeedback({ tone: "err", text: "PDF oluşturulamadı." });
+                }
               } finally {
                 setPdfExportBusy(false);
               }
