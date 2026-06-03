@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { AthleteFieldTestPdfExport } from "./_components/AthleteFieldTestPdfExport";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 
 export type FieldTestResultRow = {
@@ -58,7 +59,19 @@ function aggregateAvgByTest(rows: FieldTestResultRow[]) {
 
 const LINE_COLORS = ["#7c3aed", "#22d3ee", "#f59e0b", "#ef4444", "#22c55e", "#a78bfa", "#fb7185"];
 
-export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRow[] }) {
+export function AthleteFieldTestsPanel({
+  results,
+  athleteId,
+  athleteName,
+  heightCm,
+  weightKg,
+}: {
+  results: FieldTestResultRow[];
+  athleteId: string;
+  athleteName: string;
+  heightCm?: number | null;
+  weightKg?: number | null;
+}) {
   const allNames = useMemo(() => Array.from(new Set(results.map(testName))).sort(), [results]);
 
   const [rangeFrom, setRangeFrom] = useState("");
@@ -286,6 +299,16 @@ export function AthleteFieldTestsPanel({ results }: { results: FieldTestResultRo
             </div>
           )}
         </div>
+
+        {athleteId ? (
+          <AthleteFieldTestPdfExport
+            athleteId={athleteId}
+            athleteName={athleteName}
+            heightCm={heightCm}
+            weightKg={weightKg}
+            testDates={results.map((r) => r.test_date)}
+          />
+        ) : null}
       </div>
 
       {compareOn && compareRows && compareRows.length > 0 && (

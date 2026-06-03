@@ -42,6 +42,7 @@ import {
   wellnessToneToTextClass,
   type WellnessMetricKey,
 } from "@/lib/wellness/wellnessScore";
+import { AthletePerformancePdfExport } from "./_components/AthletePerformancePdfExport";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 
 export type BodyMetricRow = {
@@ -88,10 +89,12 @@ const expandedVis: Visibility = {
 };
 
 export function AthletePerformanceInsightsPanel({
+  athleteName,
   loads,
   wellnessReports,
   bodyMetrics,
 }: {
+  athleteName: string;
   loads: TrainingLoadRow[];
   wellnessReports: WellnessReportRow[];
   bodyMetrics: BodyMetricRow[];
@@ -222,6 +225,8 @@ export function AthletePerformanceInsightsPanel({
           {pill("body", "Kilo / yağ")}
         </div>
       </div>
+
+      <AthletePerformancePdfExport athleteName={athleteName} loads={loads} />
 
       {vis.summary && riskStats.highRiskStreak >= 3 && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 sm:px-6 py-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-wide sm:tracking-widest italic flex flex-wrap items-start gap-3 min-w-0">

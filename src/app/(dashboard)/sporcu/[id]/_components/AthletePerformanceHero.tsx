@@ -6,7 +6,6 @@ import {
   Radar,
   RadarChart,
   PolarGrid,
-  PolarAngleAxis,
   LineChart,
   Line,
   XAxis,
@@ -21,7 +20,15 @@ import { ChartFrame, chartTooltipStyle } from "@/components/ui/charts";
  * Parent'tan veri prop'ları alır; render-only.
  */
 
-export type RadarPoint = { subject: string; A: number; fullMark: number };
+export type RadarPoint = {
+  subject: string;
+  A: number;
+  fullMark: number;
+  fullName: string;
+  unit?: string;
+  rawValue: number;
+};
+
 export type WeeklyLoadPoint = { date: string; yuk: number };
 
 export function AthletePerformanceHero({
@@ -46,24 +53,43 @@ export function AthletePerformanceHero({
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6 min-w-0">
         <div className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden min-w-0">
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-[#7c3aed]/10 rounded-xl text-[#7c3aed]">
               <Activity size={18} />
             </div>
-            <h3 className="text-sm md:text-base font-black italic text-white uppercase tracking-tight">
-              Yetenek <span className="text-[#7c3aed]">Spektrumu</span>
-            </h3>
+            <div className="min-w-0">
+              <h3 className="text-sm md:text-base font-black italic text-white uppercase tracking-tight">
+                Yetenek <span className="text-[#7c3aed]">Spektrumu</span>
+              </h3>
+              <p className="text-[9px] font-bold normal-case text-gray-600 mt-0.5">
+                En güncel {radarData.length || 8} test · kişisel geçmişe göre 0–100
+              </p>
+            </div>
           </div>
           <ChartFrame
             isEmpty={radarData.length === 0}
             emptyLabel="ATLETİK TEST VERİSİ GİRİLMEMİŞ"
           >
-            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-              <PolarGrid stroke="#ffffff05" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: "#6b7280", fontSize: 10, fontWeight: 700 }} />
-              <Radar name="Sporcu" dataKey="A" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.4} strokeWidth={4} />
+            <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData}>
+              <PolarGrid stroke="#ffffff08" radialLines={false} />
+              <Radar name="Sporcu" dataKey="A" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.35} strokeWidth={2} />
             </RadarChart>
           </ChartFrame>
+          {radarData.length > 0 ? (
+            <ul className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/5 pt-4">
+              {radarData.map((p) => (
+                <li key={p.fullName} className="min-w-0 flex items-baseline justify-between gap-2 text-[9px]">
+                  <span className="truncate font-bold uppercase text-gray-500" title={p.fullName}>
+                    {p.fullName}
+                  </span>
+                  <span className="shrink-0 tabular-nums font-black text-[#c4b5fd]">
+                    {p.rawValue}
+                    {p.unit ? <span className="text-[8px] text-gray-600 ml-0.5">{p.unit}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         <div className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden min-w-0">

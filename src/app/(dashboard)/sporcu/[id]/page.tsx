@@ -17,6 +17,7 @@ import {
 import { listTeamsForActor } from "@/lib/actions/teamActions";
 import { AthleteFieldTestsPanel, type FieldTestResultRow } from "./AthleteFieldTestsPanel";
 import { AthletePerformanceInsightsPanel, type BodyMetricRow } from "./AthletePerformanceInsightsPanel";
+import { buildAthleteRadarSpectrum } from "@/lib/fieldTests/radarSpectrum";
 import { SkeletonCard, SkeletonChart, SkeletonStatGrid, SkeletonTable } from "@/components/ui/skeletons";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { useAthletePanel } from "@/lib/hooks/useAthletePanel";
@@ -285,19 +286,7 @@ export default function SporcuDetayDinamik() {
       setBodyMetrics((res.bodyMetrics || []) as BodyMetricRow[]);
       setFinancePackage((res.financeAndPackage as never) || null);
       setTimelineEvents((res.timelineEvents || []) as TimelineEvent[]);
-
-      const latestMap: Record<string, RadarPoint> = {};
-      results.forEach((r) => {
-        const mName = r.test_definitions?.name;
-        if (mName && !latestMap[mName] && typeof r.value === "number" && Number.isFinite(r.value)) {
-          latestMap[mName] = {
-            subject: mName,
-            A: r.value,
-            fullMark: 100,
-          };
-        }
-      });
-      setRadarData(Object.values(latestMap));
+      setRadarData(buildAthleteRadarSpectrum(results));
 
       const loads = (res.loads || []) as TrainingLoadRow[];
       setTrainingLoads(loads);
@@ -495,12 +484,19 @@ export default function SporcuDetayDinamik() {
       />
 
       <AthletePerformanceInsightsPanel
+        athleteName={player?.full_name || "Sporcu"}
         loads={trainingLoads}
         wellnessReports={wellnessReports}
         bodyMetrics={bodyMetrics}
       />
 
-      <AthleteFieldTestsPanel results={tableMetrics} />
+      <AthleteFieldTestsPanel
+        results={tableMetrics}
+        athleteId={id || ""}
+        athleteName={player?.full_name || "Sporcu"}
+        heightCm={player?.height ?? null}
+        weightKg={player?.weight ?? null}
+      />
     </div>
   );
 }
