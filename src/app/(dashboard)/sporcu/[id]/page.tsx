@@ -39,6 +39,7 @@ import {
 } from "./_components/AthletePerformanceHero";
 import { AthleteProfileForm } from "./_components/AthleteProfileForm";
 import { AthletePrivateLessonPackagesSection } from "./_components/AthletePrivateLessonPackagesSection";
+import { AdminSetPasswordPanel } from "@/components/admin/AdminSetPasswordPanel";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
@@ -454,6 +455,14 @@ export default function SporcuDetayDinamik() {
         onDraftChange={handleProfileDraftChange}
         onSubmit={handleProfileSubmit}
       />
+
+      {id ? (
+        <AdminSetPasswordPanel
+          targetUserId={id}
+          targetName={player.full_name || "Sporcu"}
+          targetRoleLabel="Sporcu"
+        />
+      ) : null}
 
       {id && player ? (
         <AthletePrivateLessonPackagesSection athleteId={id} athleteName={player.full_name || "Sporcu"} />

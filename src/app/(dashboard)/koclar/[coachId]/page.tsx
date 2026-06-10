@@ -13,6 +13,7 @@ import { loadCoachAdminDetailBundle, resolveOrganizationIdForCoachAdminDetail } 
 import { updateCoachProfileByAdmin } from "@/lib/actions/coachProfileActions";
 import { updateCoachPermissions } from "@/lib/actions/coachPermissionActions";
 import CoachAccountLifecyclePanel from "../CoachAccountLifecyclePanel";
+import { AdminSetPasswordPanel } from "@/components/admin/AdminSetPasswordPanel";
 
 function CoachProfilePageInner() {
   const params = useParams();
@@ -235,6 +236,12 @@ function CoachProfilePageInner() {
         coachName={coach.fullName}
         isActive={coach.isActive}
         listHref={listOrgId ? `/koclar?org=${encodeURIComponent(listOrgId)}` : "/koclar"}
+      />
+
+      <AdminSetPasswordPanel
+        targetUserId={coach.id}
+        targetName={coach.fullName}
+        targetRoleLabel="Koç"
       />
 
       <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-4">

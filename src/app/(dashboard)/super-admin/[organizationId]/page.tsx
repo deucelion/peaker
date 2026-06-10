@@ -7,6 +7,7 @@ import { asSingleDynamicParam } from "@/lib/navigation/dynamicParams";
 import { fetchOrganizationByIdAdmin } from "@/lib/organization/adminOrganizationQuery";
 import { ORGANIZATION_STATUS_LABELS, parseOrganizationStatus } from "@/lib/organization/lifecycle";
 import SuperAdminAddCoachForm from "../SuperAdminAddCoachForm";
+import SuperAdminOrgUsersPasswordPanel from "../SuperAdminOrgUsersPasswordPanel";
 import SuperAdminLicensePanel from "../SuperAdminLicensePanel";
 import SuperAdminOrgLifecyclePanel from "../SuperAdminOrgLifecyclePanel";
 import { isUuid } from "@/lib/validation/uuid";
@@ -110,6 +111,8 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
       />
 
       <SuperAdminAddCoachForm organizationId={org.id} />
+
+      <SuperAdminOrgUsersPasswordPanel profiles={profiles} />
 
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 min-w-0">
         <Mini label="Admin" value={admins} />
