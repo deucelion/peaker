@@ -59,18 +59,9 @@ export async function resolveSessionActor(
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) return { error: "Gecersiz oturum." };
 
+  // FAZ 29: super_admin claim kestirmesi kaldırıldı — super_admin yalnızca
+  // profiles tablosundaki rol ile kanıtlanır (user_metadata client yazabilir).
   const claimRoleRaw = extractSessionRole(authData.user);
-  if (looksLikeSuperAdminRole(claimRoleRaw) || getSafeRole(claimRoleRaw) === "super_admin") {
-    return {
-      actor: {
-        id: authData.user.id,
-        role: "super_admin",
-        organizationId: null,
-        isActive: true,
-        fullName: null,
-      },
-    };
-  }
 
   let { data: profile } = await sessionClient
     .from("profiles")
@@ -88,29 +79,32 @@ export async function resolveSessionActor(
         .maybeSingle();
       if (byId.data) {
         profile = byId.data;
-      } else if (authData.user.email) {
+      } else if (authData.user.email && authData.user.email_confirmed_at) {
+        // FAZ 29: e-posta eşleşmeli bağlama yalnızca doğrulanmış e-postayla ve
+        // asla super_admin profillerine yapılmaz (hesap devralma koruması).
         const byEmail = await adminClient
           .from("profiles")
           .select("id, role, full_name, organization_id, is_active")
           .eq("email", authData.user.email)
           .limit(2);
-        if (!byEmail.error && (byEmail.data || []).length === 1) {
-          const src = byEmail.data![0];
+        const candidate =
+          !byEmail.error && (byEmail.data || []).length === 1 ? byEmail.data![0] : null;
+        if (candidate && !looksLikeSuperAdminRole(candidate.role)) {
           profile = {
             id: authData.user.id,
-            role: src.role,
-            full_name: src.full_name,
-            organization_id: src.organization_id,
-            is_active: src.is_active,
+            role: candidate.role,
+            full_name: candidate.full_name,
+            organization_id: candidate.organization_id,
+            is_active: candidate.is_active,
           };
           await adminClient.from("profiles").upsert(
             {
               id: authData.user.id,
               email: authData.user.email,
-              role: src.role,
-              full_name: src.full_name,
-              organization_id: src.organization_id,
-              is_active: src.is_active ?? true,
+              role: candidate.role,
+              full_name: candidate.full_name,
+              organization_id: candidate.organization_id,
+              is_active: candidate.is_active ?? true,
             },
             { onConflict: "id" }
           );
@@ -124,7 +118,9 @@ export async function resolveSessionActor(
   if (!profile) {
     if (!claimRoleRaw) return { error: "Profil dogrulanamadi." };
     const claimRole = getSafeRole(claimRoleRaw);
-    if (!claimRole) return { error: "Profil dogrulanamadi." };
+    // FAZ 29: claim fallback tenant rolleriyle sınırlıdır; profil satırı olmadan
+    // super_admin yetkisi verilmez.
+    if (!claimRole || claimRole === "super_admin") return { error: "Profil dogrulanamadi." };
     const orgId = extractSessionOrganizationId(authData.user);
     if (claimRequiresOrganization && !orgId) return { error: "Kullanici profili dogrulanamadi." };
     return {

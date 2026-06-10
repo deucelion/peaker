@@ -52,4 +52,27 @@ describe("mergeTenantProfileFromSources", () => {
       })
     ).toBeNull();
   });
+
+  it("FAZ 29: metadata super_admin claim'i yok sayilir (profil yokken null)", () => {
+    for (const claim of ["super_admin", "superadmin", "Super Admin", "super-admin"]) {
+      expect(
+        mergeTenantProfileFromSources({
+          profile: null,
+          metaRole: claim,
+          metaFullName: "Saldirgan",
+          metaOrgId: "33333333-3333-4333-8333-333333333333",
+        })
+      ).toBeNull();
+    }
+  });
+
+  it("FAZ 29: DB super_admin rolu korunur (metadata degil DB kaynakli)", () => {
+    const merged = mergeTenantProfileFromSources({
+      profile: { role: "super_admin", full_name: "Ops", organization_id: null, is_active: true },
+      metaRole: null,
+      metaFullName: null,
+      metaOrgId: null,
+    });
+    expect(merged?.role).toBe("super_admin");
+  });
 });

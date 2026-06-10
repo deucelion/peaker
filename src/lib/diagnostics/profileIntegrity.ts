@@ -174,7 +174,9 @@ export async function runProfileIntegrityRepair(dryRun: boolean): Promise<Profil
     if (profileById.has(user.id)) continue;
     const safeRole = getSafeRole(user.user_metadata?.role);
     const orgId = user.user_metadata?.organization_id ?? null;
-    const canAutoCreate = safeRole === "super_admin" ? true : hasValidTenantOrganizationId(safeRole, orgId);
+    // FAZ 29: metadata'dan super_admin profili asla auto-create edilmez —
+    // user_metadata client yazılabilir; super admin provisioning manueldir.
+    const canAutoCreate = safeRole !== "super_admin" && hasValidTenantOrganizationId(safeRole, orgId);
     if (!canAutoCreate) {
       skippedMissingProfiles += 1;
       continue;
@@ -185,7 +187,7 @@ export async function runProfileIntegrityRepair(dryRun: boolean): Promise<Profil
         email: user.email,
         full_name: user.user_metadata?.full_name ?? user.email ?? "User",
         role: safeRole,
-        organization_id: safeRole === "super_admin" ? null : orgId,
+        organization_id: orgId,
         is_active: true,
         created_at: nowIso,
       });

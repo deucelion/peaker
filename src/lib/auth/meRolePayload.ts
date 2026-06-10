@@ -8,7 +8,7 @@ import { isInactiveCoachProfile } from "@/lib/coach/lifecycle";
 import { loadSessionProfileWithAdminFallback } from "@/lib/auth/loadSessionProfile";
 import { getSafeRole, type UserRole } from "@/lib/auth/roleMatrix";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
-import { looksLikeSuperAdminRole, resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
+import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { extractSessionFullName, extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { mergeTenantProfileFromSources } from "@/lib/auth/tenantProfileMerge";
 import type { OrganizationGateStatus } from "@/lib/organization/license";
@@ -74,22 +74,21 @@ export async function buildMeRolePayload(): Promise<MeRoleSuccess | MeRoleFailur
     const metaRole = extractSessionRole(user);
     const metaFullName = extractSessionFullName(user);
     const metaOrgId = extractSessionOrganizationId(user);
-    const claimRole = getSafeRole(metaRole);
-    const routeRole = resolveRouteRoleFromUser(user, profile?.role ?? null);
-    const effectiveProfile =
-      routeRole === "super_admin" || looksLikeSuperAdminRole(metaRole) || claimRole === "super_admin"
-        ? {
-            role: "super_admin" as const,
-            full_name: profile?.full_name ?? metaFullName ?? "Super Admin",
-            organization_id: null as string | null,
-            is_active: true as const,
-          }
-        : mergeTenantProfileFromSources({
-            profile,
-            metaRole,
-            metaFullName,
-            metaOrgId,
-          });
+    // FAZ 29: super_admin yalnızca profil rolünden türetilir; metadata claim'i
+    // super_admin'e yükseltme yapamaz.
+    const effectiveProfile = looksLikeSuperAdminRole(profile?.role)
+      ? {
+          role: "super_admin" as const,
+          full_name: profile?.full_name ?? metaFullName ?? "Super Admin",
+          organization_id: null as string | null,
+          is_active: true as const,
+        }
+      : mergeTenantProfileFromSources({
+          profile,
+          metaRole,
+          metaFullName,
+          metaOrgId,
+        });
 
     if (profileError && !effectiveProfile?.role) {
       return { ok: false, httpStatus: 500, error: "profile_fetch_failed" };

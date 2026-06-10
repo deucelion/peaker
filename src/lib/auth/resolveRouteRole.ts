@@ -11,16 +11,23 @@ export function looksLikeSuperAdminRole(role: string | null | undefined): boolea
 
 /**
  * Edge proxy ve sayfa guard'ları için rol çözümü.
- * JWT veya profil super_admin ise super_admin doner; aksi halde tenant rolune bakilir.
+ *
+ * FAZ 29 güvenlik kuralı: super_admin yalnızca DB'deki profil rolünden türetilir.
+ * `user_metadata` client tarafından yazılabildiği için JWT claim'i super_admin'e
+ * yükseltme yapamaz; claim yalnızca tenant rolleri (admin/coach/sporcu) için
+ * profil eksikken fallback olarak kullanılır.
  */
 export function resolveRouteRole(input: {
   profileRole?: string | null;
   sessionRole?: string | null;
 }): UserRole | null {
-  if (looksLikeSuperAdminRole(input.sessionRole) || looksLikeSuperAdminRole(input.profileRole)) {
-    return "super_admin";
-  }
-  return getSafeRole(input.profileRole || input.sessionRole);
+  if (looksLikeSuperAdminRole(input.profileRole)) return "super_admin";
+  const profileSafe = getSafeRole(input.profileRole);
+  if (profileSafe) return profileSafe;
+  // Claim fallback: super_admin claim'i güvenilmezdir, yok sayılır.
+  if (looksLikeSuperAdminRole(input.sessionRole)) return null;
+  const sessionSafe = getSafeRole(input.sessionRole);
+  return sessionSafe === "super_admin" ? null : sessionSafe;
 }
 
 export function resolveRouteRoleFromUser(

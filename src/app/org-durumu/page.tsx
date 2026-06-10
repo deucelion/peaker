@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getDefaultRouteForRole, getSafeRole } from "@/lib/auth/roleMatrix";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
-import { looksLikeSuperAdminRole, resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
+import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import { safeRedirectPath } from "@/lib/auth/routeRedirect";
 import { extractSessionFullName, extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { loadSessionProfileWithAdminFallback } from "@/lib/auth/loadSessionProfile";
@@ -84,11 +84,15 @@ export default async function OrgDurumuPage({
   });
 
   if (!effectiveProfile?.role || !getSafeRole(effectiveProfile.role)) {
-    // Self-heal: auth user var ama profile yoksa metadata'dan güvenli profil tamamlamayı deneriz.
-    const isSuperAdminMeta = looksLikeSuperAdminRole(metaRoleRaw);
-    const metaRole = metaRoleRaw ? (isSuperAdminMeta ? "super_admin" : getSafeRole(metaRoleRaw)) : null;
+    // FAZ 29: metadata'dan super_admin/admin self-provision kaldırıldı.
+    // Self-heal yalnızca düşük yetkili tenant rolleri (coach/sporcu) için ve
+    // doğrulanmış e-posta + geçerli org id ile yapılır.
+    const metaRole = getSafeRole(metaRoleRaw);
     const canRepair =
-      isSuperAdminMeta || (!!metaRole && !isSuperAdminMeta && !!metaOrgId && isUuid(metaOrgId));
+      (metaRole === "coach" || metaRole === "sporcu") &&
+      !!user.email_confirmed_at &&
+      !!metaOrgId &&
+      isUuid(metaOrgId);
     if (canRepair) {
       try {
         const adminClient = createSupabaseAdminClient();
@@ -99,16 +103,12 @@ export default async function OrgDurumuPage({
             full_name:
               user.email ?? "User",
             role: metaRole as string,
-            organization_id: isSuperAdminMeta ? null : metaOrgId,
+            organization_id: metaOrgId,
             is_active: true,
           },
           { onConflict: "id" }
         );
         if (!upsertError) {
-          if (isSuperAdminMeta) {
-            const target = safeRedirectPath(PATHS.orgDurumu, PATHS.superAdmin);
-            if (target) redirect(target);
-          }
           const homeTarget = safeRedirectPath(PATHS.orgDurumu, PATHS.home);
           if (homeTarget) redirect(homeTarget);
         }

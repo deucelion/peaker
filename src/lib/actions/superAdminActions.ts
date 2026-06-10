@@ -3,7 +3,6 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
-import { extractSessionRole } from "@/lib/auth/sessionClaims";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { isMissingOrganizationLifecycleColumnError } from "@/lib/organization/adminOrganizationQuery";
 import {
@@ -46,16 +45,16 @@ async function assertSuperAdmin() {
     }
   }
 
-  const sessionRole = getSafeRole(extractSessionRole(authData.user));
+  // FAZ 29: super_admin yetkisi yalnızca profiles tablosundaki rol ile kanıtlanır;
+  // user_metadata claim'i kabul edilmez.
   const profileRole = getSafeRole(actor?.role);
-  const isSuperAdmin = profileRole === "super_admin" || sessionRole === "super_admin";
-  if (!isSuperAdmin) {
+  if (!actor || profileRole !== "super_admin") {
     return { error: "Bu islem sadece super admin icindir." as const };
   }
   return {
     actor: {
-      id: actor?.id ?? authData.user.id,
-      role: actor?.role ?? "super_admin",
+      id: actor.id,
+      role: actor.role ?? "super_admin",
     },
   };
 }

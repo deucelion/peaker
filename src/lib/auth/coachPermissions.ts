@@ -29,6 +29,11 @@ export function hasCoachPermission(permissions: CoachPermissions, key: CoachPerm
   return Boolean(permissions[key]);
 }
 
+/** FAZ 29: izin okuması başarısız olduğunda fail-closed karar için tüm izinler kapalı set. */
+export function denyAllCoachPermissions(): CoachPermissions {
+  return Object.fromEntries(COACH_PERMISSION_KEYS.map((key) => [key, false])) as CoachPermissions;
+}
+
 /**
  * Service-role okuma: yalnizca oturum dogrulanmis server action / route icinden,
  * coachId ve organizationId degerlerinin gercekten oturum sahibi ve org ile eslestigi

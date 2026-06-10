@@ -25,6 +25,13 @@ export function hasAthletePermission(permissions: AthletePermissions, key: Athle
   return Boolean(permissions[key]);
 }
 
+/** FAZ 29: izin okuması başarısız olduğunda fail-closed karar için tüm izinler kapalı set. */
+export function denyAllAthletePermissions(): AthletePermissions {
+  return Object.fromEntries(
+    (Object.keys(DEFAULT_ATHLETE_PERMISSIONS) as AthletePermissionKey[]).map((key) => [key, false])
+  ) as AthletePermissions;
+}
+
 export function isRouteBlockedForAthlete(pathname: string, permissions: AthletePermissions) {
   if (isAthleteManagementProfilePath(pathname)) return true;
   const rule = athletePathPermissionRule(pathname);

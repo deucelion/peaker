@@ -7,8 +7,16 @@ import {
   logRouteRedirectDecision,
   safeRedirectPath,
 } from "@/lib/auth/routeRedirect";
-import { isRouteBlockedForCoach, normalizeCoachPermissions } from "@/lib/auth/coachPermissions";
-import { isRouteBlockedForAthlete, normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
+import {
+  denyAllCoachPermissions,
+  isRouteBlockedForCoach,
+  normalizeCoachPermissions,
+} from "@/lib/auth/coachPermissions";
+import {
+  denyAllAthletePermissions,
+  isRouteBlockedForAthlete,
+  normalizeAthletePermissions,
+} from "@/lib/auth/athletePermissions";
 
 /**
  * Yalnızca oturum (cookie + Supabase session) kontrolü.
@@ -137,6 +145,9 @@ export async function proxy(request: NextRequest) {
     }
 
     if (role === "coach") {
+      // FAZ 29: izin okuması başarısız olursa fail-closed — izin gerektiren
+      // rotalar reddedilir, serbest rotalar etkilenmez.
+      let permissions = denyAllCoachPermissions();
       try {
         const permsRes = await supabase
           .from("coach_permissions")
@@ -144,27 +155,31 @@ export async function proxy(request: NextRequest) {
           .eq("coach_id", user.id)
           .eq("organization_id", organizationId)
           .maybeSingle();
-        const permissions = normalizeCoachPermissions((permsRes.data as Record<string, boolean> | null) || undefined);
-        if (isRouteBlockedForCoach(pathname, permissions)) {
-          if (isTransportRequest) return jsonError(403, "forbidden");
-          const coachFallback = getDefaultRouteForRole(role);
-          const safeCoachTarget = safeRedirectPath(pathname, coachFallback);
-          if (!safeCoachTarget) return response;
-          logRouteRedirectDecision("proxy", {
-            pathname,
-            role,
-            organizationId,
-            target: safeCoachTarget,
-            reason: "coach_permission_denied",
-          });
-          return NextResponse.redirect(new URL(safeCoachTarget, request.url));
+        if (!permsRes.error) {
+          permissions = normalizeCoachPermissions((permsRes.data as Record<string, boolean> | null) || undefined);
         }
       } catch {
-        // Fall back to server action guards on read failure.
+        // fail-closed: deny-all izin seti ile devam
+      }
+      if (isRouteBlockedForCoach(pathname, permissions)) {
+        if (isTransportRequest) return jsonError(403, "forbidden");
+        const coachFallback = getDefaultRouteForRole(role);
+        const safeCoachTarget = safeRedirectPath(pathname, coachFallback);
+        if (!safeCoachTarget) return response;
+        logRouteRedirectDecision("proxy", {
+          pathname,
+          role,
+          organizationId,
+          target: safeCoachTarget,
+          reason: "coach_permission_denied",
+        });
+        return NextResponse.redirect(new URL(safeCoachTarget, request.url));
       }
     }
 
     if (role === "sporcu") {
+      // FAZ 29: izin okuması başarısız olursa fail-closed.
+      let permissions = denyAllAthletePermissions();
       try {
         const permsRes = await supabase
           .from("athlete_permissions")
@@ -172,23 +187,25 @@ export async function proxy(request: NextRequest) {
           .eq("athlete_id", user.id)
           .eq("organization_id", organizationId)
           .maybeSingle();
-        const permissions = normalizeAthletePermissions((permsRes.data as Record<string, boolean> | null) || undefined);
-        if (isRouteBlockedForAthlete(pathname, permissions)) {
-          if (isTransportRequest) return jsonError(403, "forbidden");
-          const athleteFallback = getDefaultRouteForRole(role);
-          const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);
-          if (!safeAthleteTarget) return response;
-          logRouteRedirectDecision("proxy", {
-            pathname,
-            role,
-            organizationId,
-            target: safeAthleteTarget,
-            reason: "athlete_permission_denied",
-          });
-          return NextResponse.redirect(new URL(safeAthleteTarget, request.url));
+        if (!permsRes.error) {
+          permissions = normalizeAthletePermissions((permsRes.data as Record<string, boolean> | null) || undefined);
         }
       } catch {
-        // Fall back to server action guards on read failure.
+        // fail-closed: deny-all izin seti ile devam
+      }
+      if (isRouteBlockedForAthlete(pathname, permissions)) {
+        if (isTransportRequest) return jsonError(403, "forbidden");
+        const athleteFallback = getDefaultRouteForRole(role);
+        const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);
+        if (!safeAthleteTarget) return response;
+        logRouteRedirectDecision("proxy", {
+          pathname,
+          role,
+          organizationId,
+          target: safeAthleteTarget,
+          reason: "athlete_permission_denied",
+        });
+        return NextResponse.redirect(new URL(safeAthleteTarget, request.url));
       }
     }
   }

@@ -20,7 +20,6 @@ import {
   Shield,
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
-import { extractSessionRole } from "@/lib/auth/sessionClaims";
 import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
@@ -77,15 +76,8 @@ export default function DashboardLayout({
     const authUser = authData.user;
     if (!authUser) return false;
 
-    if (looksLikeSuperAdminRole(extractSessionRole(authUser))) {
-      setRole("super_admin");
-      setUserName(authUser.email ?? "Super Admin");
-      setOrganizationId(null);
-      setUserId(authUser.id);
-      setOrganizationName("SYSTEM");
-      return true;
-    }
-
+    // FAZ 29: metadata claim'inden super_admin UI bootstrap'i kaldırıldı;
+    // yalnızca profiles satırındaki rol kabul edilir.
     const { data: profileRow } = await supabase
       .from("profiles")
       .select("role, full_name")

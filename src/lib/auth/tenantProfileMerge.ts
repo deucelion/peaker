@@ -1,3 +1,5 @@
+import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
+
 export type SessionProfileRow = {
   role: string | null;
   full_name: string | null;
@@ -17,8 +19,11 @@ export function mergeTenantProfileFromSources(args: {
 }): SessionProfileRow & { role: string } | null {
   const p = args.profile;
   const fromRow = p?.role != null && String(p.role).trim() ? String(p.role).trim() : null;
-  const fromMeta =
+  // FAZ 29: metadata claim'i tenant rolleriyle sınırlıdır; super_admin görünümlü
+  // claim'ler yok sayılır (user_metadata client tarafından yazılabilir).
+  const metaTrimmed =
     args.metaRole != null && String(args.metaRole).trim() ? String(args.metaRole).trim() : null;
+  const fromMeta = metaTrimmed && !looksLikeSuperAdminRole(metaTrimmed) ? metaTrimmed : null;
   const role = fromRow ?? fromMeta;
   if (!role) return null;
 
