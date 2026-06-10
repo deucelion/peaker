@@ -6,6 +6,12 @@
 -- 20260411_gate_rls_profiles_org_read_alignment.sql) dosyalaridir.
 -- Bu dosyayi migration'lardan SONRA dikkatle calistirin; asagidaki
 -- profiles_select_org_scope migration ile ayni olmayabilir (regression riski).
+--
+-- FAZ 30 NOTU: "enable row level security" komutlari ve athletic_results /
+-- training_schedule / training_participants SELECT kapsamlari artik migration
+-- pipeline'inda (20260610_faz30_rls_completion.sql ve 20260503). Bu dosya yalnizca
+-- yazma (insert/update) politikalari icin referans olarak tutulur; manuel
+-- calistirilmasi zorunlu degildir.
 
 alter table if exists public.profiles enable row level security;
 alter table if exists public.training_schedule enable row level security;
