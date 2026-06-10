@@ -83,3 +83,25 @@ export function canRefundPackage(status: PackageLifecycleStatus): boolean {
 export function lifecycleLabelForPackage(pkg: PrivateLessonPackage): string {
   return PACKAGE_LIFECYCLE_LABEL[resolvePackageLifecycleStatus(pkg)];
 }
+
+/** Cancelled/refunded paketlerde çekirdek alanlar (ders sayısı, ücret) düzenlenemez. */
+export function packageAllowsCoreEdit(status: PackageLifecycleStatus): boolean {
+  return status !== "cancelled" && status !== "refunded";
+}
+
+/**
+ * Çekirdek güncelleme (ders sayısı / ücret / aktiflik) sonrası yaşam döngüsü.
+ * Kritik kural: tamamlanmış pakete ders eklenirse paket yeniden "active" olur
+ * (pazarlık, ders hediye etme senaryoları) — "completed"da takılı kalmaz.
+ */
+export function resolveLifecycleAfterCoreUpdate(opts: {
+  current: PackageLifecycleStatus;
+  isActiveRequested: boolean;
+  nextRemaining: number;
+}): PackageLifecycleStatus {
+  const { current, isActiveRequested, nextRemaining } = opts;
+  if (current === "cancelled" || current === "refunded") return current;
+  if (nextRemaining <= 0) return "completed";
+  if (!isActiveRequested) return "paused";
+  return "active";
+}

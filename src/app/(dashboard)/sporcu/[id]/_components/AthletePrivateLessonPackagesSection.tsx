@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Package, PlusCircle } from "lucide-react";
+import { Loader2, Package, Pencil, PlusCircle } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { PrivateLessonPackageFormModal } from "@/components/privateLessons/PrivateLessonPackageFormModal";
+import { PrivateLessonPackageEditModal } from "@/components/privateLessons/PrivateLessonPackageEditModal";
 import {
   listPrivateLessonFormOptions,
   listPrivateLessonPackagesForAthleteId,
@@ -27,6 +28,7 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
   const [packages, setPackages] = useState<PrivateLessonPackage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editPkg, setEditPkg] = useState<PrivateLessonPackage | null>(null);
   const [athletes, setAthletes] = useState<Array<{ id: string; full_name: string }>>([]);
   const [coaches, setCoaches] = useState<Array<{ id: string; full_name: string }>>([]);
   const [viewerRole, setViewerRole] = useState<"admin" | "coach">("admin");
@@ -114,6 +116,16 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
                   >
                     {PACKAGE_LIFECYCLE_LABEL[lifecycle]}
                   </span>
+                  {lifecycle !== "cancelled" && lifecycle !== "refunded" ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditPkg(pkg)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[9px] font-black uppercase text-gray-300 hover:border-[#7c3aed]/40 hover:text-white"
+                    >
+                      <Pencil size={10} aria-hidden />
+                      Düzenle
+                    </button>
+                  ) : null}
                   <Link
                     href={`/ozel-ders-paketleri/${pkg.id}`}
                     className="rounded-lg border border-white/10 px-2 py-1 text-[9px] font-black uppercase text-[#c4b5fd]"
@@ -139,6 +151,18 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
           viewerId={viewerId}
           lockedAthleteId={athleteId}
           lockedAthleteName={athleteName}
+        />
+      ) : null}
+
+      {editPkg ? (
+        <PrivateLessonPackageEditModal
+          key={`edit-${editPkg.id}`}
+          open
+          onClose={() => setEditPkg(null)}
+          onSuccess={() => void load()}
+          pkg={editPkg}
+          coaches={coaches}
+          viewerRole={viewerRole}
         />
       ) : null}
     </section>

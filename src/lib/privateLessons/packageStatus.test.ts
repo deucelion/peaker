@@ -3,8 +3,10 @@ import {
   canCancelPackage,
   canRefundPackage,
   derivePackageLifecycleStatus,
+  packageAllowsCoreEdit,
   packageAllowsNewSessions,
   packageAllowsPayment,
+  resolveLifecycleAfterCoreUpdate,
 } from "@/lib/privateLessons/packageStatus";
 
 describe("package lifecycle", () => {
@@ -45,5 +47,71 @@ describe("package lifecycle", () => {
     expect(canCancelPackage("active")).toBe(true);
     expect(canCancelPackage("refunded")).toBe(false);
     expect(canRefundPackage("cancelled")).toBe(true);
+  });
+});
+
+describe("core edit lifecycle (pazarlık / ders hediye)", () => {
+  it("tamamlanmış pakete ders eklenince yeniden aktifleşir", () => {
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "completed",
+        isActiveRequested: true,
+        nextRemaining: 2,
+      })
+    ).toBe("active");
+  });
+
+  it("ders eklenmeden tamamlanmış paket completed kalır", () => {
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "completed",
+        isActiveRequested: true,
+        nextRemaining: 0,
+      })
+    ).toBe("completed");
+  });
+
+  it("aktif paketten ders azaltılıp sıfıra inerse completed olur", () => {
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "active",
+        isActiveRequested: true,
+        nextRemaining: 0,
+      })
+    ).toBe("completed");
+  });
+
+  it("aktif istek false ise kalan ders olsa da paused olur", () => {
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "active",
+        isActiveRequested: false,
+        nextRemaining: 3,
+      })
+    ).toBe("paused");
+  });
+
+  it("donmuş paket aktif istek ile yeniden aktifleşir", () => {
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "paused",
+        isActiveRequested: true,
+        nextRemaining: 3,
+      })
+    ).toBe("active");
+  });
+
+  it("iptal/iade edilmiş paket düzenlenemez ve durumu değişmez", () => {
+    expect(packageAllowsCoreEdit("cancelled")).toBe(false);
+    expect(packageAllowsCoreEdit("refunded")).toBe(false);
+    expect(packageAllowsCoreEdit("completed")).toBe(true);
+    expect(packageAllowsCoreEdit("active")).toBe(true);
+    expect(
+      resolveLifecycleAfterCoreUpdate({
+        current: "cancelled",
+        isActiveRequested: true,
+        nextRemaining: 5,
+      })
+    ).toBe("cancelled");
   });
 });

@@ -14,8 +14,10 @@ import { assertValidTRYMoneyAmount, calculatePackageFinanceSummary } from "@/lib
 import { computePaymentStatus, normalizeMoney, parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { parseInstallmentFieldsFromForm } from "@/lib/privateLessons/parseInstallmentFields";
 import {
+  packageAllowsCoreEdit,
   packageAllowsPayment,
   packageAllowsUsage,
+  resolveLifecycleAfterCoreUpdate,
   resolvePackageLifecycleStatus,
 } from "@/lib/privateLessons/packageStatus";
 import { buildPackageUsageLessonRows } from "@/lib/privateLessons/packageUsageLessonRows";
@@ -44,7 +46,6 @@ import type {
   PrivateLessonPayment,
   PrivateLessonUsage,
 } from "@/lib/types";
-import type { PackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
@@ -580,10 +581,15 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
       totalLessons: pkg.total_lessons ?? 0,
       usedLessons: pkg.used_lessons ?? 0,
     });
-    let nextLifecycle: PackageLifecycleStatus = currentLifecycle;
-    if (isActive && currentLifecycle === "paused") nextLifecycle = "active";
-    else if (!isActive && currentLifecycle === "active") nextLifecycle = "paused";
-    else if (nextRemaining <= 0) nextLifecycle = "completed";
+    if (!packageAllowsCoreEdit(currentLifecycle)) {
+      return { error: "İptal edilmiş veya iade edilmiş paket düzenlenemez." };
+    }
+    const nextLifecycle = resolveLifecycleAfterCoreUpdate({
+      current: currentLifecycle,
+      isActiveRequested: isActive,
+      nextRemaining,
+    });
+    const nextIsActive = nextLifecycle === "active";
 
     const caps = await getSchemaCapabilities();
     const updatePayload: Record<string, unknown> = {
@@ -591,11 +597,11 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
       coach_id: coachId,
       total_lessons: totalLessons,
       total_price: totalPrice,
-      is_active: isActive,
+      is_active: nextIsActive,
       remaining_lessons: nextRemaining,
       payment_status: nextPaymentStatus,
       updated_at: new Date().toISOString(),
-      ...packageLifecycleUpdatePayload(caps, nextLifecycle, isActive),
+      ...packageLifecycleUpdatePayload(caps, nextLifecycle, nextIsActive),
     };
     if (caps.packages.installmentFields) {
       updatePayload.installment_count = installmentParsed.installmentCount;
@@ -621,7 +627,8 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
           packageName,
           totalLessons,
           totalPrice,
-          isActive,
+          isActive: nextIsActive,
+          lifecycle: nextLifecycle,
           coachId,
           previous: {
             package_name: pkg.package_name,
@@ -641,9 +648,12 @@ export async function updatePrivateLessonPackageCore(formData: FormData) {
       organizationId: actor.organization_id!,
       actorId: actor.id,
       eventType: "package_updated",
-      title: "Paket güncellendi",
+      title:
+        currentLifecycle === "completed" && nextLifecycle === "active"
+          ? "Paket güncellendi — ders eklenerek yeniden aktifleştirildi"
+          : "Paket güncellendi",
       description: packageName,
-      metadata: { totalLessons, totalPrice, isActive, nextLifecycle },
+      metadata: { totalLessons, totalPrice, isActive: nextIsActive, nextLifecycle },
     });
 
     revalidatePath("/ozel-ders-paketleri");

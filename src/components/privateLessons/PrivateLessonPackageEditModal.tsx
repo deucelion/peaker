@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { updatePrivateLessonPackage } from "@/lib/actions/privateLessonPackageActions";
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
+import { resolvePackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
 import { MoneyAmountInput } from "@/components/privateLessons/MoneyAmountInput";
 import type { PrivateLessonPackage } from "@/lib/types";
 
@@ -38,6 +39,13 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
     return { lessons, price };
   }, [totalLessons, totalPrice]);
 
+  const currentLifecycle = useMemo(() => resolvePackageLifecycleStatus(pkg), [pkg]);
+  /** Tamamlanmış pakete ders eklenirse (pazarlık/hediye) paket otomatik yeniden aktifleşir. */
+  const willReactivate =
+    currentLifecycle === "completed" &&
+    Number.isFinite(parsed.lessons) &&
+    parsed.lessons > pkg.usedLessons;
+
   const isValid =
     Boolean(packageName.trim()) &&
     Number.isFinite(parsed.lessons) &&
@@ -59,7 +67,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
     fd.append("coachId", coachId);
     fd.append("totalLessons", totalLessons);
     fd.append("totalPrice", totalPrice);
-    fd.append("isActive", isActive ? "true" : "false");
+    fd.append("isActive", willReactivate || isActive ? "true" : "false");
     if (installmentCount) fd.append("installmentCount", installmentCount);
     if (installmentIntervalDays) fd.append("installmentIntervalDays", installmentIntervalDays);
     if (nextPaymentDueAt) fd.append("nextPaymentDueAt", nextPaymentDueAt);
@@ -88,6 +96,11 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
         <p className="mt-2 text-[10px] font-semibold text-amber-300/90">
           Ödenen tutar (₺{pkg.amountPaid}) manuel değiştirilmez. Toplam ücret ve ders sayısı finansal kurallara göre sınırlanır.
         </p>
+        {willReactivate ? (
+          <p className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-200">
+            Ders eklediğiniz için tamamlanmış paket kaydedildiğinde otomatik olarak yeniden aktifleşecek; yeni ders planlanabilir.
+          </p>
+        ) : null}
         <div className="mt-4 space-y-4">
           <label className="block space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Paket adı</span>
