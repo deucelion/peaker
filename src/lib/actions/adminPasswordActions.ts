@@ -12,7 +12,6 @@ import {
   type PasswordAdminActor,
 } from "@/lib/auth/adminPasswordPolicy";
 import { mapAuthPasswordError, readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
-import { assertSuperAdmin } from "@/lib/actions/superAdminActions";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 
 function assertUuid(id: string | null | undefined): id is string {
@@ -105,8 +104,11 @@ export async function setUserPasswordByAdmin(targetUserId: string, newPassword: 
 /** Super admin ayarlar / hub: sifre atamasi icin org listesi. */
 export async function listOrganizationsForSuperAdminPasswordHub() {
   return withServerActionGuard("admin.listOrganizationsForSuperAdminPasswordHub", async () => {
-    const guard = await assertSuperAdmin();
-    if ("error" in guard) return { error: guard.error ?? "Yetkisiz." };
+    const actorResult = await resolveSessionActor();
+    if ("error" in actorResult) return { error: actorResult.error };
+    if (actorResult.actor.role !== "super_admin") {
+      return { error: "Bu işlem yalnızca super admin içindir." };
+    }
 
     const adminClient = createSupabaseAdminClient();
     const { data, error } = await adminClient
