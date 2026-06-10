@@ -158,6 +158,8 @@ export default function PerformanceAnalytics() {
   const acwrChartRef = useRef<HTMLDivElement>(null);
   const ewmaChartRef = useRef<HTMLDivElement>(null);
   const [exportFeedback, setExportFeedback] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
+  // FAZ 32: sunucu tarafindaki sporcu hard-cap kesintisi gorunur uyariya baglanir.
+  const [capWarning, setCapWarning] = useState<{ cap: number; total: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,6 +236,11 @@ export default function PerformanceAnalytics() {
       }
 
       const range = result.appliedRange ?? { dateFrom: appliedFrom, dateTo: appliedTo };
+      setCapWarning(
+        "athleteCap" in result && result.athleteCap?.capped
+          ? { cap: result.athleteCap.cap, total: result.athleteCap.total }
+          : null
+      );
       const loads = (result.loads || []) as unknown as TrainingLoadRow[];
       const reports = (result.reports || []) as WellnessReportRow[];
       const tz =
@@ -624,6 +631,15 @@ export default function PerformanceAnalytics() {
           role="status"
         >
           {exportFeedback.text}
+        </p>
+      ) : null}
+      {capWarning ? (
+        <p
+          className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-200"
+          role="alert"
+        >
+          Veri kapsamı sınırlandı: {capWarning.total} sporcudan ilk {capWarning.cap} tanesi analize dahil edildi. Tarih
+          aralığını daraltın veya tek sporcu görünümünü kullanın.
         </p>
       ) : null}
 

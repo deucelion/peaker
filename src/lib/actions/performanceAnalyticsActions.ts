@@ -14,6 +14,7 @@ import type { TrainingLoadRow } from "@/types/performance";
 import { aggregateTrainingLoadsByCalendarDay } from "@/lib/performance/loadSeries";
 import {
   planProfileLoadFetch,
+  PROFILE_LOAD_FETCH_HARD_CAP,
   trainingLoadsSelectClause,
 } from "@/lib/performance/aggregationHelpers";
 import { chunkedInQuery } from "@/lib/db/chunkedIn";
@@ -203,6 +204,7 @@ export async function listPerformanceAnalyticsData(
   // Tek sporcu görünümünde profil join'i display name için gerekli; takım
   // görünümünde aggregateTrainingLoadsByCalendarDay sonrası profiles
   // alanı null'a düşürüldüğü için join cost'u boşa harcanmaz.
+  const profileIdsTotalCount = new Set(profileIdsForLoads.filter(Boolean)).size;
   const fetchPlan = planProfileLoadFetch(profileIdsForLoads, {
     mode: athleteProfileId ? "single" : "team",
     scope: "listPerformanceAnalyticsData",
@@ -366,6 +368,10 @@ export async function listPerformanceAnalyticsData(
     appliedRange: { dateFrom, dateTo },
     timeZone: orgTimeZone,
     mvFreshness,
+    // FAZ 32: hard cap kesintisi artik sessiz degil — UI gorunur uyari basar.
+    athleteCap: fetchPlan.cappedAtHard
+      ? { capped: true as const, cap: PROFILE_LOAD_FETCH_HARD_CAP, total: profileIdsTotalCount }
+      : null,
     reports: (reports || []).map((row) => {
       const profile = (row as { profiles?: { full_name?: string | null; email?: string | null } }).profiles;
       return {

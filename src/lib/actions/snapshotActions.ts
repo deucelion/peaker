@@ -845,14 +845,19 @@ export async function getDashboardSnapshot() {
   const dayEnd = new Date();
   dayEnd.setHours(23, 59, 59, 999);
 
-  const [playersRes, trainingRes, recentRes, coachRes, participantsRes, paymentsRes, teamProfilesRes, todayLessonsRes, recentAttendanceRes, fieldTestDefRes] = await Promise.all([
+  // FAZ 32: yoklama orani / tahsilat / takim ozetleri DB-side agregasyonla
+  // hesaplanir (peaker_admin_dashboard_stats). RPC yoksa (migration henuz
+  // uygulanmamis ortam) eski satir-tasiyan sorgulara fallback yapilir.
+  const statsRpcPromise = adminClient.rpc("peaker_admin_dashboard_stats", {
+    p_org_id: actor.organizationId,
+  });
+
+  const [playersRes, trainingRes, recentRes, coachRes, statsRpcRes, todayLessonsRes, recentAttendanceRes, fieldTestDefRes] = await Promise.all([
     adminClient.from("profiles").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId).eq("role", "sporcu"),
     adminClient.from("training_schedule").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId),
     adminClient.from("training_schedule").select("id, title, start_time, location").eq("organization_id", actor.organizationId).order("start_time", { ascending: false }).limit(4),
     adminClient.from("profiles").select("id, full_name, email, created_at, role").eq("organization_id", actor.organizationId).order("created_at", { ascending: false }),
-    adminClient.from("training_participants").select("attendance_status, training_schedule!inner(organization_id)").eq("training_schedule.organization_id", actor.organizationId),
-    adminClient.from("payments").select("amount, status").eq("organization_id", actor.organizationId),
-    adminClient.from("profiles").select("id, team, payments(status)").eq("organization_id", actor.organizationId).eq("role", "sporcu"),
+    statsRpcPromise,
     adminClient
       .from("training_schedule")
       .select("id, title, start_time, location, capacity, coach_id, coach_profile:profiles!training_schedule_coach_id_fkey(full_name), training_participants(attendance_status)")
@@ -861,9 +866,12 @@ export async function getDashboardSnapshot() {
       .lte("start_time", dayEnd.toISOString())
       .neq("status", "cancelled")
       .order("start_time", { ascending: true }),
+    // FAZ 32: org filtresi eklendi — onceden tum platformdaki son yoklama
+    // guncellemeleri okunuyordu (cross-org sizinti + olceklenme sorunu).
     adminClient
       .from("training_participants")
-      .select("training_id, marked_at, athlete_profile:profiles!training_participants_profile_id_fkey(full_name, email)")
+      .select("training_id, marked_at, training_schedule!inner(organization_id), athlete_profile:profiles!training_participants_profile_id_fkey(full_name, email)")
+      .eq("training_schedule.organization_id", actor.organizationId)
       .not("marked_at", "is", null)
       .order("marked_at", { ascending: false })
       .limit(5),
@@ -872,23 +880,69 @@ export async function getDashboardSnapshot() {
     adminClient.from("test_definitions").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId),
   ]);
 
-  const participantRows = (participantsRes.data || []) as Array<{ attendance_status?: string | null }>;
-  const paymentRows = (paymentsRes.data || []) as Array<{ amount: number | null; status: string | null }>;
-  const attendanceRate = participantRows.length > 0
-    ? Math.round((participantRows.filter((p) => (p.attendance_status || "registered") === "attended").length / participantRows.length) * 100).toString()
-    : "-";
-  const monthlyRevenue = paymentRows.length > 0
-    ? paymentRows.filter((p) => p.status === "odendi").reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toLocaleString("tr-TR")
-    : "-";
-  const paidCount = paymentRows.filter((p) => p.status === "odendi").length;
-  const revenueTrend = paymentRows.length > 0 ? `%${Math.round((paidCount / paymentRows.length) * 100)} TAHSILAT` : "VERI YOK";
+  type AdminDashboardStats = {
+    attendance_total: number;
+    attendance_attended: number;
+    payments_total: number;
+    payments_paid_count: number;
+    payments_paid_sum: number;
+    team_summaries: Array<{
+      team_name: string;
+      total_payments: number;
+      paid_payments: number;
+      pending_players: number;
+    }>;
+  };
+
+  let attendanceRate = "-";
+  let monthlyRevenue = "-";
+  let revenueTrend = "VERI YOK";
+  let totalPaymentsCount = 0;
+  let allTeamSummaries: Array<{ teamName: string; completionRate: number; pendingPlayers: number }> = [];
+
+  if (!statsRpcRes.error && statsRpcRes.data) {
+    const stats = statsRpcRes.data as AdminDashboardStats;
+    attendanceRate = stats.attendance_total > 0
+      ? Math.round((stats.attendance_attended / stats.attendance_total) * 100).toString()
+      : "-";
+    monthlyRevenue = stats.payments_total > 0 ? Number(stats.payments_paid_sum).toLocaleString("tr-TR") : "-";
+    revenueTrend = stats.payments_total > 0
+      ? `%${Math.round((stats.payments_paid_count / stats.payments_total) * 100)} TAHSILAT`
+      : "VERI YOK";
+    totalPaymentsCount = stats.payments_total;
+    allTeamSummaries = (stats.team_summaries || [])
+      .map((t) => ({
+        teamName: t.team_name,
+        completionRate: t.total_payments > 0 ? Math.round((t.paid_payments / t.total_payments) * 100) : 100,
+        pendingPlayers: t.pending_players,
+      }))
+      .sort((a, b) => b.completionRate - a.completionRate);
+  } else {
+    // Fallback: RPC yok — eski davranis (satir tasiyan sorgular).
+    const [participantsRes, paymentsRes, teamProfilesRes] = await Promise.all([
+      adminClient.from("training_participants").select("attendance_status, training_schedule!inner(organization_id)").eq("training_schedule.organization_id", actor.organizationId),
+      adminClient.from("payments").select("amount, status").eq("organization_id", actor.organizationId),
+      adminClient.from("profiles").select("id, team, payments(status)").eq("organization_id", actor.organizationId).eq("role", "sporcu"),
+    ]);
+    const participantRows = (participantsRes.data || []) as Array<{ attendance_status?: string | null }>;
+    const paymentRows = (paymentsRes.data || []) as Array<{ amount: number | null; status: string | null }>;
+    attendanceRate = participantRows.length > 0
+      ? Math.round((participantRows.filter((p) => (p.attendance_status || "registered") === "attended").length / participantRows.length) * 100).toString()
+      : "-";
+    monthlyRevenue = paymentRows.length > 0
+      ? paymentRows.filter((p) => p.status === "odendi").reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toLocaleString("tr-TR")
+      : "-";
+    const paidCount = paymentRows.filter((p) => p.status === "odendi").length;
+    revenueTrend = paymentRows.length > 0 ? `%${Math.round((paidCount / paymentRows.length) * 100)} TAHSILAT` : "VERI YOK";
+    totalPaymentsCount = paymentRows.length;
+    allTeamSummaries = mapTeamPaymentSummaries((teamProfilesRes.data || []) as RawTeamProfileForPayments[]);
+  }
 
   const adminTodayLessons = (todayLessonsRes.data || []) as AdminTodayLessonRow[];
   const adminPendingAttendance = adminTodayLessons.filter((lesson) =>
     (lesson.training_participants || []).some((p) => (p.attendance_status || "registered") === "registered")
   );
   const activeCoachCountToday = new Set(adminTodayLessons.map((lesson) => lesson.coach_id).filter(Boolean)).size;
-  const allTeamSummaries = mapTeamPaymentSummaries((teamProfilesRes.data || []) as RawTeamProfileForPayments[]);
   const teamStats = allTeamSummaries
     .map((item) => ({
       name: item.teamName,
@@ -946,7 +1000,7 @@ export async function getDashboardSnapshot() {
         totalTeams: totalTeamCount,
         totalLessons: trainingRes.count || 0,
         totalFieldTestMetrics: fieldTestDefRes.count || 0,
-        totalPayments: paymentRows.length,
+        totalPayments: totalPaymentsCount,
       },
     },
   };

@@ -100,6 +100,16 @@ export default async function SuperAdminPage() {
   let profiles: Array<{ organization_id?: string | null; role?: string | null }> = [];
   let lessons: Array<{ organization_id?: string | null; start_time?: string | null; created_at?: string | null }> = [];
   let markedRows: MarkedRow[] = [];
+  type OrgSummaryRpcRow = {
+    organization_id: string;
+    athletes: number;
+    coaches: number;
+    total_lessons: number;
+    today_lessons: number;
+    last_activity_at: string | null;
+    attendance_marked_today: number;
+  };
+  let rpcSummaryRows: OrgSummaryRpcRow[] | null = null;
 
   try {
     const adminClient = createSupabaseAdminClient();
@@ -113,22 +123,32 @@ export default async function SuperAdminPage() {
       organizations = fullOrgRes.data || [];
     }
 
-    const [profilesRes, lessonsRes, markedRes] = await Promise.all([
-      adminClient.from("profiles").select("organization_id, role"),
-      adminClient.from("training_schedule").select("organization_id, start_time, created_at"),
-      adminClient
-        .from("training_participants")
-        .select("marked_at, training_schedule!inner(organization_id, start_time)")
-        .not("marked_at", "is", null),
-    ]);
-
-    profiles = profilesRes.data || [];
-    lessons = lessonsRes.data || [];
-
-    if (markedRes.error) {
-      markedRows = [];
+    // FAZ 32: org bazli sayimlar DB-side agregasyonla alinir; RPC yoksa
+    // (migration uygulanmamis ortam) eski platform taramalarina fallback.
+    const summariesRpc = await adminClient.rpc("peaker_super_admin_org_summaries", {
+      p_today_start: startOfTodayIso(),
+      p_today_end: endOfTodayIso(),
+    });
+    if (!summariesRpc.error && Array.isArray(summariesRpc.data)) {
+      rpcSummaryRows = summariesRpc.data as OrgSummaryRpcRow[];
     } else {
-      markedRows = (markedRes.data || []) as MarkedRow[];
+      const [profilesRes, lessonsRes, markedRes] = await Promise.all([
+        adminClient.from("profiles").select("organization_id, role"),
+        adminClient.from("training_schedule").select("organization_id, start_time, created_at"),
+        adminClient
+          .from("training_participants")
+          .select("marked_at, training_schedule!inner(organization_id, start_time)")
+          .not("marked_at", "is", null),
+      ]);
+
+      profiles = profilesRes.data || [];
+      lessons = lessonsRes.data || [];
+
+      if (markedRes.error) {
+        markedRows = [];
+      } else {
+        markedRows = (markedRes.data || []) as MarkedRow[];
+      }
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Bilinmeyen hata";
@@ -152,38 +172,51 @@ export default async function SuperAdminPage() {
   }
 
   const roleCounts = new Map<string, { athletes: number; coaches: number }>();
-  profiles.forEach((row) => {
-    const orgId = row.organization_id || "";
-    if (!orgId) return;
-    if (!roleCounts.has(orgId)) roleCounts.set(orgId, { athletes: 0, coaches: 0 });
-    const bucket = roleCounts.get(orgId)!;
-    if (row.role === "sporcu") bucket.athletes += 1;
-    if (row.role === "coach") bucket.coaches += 1;
-  });
-
   const lessonStats = new Map<string, { total: number; today: number; lastActivityAt: string | null }>();
-  const todayIso = startOfTodayIso();
-  const todayEndIso = endOfTodayIso();
-  lessons.forEach((row) => {
-    const orgId = row.organization_id || "";
-    if (!orgId) return;
-    if (!lessonStats.has(orgId)) lessonStats.set(orgId, { total: 0, today: 0, lastActivityAt: null });
-    const bucket = lessonStats.get(orgId)!;
-    bucket.total += 1;
-    if (row.start_time && row.start_time >= todayIso && row.start_time <= todayEndIso) bucket.today += 1;
-    const candidate = row.start_time || row.created_at || null;
-    if (candidate && (!bucket.lastActivityAt || candidate > bucket.lastActivityAt)) bucket.lastActivityAt = candidate;
-  });
-
   const attendanceTodayByOrg = new Map<string, number>();
-  markedRows.forEach((row) => {
-    const schedule = Array.isArray(row.training_schedule) ? row.training_schedule[0] : row.training_schedule;
-    const orgId = schedule?.organization_id || "";
-    if (!orgId || !row.marked_at) return;
-    if (row.marked_at >= todayIso) {
-      attendanceTodayByOrg.set(orgId, (attendanceTodayByOrg.get(orgId) || 0) + 1);
+
+  if (rpcSummaryRows) {
+    for (const row of rpcSummaryRows) {
+      roleCounts.set(row.organization_id, { athletes: Number(row.athletes), coaches: Number(row.coaches) });
+      lessonStats.set(row.organization_id, {
+        total: Number(row.total_lessons),
+        today: Number(row.today_lessons),
+        lastActivityAt: row.last_activity_at,
+      });
+      attendanceTodayByOrg.set(row.organization_id, Number(row.attendance_marked_today));
     }
-  });
+  } else {
+    profiles.forEach((row) => {
+      const orgId = row.organization_id || "";
+      if (!orgId) return;
+      if (!roleCounts.has(orgId)) roleCounts.set(orgId, { athletes: 0, coaches: 0 });
+      const bucket = roleCounts.get(orgId)!;
+      if (row.role === "sporcu") bucket.athletes += 1;
+      if (row.role === "coach") bucket.coaches += 1;
+    });
+
+    const todayIso = startOfTodayIso();
+    const todayEndIso = endOfTodayIso();
+    lessons.forEach((row) => {
+      const orgId = row.organization_id || "";
+      if (!orgId) return;
+      if (!lessonStats.has(orgId)) lessonStats.set(orgId, { total: 0, today: 0, lastActivityAt: null });
+      const bucket = lessonStats.get(orgId)!;
+      bucket.total += 1;
+      if (row.start_time && row.start_time >= todayIso && row.start_time <= todayEndIso) bucket.today += 1;
+      const candidate = row.start_time || row.created_at || null;
+      if (candidate && (!bucket.lastActivityAt || candidate > bucket.lastActivityAt)) bucket.lastActivityAt = candidate;
+    });
+
+    markedRows.forEach((row) => {
+      const schedule = Array.isArray(row.training_schedule) ? row.training_schedule[0] : row.training_schedule;
+      const orgId = schedule?.organization_id || "";
+      if (!orgId || !row.marked_at) return;
+      if (row.marked_at >= todayIso) {
+        attendanceTodayByOrg.set(orgId, (attendanceTodayByOrg.get(orgId) || 0) + 1);
+      }
+    });
+  }
 
   const orgSummaries: SuperAdminOrganizationSummary[] = organizations.map((org) => {
     const roleBucket = roleCounts.get(org.id) || { athletes: 0, coaches: 0 };

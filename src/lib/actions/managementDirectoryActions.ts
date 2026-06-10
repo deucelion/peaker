@@ -108,7 +108,17 @@ export async function listManagementDirectory() {
     .filter((row) => getSafeRole(row.role) === "sporcu")
     .map((row) => row.id);
 
-  const [packageRes, sessionRes, paymentRes] = await Promise.all([
+  // FAZ 32: "son tamamlanan ders" DB-side distinct on RPC ile sporcu basina
+  // tek satir doner; RPC yoksa eski (tum tamamlanmis seanslari tasiyan)
+  // sorguya fallback yapilir.
+  const lastSessionRpcPromise =
+    athleteIds.length > 0
+      ? adminClient.rpc("peaker_directory_last_completed_sessions", {
+          p_org_id: resolved.organizationId,
+        })
+      : Promise.resolve({ data: [], error: null });
+
+  const [packageRes, lastSessionRpcRes, paymentRes] = await Promise.all([
     athleteIds.length > 0
       ? adminClient
           .from("private_lesson_packages")
@@ -117,26 +127,38 @@ export async function listManagementDirectory() {
           .in("athlete_id", athleteIds)
           .order("updated_at", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
-    athleteIds.length > 0
-      ? adminClient
-          .from("private_lesson_sessions")
-          .select("athlete_id, starts_at, status")
-          .eq("organization_id", resolved.organizationId)
-          .eq("status", "completed")
-          .in("athlete_id", athleteIds)
-          .order("starts_at", { ascending: false })
-      : Promise.resolve({ data: [], error: null }),
+    lastSessionRpcPromise,
+    // FAZ 32: dizin paket satirlarini kullanmaz (paket finansi packages
+    // uzerinden gelir; computeFinanceStatusSummary "paket" disindakileri aidat
+    // sayar). Satir hacmi payment_type filtresiyle dusurulur.
     athleteIds.length > 0
       ? adminClient
           .from("payments")
           .select("id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description")
           .eq("organization_id", resolved.organizationId)
+          .neq("payment_type", "paket")
           .in("profile_id", athleteIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (packageRes.error) return { error: `Paket bilgisi alınamadı: ${packageRes.error.message}` };
-  if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
   if (paymentRes.error) return { error: `Finans bilgisi alınamadı: ${paymentRes.error.message}` };
+
+  let sessionRows: Array<{ athlete_id: string | null; starts_at: string }> = [];
+  if (!lastSessionRpcRes.error) {
+    sessionRows = ((lastSessionRpcRes.data || []) as Array<{ athlete_id: string; last_completed_at: string }>).map(
+      (r) => ({ athlete_id: r.athlete_id, starts_at: r.last_completed_at })
+    );
+  } else {
+    const sessionRes = await adminClient
+      .from("private_lesson_sessions")
+      .select("athlete_id, starts_at, status")
+      .eq("organization_id", resolved.organizationId)
+      .eq("status", "completed")
+      .in("athlete_id", athleteIds)
+      .order("starts_at", { ascending: false });
+    if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
+    sessionRows = (sessionRes.data || []) as Array<{ athlete_id: string | null; starts_at: string }>;
+  }
 
   const packageByAthlete = new Map<
     string,
@@ -168,9 +190,9 @@ export async function listManagementDirectory() {
   }
 
   const lastCompletedSessionByAthlete = new Map<string, string>();
-  for (const row of sessionRes.data || []) {
+  for (const row of sessionRows) {
     if (!row.athlete_id || lastCompletedSessionByAthlete.has(row.athlete_id)) continue;
-    lastCompletedSessionByAthlete.set(row.athlete_id, row.starts_at as string);
+    lastCompletedSessionByAthlete.set(row.athlete_id, row.starts_at);
   }
 
   const paymentsByAthlete = new Map<string, PaymentRow[]>();
