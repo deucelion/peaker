@@ -6,6 +6,7 @@ import {
   listAthleticResultNotesByDate,
   listAthleticResultsForActorByDate,
   listFieldTestDefinitionsForActor,
+  getFieldTestOrganizationDisplayName,
 } from "@/lib/actions/athleticFieldActions";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 import {
@@ -75,8 +76,9 @@ export function AthleteFieldTestPdfExport({
     setBusy("single");
     setMessage("Veri alınıyor…");
     try {
-      const [defsRes, dataRes, notesRes] = await Promise.all([
+      const [defsRes, orgRes, dataRes, notesRes] = await Promise.all([
         listFieldTestDefinitionsForActor(),
+        getFieldTestOrganizationDisplayName(),
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: singleDate }),
         listAthleticResultNotesByDate({ profileIds: [athleteId], testDate: singleDate }),
       ]);
@@ -84,6 +86,7 @@ export function AthleteFieldTestPdfExport({
         setMessage("Test verisi alınamadı.");
         return;
       }
+      const pdfOrgName = "error" in orgRes ? undefined : orgRes.orgName;
       const metrics = (defsRes.metrics || []) as unknown as TestDefinitionRow[];
       const resultMap = new Map((dataRes.results || []).map((r) => [r.test_id, r]));
       const buildEntries = (kind: "number" | "text"): FieldTestMetricEntry[] =>
@@ -109,6 +112,7 @@ export function AthleteFieldTestPdfExport({
       setMessage("PDF oluşturuluyor…");
       const bytes = await runPdfTask(() =>
         buildFieldTestSingleDatePdf({
+          orgName: pdfOrgName,
           athlete: {
             fullName: athleteName,
             testDate: singleDate,
@@ -142,8 +146,9 @@ export function AthleteFieldTestPdfExport({
     setBusy("compare");
     setMessage("Kıyas verisi alınıyor…");
     try {
-      const [defsRes, oldRes, newRes] = await Promise.all([
+      const [defsRes, orgRes, oldRes, newRes] = await Promise.all([
         listFieldTestDefinitionsForActor(),
+        getFieldTestOrganizationDisplayName(),
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: compareFrom }),
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: compareTo }),
       ]);
@@ -151,6 +156,7 @@ export function AthleteFieldTestPdfExport({
         setMessage("Kıyas verisi alınamadı.");
         return;
       }
+      const pdfOrgName = "error" in orgRes ? undefined : orgRes.orgName;
 
       const metrics = (defsRes.metrics || []) as unknown as TestDefinitionRow[];
 
@@ -199,6 +205,7 @@ export function AthleteFieldTestPdfExport({
       setMessage("PDF oluşturuluyor…");
       const bytes = await runPdfTask(() =>
         buildFieldTestComparisonPdf({
+          orgName: pdfOrgName,
           athleteName,
           dateFrom: compareFrom,
           dateTo: compareTo,

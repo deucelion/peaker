@@ -4,6 +4,7 @@ import { buildFieldTestSingleDatePdf, fieldTestSingleDatePdfFilename } from "./f
 describe("fieldTestPdf", () => {
   it("uretilen PDF %PDF ile baslar", async () => {
     const bytes = await buildFieldTestSingleDatePdf({
+      orgName: "Test Akademi",
       athlete: {
         fullName: "Ali Veli",
         testDate: "2026-06-02",

@@ -109,6 +109,23 @@ async function resolveFieldTestActor() {
   return { actorId: actor.id, organizationId: actor.organization_id, role, adminClient: createSupabaseAdminClient() };
 }
 
+/** Saha testi PDF basligi icin org gorunen adi (sol ust). */
+export async function getFieldTestOrganizationDisplayName() {
+  const resolved = await resolveFieldTestActor();
+  if ("error" in resolved) return { error: resolved.error };
+
+  const { data, error } = await resolved.adminClient
+    .from("organizations")
+    .select("name")
+    .eq("id", resolved.organizationId)
+    .maybeSingle();
+
+  if (error) return { error: `Organizasyon adi alinamadi: ${error.message}` as const };
+
+  const trimmed = data?.name?.trim();
+  return { orgName: trimmed && trimmed.length >= 2 ? trimmed : "PEAKER" };
+}
+
 export async function createFieldTestDefinition(formData: FormData) {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };

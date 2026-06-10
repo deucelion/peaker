@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PaymentRow } from "@/types/domain";
-import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
+import { computeFinanceStatusSummary, sumPackageOpenBalance } from "@/lib/finance/paymentSummary";
 
 function aidatRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
   return {
@@ -13,6 +13,20 @@ function aidatRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     ...overrides,
   } as PaymentRow;
 }
+
+describe("sumPackageOpenBalance", () => {
+  it("counts unpaid package remainder", () => {
+    expect(
+      sumPackageOpenBalance([{ payment_status: "unpaid", total_price: 18_000, amount_paid: 0 }])
+    ).toBe(18_000);
+  });
+
+  it("skips fully paid packages", () => {
+    expect(
+      sumPackageOpenBalance([{ payment_status: "paid", total_price: 18_000, amount_paid: 18_000 }])
+    ).toBe(0);
+  });
+});
 
 describe("computeFinanceStatusSummary — package open balance", () => {
   it("does not show Borç Bulunmuyor when package open balance > 0 and no aidat debt", () => {

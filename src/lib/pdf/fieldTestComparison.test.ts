@@ -46,4 +46,63 @@ describe("fieldTestComparison", () => {
     });
     expect(String.fromCharCode(...bytes.slice(0, 4))).toBe("%PDF");
   });
+
+  it("uzun metin satirlarinda PDF uretir", async () => {
+    const longPosture =
+      "FORWARD HEAD, ANKLE MOBILITY, HIP MOBILITY, THORACIC MOBILITY, SHOULDER MOBILITY, CORE STABILITY, BALANCE, PROPRIOCEPTION";
+    const bytes = await buildFieldTestComparisonPdf({
+      athleteName: "Levent Sarikaya",
+      dateFrom: "2026-01-03",
+      dateTo: "2026-04-25",
+      rows: [
+        {
+          name: "POSTUR ANALIZI",
+          oldDisplay: longPosture,
+          newDisplay: longPosture,
+          direction: "lower_better",
+          isText: true,
+        },
+        {
+          name: "OVER HEAD SQUAT",
+          oldDisplay: "1 ( AYAK BILEGI KISITLILIGI, HIP MOBILITY, THORACIC MOBILITY )",
+          newDisplay: "1 ( AYAK BILEGI KISITLILIGI, HIP MOBILITY, THORACIC MOBILITY )",
+          direction: "lower_better",
+          isText: true,
+        },
+        {
+          name: "LUNGE",
+          oldDisplay: "SAG: 2 SOL: 2 (DENGESIZLIK, HIP MOBILITY, CORE STABILITY)",
+          newDisplay: "SAG: 2 SOL: 2 (DENGESIZLIK, HIP MOBILITY, CORE STABILITY)",
+          direction: "lower_better",
+          isText: true,
+        },
+        {
+          name: "THOMAS TEST",
+          oldDisplay: "SAG: NORMAL SOL: NORMAL",
+          newDisplay: "SAG: NORMAL SOL: NORMAL",
+          direction: "lower_better",
+          isText: true,
+        },
+        {
+          name: "OMUZ",
+          oldDisplay: "45",
+          newDisplay: "50",
+          oldNumeric: 45,
+          newNumeric: 50,
+          direction: "higher_better",
+        },
+      ],
+    });
+    expect(bytes.length).toBeGreaterThan(500);
+    expect(String.fromCharCode(...bytes.slice(0, 4))).toBe("%PDF");
+    expect(buildComparisonRowsResolved([
+      {
+        name: "POSTUR ANALIZI",
+        oldDisplay: longPosture,
+        newDisplay: longPosture,
+        direction: "lower_better",
+        isText: true,
+      },
+    ])[0]?.comment).toBe("Değişim yok");
+  });
 });

@@ -153,18 +153,47 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
   y = drawSectionTitle(doc, y, "Metrik Kıyas Tablosu", ctx);
   const startX = PDF_LAYOUT_MARGIN;
   const pageW = doc.internal.pageSize.getWidth();
-  const cols = [52, 28, 28, 22, 38, pageW - PDF_LAYOUT_MARGIN - 52 - 28 - 28 - 22 - 38];
+  const tableW = pageW - startX * 2;
+  const colMetric = tableW * 0.16;
+  const colOld = tableW * 0.24;
+  const colNew = tableW * 0.24;
+  const colChange = tableW * 0.1;
+  const colComment = tableW - colMetric - colOld - colNew - colChange;
+  const colWidths = [colMetric, colOld, colNew, colChange, colComment];
   const headerLabels = ["Metrik", "Eski", "Yeni", "Değişim", "Yorum"];
-  const headerWidths = [cols[0]!, cols[1]!, cols[2]!, cols[3]!, cols[5]!];
+  const LINE_H = 4.5;
+  const ROW_PAD = 3.5;
 
-  const drawHeader = (atY: number) => drawTableHeaderBar(doc, atY, headerLabels, headerWidths, ctx);
+  const cellLines = (text: string, maxW: number): string[] => {
+    const lines = doc.splitTextToSize(pdfT(text, ctx), Math.max(maxW, 8)) as string[];
+    return lines.length > 0 ? lines : ["—"];
+  };
+
+  const drawHeader = (atY: number) => drawTableHeaderBar(doc, atY, headerLabels, colWidths, ctx);
 
   y = drawHeader(y);
 
   for (let ri = 0; ri < resolved.length; ri += 1) {
     const row = resolved[ri]!;
+    doc.setFontSize(7.5);
+
+    const nameLines = cellLines(row.name, colMetric - 4);
+    const oldLines = cellLines(row.oldDisplay, colOld - 4);
+    const newLines = cellLines(row.newDisplay, colNew - 4);
+    const changeLines = cellLines(row.changePct ?? "—", colChange - 4);
+    const commentLines = cellLines(row.comment, colComment - 4);
+    const lineCount = Math.max(
+      nameLines.length,
+      oldLines.length,
+      newLines.length,
+      changeLines.length,
+      commentLines.length,
+      1
+    );
+    const rowH = Math.max(7, lineCount * LINE_H + ROW_PAD);
+
     const prevY = y;
-    y = ensureSpace(doc, y, 7);
+    y = ensureSpace(doc, y, rowH + 1);
     if (y < prevY - 1) {
       y = drawHeader(y);
     }
@@ -172,26 +201,32 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
     const rgb = VERDICT_RGB[row.verdict];
     if (ri % 2 === 0) {
       doc.setFillColor(252, 252, 254);
-      doc.rect(startX, y - 3, pageW - startX * 2, 6.5, "F");
+      doc.rect(startX, y - 1, tableW, rowH + 1, "F");
     }
 
-    doc.setFontSize(7.5);
+    const textY = y + ROW_PAD;
+    let x = startX + 2;
+
     doc.setFont(ctx.turkish ? "NotoSans" : "helvetica", "bold");
     doc.setTextColor(40, 40, 40);
-    let x = startX + 2;
-    doc.text(pdfT(row.name, ctx), x, y, { maxWidth: cols[0]! - 4 });
-    x += cols[0]!;
+    doc.text(nameLines, x, textY);
+    x += colMetric;
+
     doc.setFont(ctx.turkish ? "NotoSans" : "helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    doc.text(pdfT(row.oldDisplay, ctx), x, y);
-    x += cols[1]!;
-    doc.text(pdfT(row.newDisplay, ctx), x, y);
-    x += cols[2]!;
+    doc.text(oldLines, x + 2, textY);
+    x += colOld;
+    doc.text(newLines, x + 2, textY);
+    x += colNew;
+
     doc.setTextColor(...rgb);
-    doc.text(pdfT(row.changePct ?? "—", ctx), x, y);
-    x += cols[3]!;
-    doc.text(pdfT(row.comment, ctx), x, y, { maxWidth: cols[5]! - 2 });
-    y += 5.5;
+    doc.text(changeLines, x + 2, textY);
+    x += colChange;
+
+    doc.setTextColor(60, 60, 60);
+    doc.text(commentLines, x + 2, textY);
+
+    y += rowH;
   }
 
   doc.setTextColor(40, 40, 40);

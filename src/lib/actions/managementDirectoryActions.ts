@@ -7,7 +7,7 @@ import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
-import { computeFinanceStatusSummary } from "@/lib/finance/paymentSummary";
+import { computeFinanceStatusSummary, sumPackageOpenBalance } from "@/lib/finance/paymentSummary";
 import type { PaymentRow } from "@/types/domain";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
@@ -108,7 +108,7 @@ export async function listManagementDirectory() {
     athleteIds.length > 0
       ? adminClient
           .from("private_lesson_packages")
-          .select("id, athlete_id, package_name, remaining_lessons, payment_status, is_active, updated_at")
+          .select("id, athlete_id, package_name, remaining_lessons, payment_status, total_price, amount_paid, is_active, updated_at")
           .eq("organization_id", resolved.organizationId)
           .in("athlete_id", athleteIds)
           .order("updated_at", { ascending: false })
@@ -142,7 +142,19 @@ export async function listManagementDirectory() {
       packagePaymentStatus: string | null;
     }
   >();
+  const packagesByAthlete = new Map<
+    string,
+    Array<{ payment_status?: string | null; total_price?: unknown; amount_paid?: unknown }>
+  >();
   for (const row of packageRes.data || []) {
+    const list = packagesByAthlete.get(row.athlete_id) || [];
+    list.push({
+      payment_status: row.payment_status,
+      total_price: row.total_price,
+      amount_paid: row.amount_paid,
+    });
+    packagesByAthlete.set(row.athlete_id, list);
+
     if (packageByAthlete.has(row.athlete_id)) continue;
     packageByAthlete.set(row.athlete_id, {
       activePackageName: row.is_active ? row.package_name : null,
@@ -196,7 +208,10 @@ export async function listManagementDirectory() {
         aidatPayments: (paymentsByAthlete.get(row.id) || []).filter((p) => p.payment_type === "aylik"),
         plannedNextDueDate: row.next_aidat_due_date ?? null,
         plannedNextAmount: row.next_aidat_amount != null ? Number(row.next_aidat_amount) : null,
-        hasPartialPackagePayment: packageByAthlete.get(row.id)?.packagePaymentStatus === "partial",
+        hasPartialPackagePayment: (packagesByAthlete.get(row.id) || []).some(
+          (p) => p.payment_status === "partial"
+        ),
+        packageOpenBalance: sumPackageOpenBalance(packagesByAthlete.get(row.id) || []),
       }),
     }));
 
