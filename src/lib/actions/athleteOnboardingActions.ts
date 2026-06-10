@@ -10,6 +10,7 @@ import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/ses
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { captureServerActionSignal, withServerActionGuard } from "@/lib/observability/serverActionError";
+import { deleteAthleteProfileDependents } from "@/lib/auth/deleteAthleteProfileDependents";
 
 type OnboardingMode = "none" | "private_lesson" | "monthly_subscription";
 
@@ -253,6 +254,13 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
       message,
     });
     if (createdAuthUserId) {
+      const depErr = await deleteAthleteProfileDependents(adminClient, createdAuthUserId);
+      if (depErr.error) {
+        captureServerActionSignal("athleteOnboarding.createAthleteWithPackageAndPayment", "profile_dependents_rollback_failed", {
+          createdAuthUserId,
+          errorMessage: depErr.error,
+        });
+      }
       const { error: profileDeleteErr } = await adminClient.from("profiles").delete().eq("id", createdAuthUserId);
       if (profileDeleteErr) {
         captureServerActionSignal("athleteOnboarding.createAthleteWithPackageAndPayment", "profile_rollback_delete_failed", {

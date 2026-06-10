@@ -1,9 +1,11 @@
 import "server-only";
 
+import type { User } from "@supabase/supabase-js";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole, type UserRole } from "@/lib/auth/roleMatrix";
 import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
-import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
+import { extractSessionOrganizationId, extractSessionRole, extractSessionFullName } from "@/lib/auth/sessionClaims";
+import { isUuid } from "@/lib/validation/uuid";
 
 export type SessionActor = {
   id: string;
@@ -35,6 +37,54 @@ export function toProgramActorProfile(actor: SessionActor): ProgramActorProfile 
   return {
     ...toTenantProfileRow(actor),
     full_name: actor.fullName,
+  };
+}
+
+type ProfileSelectRow = {
+  id: string;
+  role: string;
+  full_name: string | null;
+  organization_id: string | null;
+  is_active: boolean | null;
+};
+
+/**
+ * Auth metadata'dan tenant profili olusturur / eksik organization_id'yi tamamlar.
+ * Yeni kayitli sporcu/koc icin profiles satiri yoksa veya org_id bos ise login engellenmesin.
+ */
+async function ensureTenantProfileFromMetadata(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  user: User,
+  existing: ProfileSelectRow | null
+): Promise<ProfileSelectRow | null> {
+  const metaRole = getSafeRole(extractSessionRole(user));
+  const metaOrgId = extractSessionOrganizationId(user);
+  if (!metaRole || metaRole === "super_admin") return existing;
+  if (metaRole !== "coach" && metaRole !== "sporcu") return existing;
+  if (!user.email_confirmed_at || !metaOrgId || !isUuid(metaOrgId)) return existing;
+
+  const needsInsert = !existing;
+  const needsOrgRepair = !!existing && !existing.organization_id && metaOrgId;
+  if (!needsInsert && !needsOrgRepair) return existing;
+
+  const payload = {
+    id: user.id,
+    email: user.email ?? null,
+    full_name: existing?.full_name ?? extractSessionFullName(user) ?? user.email ?? "User",
+    role: existing?.role && getSafeRole(existing.role) ? existing.role : metaRole,
+    organization_id: existing?.organization_id ?? metaOrgId,
+    is_active: existing?.is_active ?? true,
+  };
+
+  const { error } = await adminClient.from("profiles").upsert(payload, { onConflict: "id" });
+  if (error) return existing;
+
+  return {
+    id: user.id,
+    role: payload.role,
+    full_name: payload.full_name,
+    organization_id: payload.organization_id,
+    is_active: payload.is_active,
   };
 }
 
@@ -113,6 +163,14 @@ export async function resolveSessionActor(
     } catch {
       // claim fallback below
     }
+  }
+
+  try {
+    const adminClient = createSupabaseAdminClient();
+    const repaired = await ensureTenantProfileFromMetadata(adminClient, authData.user, profile ?? null);
+    if (repaired) profile = repaired;
+  } catch {
+    // mevcut profile veya claim fallback ile devam
   }
 
   if (!profile) {

@@ -7,6 +7,7 @@ import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
 import { revalidatePath } from "next/cache";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { deleteAthleteProfileDependents } from "@/lib/auth/deleteAthleteProfileDependents";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 
@@ -272,6 +273,11 @@ export async function hardDeleteAthlete(playerId: string) {
       .eq("organization_id", actorProfile.organization_id);
     if (deletePaymentsErr) {
       return { error: `Odeme kayitlari silinemedi: ${deletePaymentsErr.message}` };
+    }
+
+    const depErr = await deleteAthleteProfileDependents(adminClient, playerId);
+    if (depErr.error) {
+      return { error: depErr.error };
     }
 
     const { error: deleteProfileErr } = await adminClient

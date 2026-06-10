@@ -11,6 +11,7 @@ import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import { listAthletesWithPermissionsForSettings, updateAthletePermissions } from "@/lib/actions/athletePermissionActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { PATHS } from "@/lib/navigation/routeRegistry";
+import { buildPasswordResetRedirectUrl } from "@/lib/auth/passwordResetRedirect";
 
 interface AthleteProfile extends ProfileBasic {
   permissions?: AthletePermissions;
@@ -101,7 +102,7 @@ export default function AyarlarPage() {
     try {
       if (userProfile?.email) {
         const { error } = await supabase.auth.resetPasswordForEmail(userProfile.email, {
-          redirectTo: `${window.location.origin}/sifre-guncelleme`,
+          redirectTo: buildPasswordResetRedirectUrl(window.location.origin),
         });
         if (error) throw error;
         setMailSent(true);

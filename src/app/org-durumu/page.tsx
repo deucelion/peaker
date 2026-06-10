@@ -101,7 +101,7 @@ export default async function OrgDurumuPage({
             id: user.id,
             email: user.email ?? null,
             full_name:
-              user.email ?? "User",
+              extractSessionFullName(user) ?? user.email ?? "User",
             role: metaRole as string,
             organization_id: metaOrgId,
             is_active: true,

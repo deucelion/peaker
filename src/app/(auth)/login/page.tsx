@@ -8,6 +8,7 @@ import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import Notification from "@/components/Notification";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
+import { buildPasswordResetRedirectUrl } from "@/lib/auth/passwordResetRedirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -105,7 +106,7 @@ export default function LoginPage() {
       return;
     }
     const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmailInput(email), {
-      redirectTo: `${window.location.origin}/sifre-guncelleme`,
+      redirectTo: buildPasswordResetRedirectUrl(window.location.origin),
     });
     if (error) {
       setFormMessage("Sifre sifirlama baglantisi gonderilemedi: " + error.message);

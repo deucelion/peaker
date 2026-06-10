@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Lock, Loader2, CheckCircle2 } from "lucide-react";
@@ -8,12 +8,50 @@ import Notification from "@/components/Notification";
 export default function UpdatePasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error && !cancelled) {
+          setMessage(
+            "Sifre sifirlama baglantisi gecersiz veya suresi dolmus. Lutfen tekrar sifre sifirlama isteyin."
+          );
+          setCheckingSession(false);
+          return;
+        }
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled) {
+        setSessionReady(!!data.session);
+        if (!data.session) {
+          setMessage(
+            "Oturum bulunamadi. Lutfen e-postanizdaki sifre sifirlama baglantisini tekrar kullanin veya yeni bir baglanti isteyin."
+          );
+        }
+        setCheckingSession(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sessionReady) {
+      setMessage("Oturum bulunamadi. Lutfen sifre sifirlama e-postasindaki baglantiyi kullanin.");
+      return;
+    }
     setLoading(true);
     setMessage(null);
 
@@ -66,7 +104,7 @@ export default function UpdatePasswordPage() {
               </div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || checkingSession || !sessionReady}
                 className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-[2rem] bg-[#7c3aed] p-4 font-black uppercase italic tracking-widest text-white transition-all sm:hover:bg-[#6d28d9] disabled:opacity-60 sm:p-5"
               >
                 {loading ? <Loader2 className="animate-spin shrink-0" aria-hidden /> : "ŞİFREYİ GÜNCELLE"}

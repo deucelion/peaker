@@ -58,7 +58,7 @@ export const PATHS = {
 
 export type AppPath = (typeof PATHS)[keyof typeof PATHS];
 
-export const PUBLIC_PATH_PREFIXES = [PATHS.login, PATHS.passwordReset] as const;
+export const PUBLIC_PATH_PREFIXES = [PATHS.login, PATHS.passwordReset, "/auth/callback", "/auth/confirm"] as const;
 
 /** proxy / layout ile uyumlu sabit isimler */
 export const ORG_LIFECYCLE_INFO_ROUTE = PATHS.orgDurumu;
