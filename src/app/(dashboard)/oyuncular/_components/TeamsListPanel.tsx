@@ -1,14 +1,13 @@
 "use client";
 
 import { ChevronRight, Loader2 } from "lucide-react";
-import type { PlayerWithPayments } from "@/types/domain";
 
 export type TeamRow = { id: string; name: string; created_at: string };
 
 export type TeamsListPanelProps = {
   teamsList: TeamRow[];
   teamsLoading: boolean;
-  players: PlayerWithPayments[];
+  teamAthleteCounts: Record<string, number>;
   newTeamNameInput: string;
   setNewTeamNameInput: (v: string) => void;
   teamCreateBusy: boolean;
@@ -20,7 +19,7 @@ export type TeamsListPanelProps = {
 export function TeamsListPanel({
   teamsList,
   teamsLoading,
-  players,
+  teamAthleteCounts,
   newTeamNameInput,
   setNewTeamNameInput,
   teamCreateBusy,
@@ -91,7 +90,7 @@ export function TeamsListPanel({
             </thead>
             <tbody>
               {teamsList.map((t) => {
-                const athleteCount = players.filter((p) => (p.team || "").trim() === t.name).length;
+                const athleteCount = teamAthleteCounts[t.name] ?? 0;
                 const createdLabel = t.created_at
                   ? new Date(t.created_at).toLocaleDateString("tr-TR", {
                       day: "2-digit",

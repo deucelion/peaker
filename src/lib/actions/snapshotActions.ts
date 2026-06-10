@@ -921,7 +921,7 @@ export async function getDashboardSnapshot() {
     // Fallback: RPC yok — eski davranis (satir tasiyan sorgular).
     const [participantsRes, paymentsRes, teamProfilesRes] = await Promise.all([
       adminClient.from("training_participants").select("attendance_status, training_schedule!inner(organization_id)").eq("training_schedule.organization_id", actor.organizationId),
-      adminClient.from("payments").select("amount, status").eq("organization_id", actor.organizationId),
+      adminClient.from("payments").select("amount, status").eq("organization_id", actor.organizationId).is("deleted_at", null),
       adminClient.from("profiles").select("id, team, payments(status)").eq("organization_id", actor.organizationId).eq("role", "sporcu"),
     ]);
     const participantRows = (participantsRes.data || []) as Array<{ attendance_status?: string | null }>;

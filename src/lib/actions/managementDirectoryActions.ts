@@ -15,6 +15,11 @@ import { chunkedInQuery } from "@/lib/db/chunkedIn";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
+import {
+  normalizeDirectoryPagination,
+  totalDirectoryPages,
+} from "@/lib/management/directoryPagination";
+import { PROFILE_LOAD_FETCH_HARD_CAP } from "@/lib/performance/aggregationHelpers";
 
 type ManagementRole = "admin" | "coach";
 type DailyTrainingLoadReport = {
@@ -69,7 +74,90 @@ async function resolveManagementActor() {
   };
 }
 
-export async function listManagementDirectory() {
+export type ManagementDirectoryView = "full" | "summary";
+
+export type ListManagementDirectoryOptions = {
+  /** full: sayfalanmis finans alanlari; summary: tum sporcular (hafif profil) */
+  view?: ManagementDirectoryView;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  team?: string;
+  lifecycle?: "all" | "active" | "inactive";
+};
+
+export type ManagementDirectoryAthleteSummary = {
+  id: string;
+  full_name: string;
+  is_active: boolean;
+  team: string | null;
+  position: string | null;
+  number: string | null;
+  height: number | null;
+  weight: number | null;
+};
+
+export type ManagementDirectoryAthleteFull = ManagementDirectoryAthleteSummary & {
+  activePackageName: string | null;
+  remainingLessons: number | null;
+  packagePaymentStatus: string | null;
+  lastLessonAt: string | null;
+  financeSummary: ReturnType<typeof computeFinanceStatusSummary>;
+};
+
+export type ManagementDirectorySuccess = {
+  role: ManagementRole;
+  actorUserId: string;
+  organizationId: string;
+  timeZone: string;
+  permissions: typeof DEFAULT_COACH_PERMISSIONS;
+  coaches: Array<{ id: string; full_name: string }>;
+  athletes: ManagementDirectoryAthleteSummary[] | ManagementDirectoryAthleteFull[];
+  athleteCount: number;
+  totalAthletes: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  view: ManagementDirectoryView;
+  orgAthleteCap: { capped: true; cap: number; total: number } | null;
+};
+
+export type ManagementDirectoryResult = { error: string } | ManagementDirectorySuccess;
+
+type AthleteProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  is_active: boolean | null;
+  team: string | null;
+  position: string | null;
+  number: string | null;
+  height: number | null;
+  weight: number | null;
+  next_aidat_due_date: string | null;
+  next_aidat_amount: number | null;
+};
+
+function applyAthleteDirectoryFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  options: Pick<ListManagementDirectoryOptions, "search" | "team" | "lifecycle">
+) {
+  let q = query.eq("role", "sporcu");
+  if (options.lifecycle === "active") q = q.eq("is_active", true);
+  else if (options.lifecycle === "inactive") q = q.eq("is_active", false);
+  const team = options.team?.trim();
+  if (team && team !== "Tüm Takımlar") q = q.eq("team", team);
+  const search = options.search?.trim();
+  if (search) {
+    const term = `%${search.replace(/[%_]/g, "")}%`;
+    q = q.or(`full_name.ilike.${term},email.ilike.${term}`);
+  }
+  return q;
+}
+
+export async function listManagementDirectory(options?: ListManagementDirectoryOptions) {
   return withServerActionGuard("managementDirectory.listManagementDirectory", async () => {
   const resolved = await resolveManagementActor();
   if ("error" in resolved) return { error: resolved.error };
@@ -81,6 +169,13 @@ export async function listManagementDirectory() {
       : DEFAULT_COACH_PERMISSIONS;
 
   const canViewAthletes = resolved.role !== "coach" || permissions.can_view_all_athletes;
+  const view = options?.view ?? "summary";
+  const pager = view === "full" ? normalizeDirectoryPagination(options?.page, options?.pageSize) : null;
+
+  const athleteSelectSummary =
+    "id, full_name, email, role, is_active, team, position, number, height, weight";
+  const athleteSelectFull =
+    `${athleteSelectSummary}, next_aidat_due_date, next_aidat_amount`;
 
   const [coachRes, athleteRes] = await Promise.all([
     adminClient
@@ -89,12 +184,17 @@ export async function listManagementDirectory() {
       .eq("organization_id", resolved.organizationId)
       .order("full_name"),
     canViewAthletes
-      ? adminClient
-          .from("profiles")
-          .select("id, full_name, email, role, is_active, team, position, number, height, weight, next_aidat_due_date, next_aidat_amount")
-          .eq("organization_id", resolved.organizationId)
-          .order("full_name")
-      : Promise.resolve({ data: [], error: null }),
+      ? (() => {
+          let q = adminClient
+            .from("profiles")
+            .select(view === "full" ? athleteSelectFull : athleteSelectSummary, { count: "exact" })
+            .eq("organization_id", resolved.organizationId)
+            .order("full_name");
+          q = applyAthleteDirectoryFilters(q, options ?? {});
+          if (pager) return q.range(pager.from, pager.to);
+          return q;
+        })()
+      : Promise.resolve({ data: [], error: null, count: 0 }),
   ]);
 
   if (coachRes.error) return { error: `Koç listesi alınamadı: ${coachRes.error.message}` };
@@ -104,22 +204,26 @@ export async function listManagementDirectory() {
     .filter((row) => getSafeRole(row.role) === "coach")
     .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Koç") }));
 
-  const athleteIds = (athleteRes.data || [])
-    .filter((row) => getSafeRole(row.role) === "sporcu")
-    .map((row) => row.id);
+  const athleteRows = ((athleteRes.data || []) as unknown as AthleteProfileRow[]).filter(
+    (row) => getSafeRole(row.role) === "sporcu"
+  );
+  const totalAthletes = canViewAthletes ? (athleteRes.count ?? athleteRows.length) : 0;
+  const athleteIds = athleteRows.map((row) => row.id);
+
+  const skipFinance = view === "summary" || athleteIds.length === 0;
 
   // FAZ 32: "son tamamlanan ders" DB-side distinct on RPC ile sporcu basina
   // tek satir doner; RPC yoksa eski (tum tamamlanmis seanslari tasiyan)
   // sorguya fallback yapilir.
   const lastSessionRpcPromise =
-    athleteIds.length > 0
+    !skipFinance && athleteIds.length > 0 && !pager
       ? adminClient.rpc("peaker_directory_last_completed_sessions", {
           p_org_id: resolved.organizationId,
         })
       : Promise.resolve({ data: [], error: null });
 
   const [packageRes, lastSessionRpcRes, paymentRes] = await Promise.all([
-    athleteIds.length > 0
+    !skipFinance && athleteIds.length > 0
       ? adminClient
           .from("private_lesson_packages")
           .select("id, athlete_id, package_name, remaining_lessons, payment_status, total_price, amount_paid, is_active, updated_at")
@@ -131,33 +235,36 @@ export async function listManagementDirectory() {
     // FAZ 32: dizin paket satirlarini kullanmaz (paket finansi packages
     // uzerinden gelir; computeFinanceStatusSummary "paket" disindakileri aidat
     // sayar). Satir hacmi payment_type filtresiyle dusurulur.
-    athleteIds.length > 0
+    !skipFinance && athleteIds.length > 0
       ? adminClient
           .from("payments")
           .select("id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description")
           .eq("organization_id", resolved.organizationId)
           .neq("payment_type", "paket")
+          .is("deleted_at", null)
           .in("profile_id", athleteIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  if (packageRes.error) return { error: `Paket bilgisi alınamadı: ${packageRes.error.message}` };
-  if (paymentRes.error) return { error: `Finans bilgisi alınamadı: ${paymentRes.error.message}` };
+  if (!skipFinance && packageRes.error) return { error: `Paket bilgisi alınamadı: ${packageRes.error.message}` };
+  if (!skipFinance && paymentRes.error) return { error: `Finans bilgisi alınamadı: ${paymentRes.error.message}` };
 
   let sessionRows: Array<{ athlete_id: string | null; starts_at: string }> = [];
-  if (!lastSessionRpcRes.error) {
-    sessionRows = ((lastSessionRpcRes.data || []) as Array<{ athlete_id: string; last_completed_at: string }>).map(
-      (r) => ({ athlete_id: r.athlete_id, starts_at: r.last_completed_at })
-    );
-  } else {
-    const sessionRes = await adminClient
-      .from("private_lesson_sessions")
-      .select("athlete_id, starts_at, status")
-      .eq("organization_id", resolved.organizationId)
-      .eq("status", "completed")
-      .in("athlete_id", athleteIds)
-      .order("starts_at", { ascending: false });
-    if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
-    sessionRows = (sessionRes.data || []) as Array<{ athlete_id: string | null; starts_at: string }>;
+  if (!skipFinance && athleteIds.length > 0) {
+    if (!pager && !lastSessionRpcRes.error && (lastSessionRpcRes.data || []).length > 0) {
+      sessionRows = ((lastSessionRpcRes.data || []) as Array<{ athlete_id: string; last_completed_at: string }>).map(
+        (r) => ({ athlete_id: r.athlete_id, starts_at: r.last_completed_at })
+      );
+    } else {
+      const sessionRes = await adminClient
+        .from("private_lesson_sessions")
+        .select("athlete_id, starts_at, status")
+        .eq("organization_id", resolved.organizationId)
+        .eq("status", "completed")
+        .in("athlete_id", athleteIds)
+        .order("starts_at", { ascending: false });
+      if (sessionRes.error) return { error: `Ders geçmişi alınamadı: ${sessionRes.error.message}` };
+      sessionRows = (sessionRes.data || []) as Array<{ athlete_id: string | null; starts_at: string }>;
+    }
   }
 
   const packageByAthlete = new Map<
@@ -215,9 +322,20 @@ export async function listManagementDirectory() {
     paymentsByAthlete.set(row.profile_id, list);
   }
 
-  const athletes = (athleteRes.data || [])
-    .filter((row) => getSafeRole(row.role) === "sporcu")
-    .map((row) => ({
+  const athletes = athleteRows.map((row) => {
+    if (view === "summary") {
+      return {
+        id: row.id,
+        full_name: toDisplayName(row.full_name, row.email, "Sporcu"),
+        is_active: row.is_active ?? true,
+        team: row.team ?? null,
+        position: row.position ?? null,
+        number: row.number ?? null,
+        height: row.height ?? null,
+        weight: row.weight ?? null,
+      };
+    }
+    return {
       id: row.id,
       full_name: toDisplayName(row.full_name, row.email, "Sporcu"),
       is_active: row.is_active ?? true,
@@ -239,9 +357,12 @@ export async function listManagementDirectory() {
         ),
         packageOpenBalance: sumPackageOpenBalance(packagesByAthlete.get(row.id) || []),
       }),
-    }));
+    };
+  });
 
   const timeZone = await resolveOrganizationTimeZone(resolved.organizationId);
+  const page = pager?.page ?? 1;
+  const pageSize = pager?.pageSize ?? athletes.length;
 
   return {
     role: resolved.role,
@@ -252,6 +373,15 @@ export async function listManagementDirectory() {
     coaches,
     athletes,
     athleteCount: athletes.length,
+    totalAthletes,
+    page,
+    pageSize,
+    totalPages: pager ? totalDirectoryPages(totalAthletes, pageSize) : 1,
+    view,
+    orgAthleteCap:
+      totalAthletes > PROFILE_LOAD_FETCH_HARD_CAP
+        ? { capped: true as const, cap: PROFILE_LOAD_FETCH_HARD_CAP, total: totalAthletes }
+        : null,
   };
   });
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search,
   UserPlus,
@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { deactivateAthlete, hardDeleteAthlete, reactivateAthlete } from "@/lib/actions/playerActions";
-import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
+import { listManagementDirectory, type ManagementDirectorySuccess } from "@/lib/actions/managementDirectoryActions";
 import {
   assignAthleteToTeam,
   createTeamAction,
@@ -24,6 +24,7 @@ import { TeamsListPanel, type TeamRow } from "./_components/TeamsListPanel";
 import { TeamDetailPanel, type TeamDetailWorkspace } from "./_components/TeamDetailPanel";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonCard } from "@/components/ui/skeletons";
+import { DIRECTORY_DEFAULT_PAGE_SIZE } from "@/lib/management/directoryPagination";
 
 export default function OyuncuYonetimi() {
   const [players, setPlayers] = useState<PlayerWithPayments[]>([]);
@@ -43,30 +44,45 @@ export default function OyuncuYonetimi() {
   const [removeBusyId, setRemoveBusyId] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("Tüm Takımlar");
   const [lifecycleFilter, setLifecycleFilter] = useState<"all" | "active" | "inactive">("active");
+  const [page, setPage] = useState(1);
+  const [totalAthletes, setTotalAthletes] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [teamAthleteCounts, setTeamAthleteCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    void fetchPlayers();
-  }, []);
+    const timer = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
 
-  const availableTeams = useMemo(() => {
-    const teams = new Set([
-      ...players.map((p) => p.team).filter((team): team is string => typeof team === "string" && team.length > 0),
-      ...teamRegistry,
-    ]);
-    return ["Tüm Takımlar", ...Array.from(teams)];
-  }, [players, teamRegistry]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedTeam, lifecycleFilter]);
 
-  async function fetchPlayers() {
+  const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
-      const [result, teamsResult] = await Promise.all([listManagementDirectory(), listTeamsForActor()]);
-      if ("error" in result) {
+      const [result, teamsResult] = await Promise.all([
+        listManagementDirectory({
+          view: "full",
+          page,
+          pageSize: DIRECTORY_DEFAULT_PAGE_SIZE,
+          search: debouncedSearch || undefined,
+          team: selectedTeam,
+          lifecycle: lifecycleFilter,
+        }),
+        listTeamsForActor(),
+      ]);
+      if ("error" in result && result.error) {
         setPlayers([]);
         return;
       }
-      setPlayers((result.athletes as PlayerWithPayments[]) || []);
+      const directory = result as ManagementDirectorySuccess;
+      setPlayers((directory.athletes as PlayerWithPayments[]) || []);
+      setTotalAthletes(directory.totalAthletes ?? directory.athletes.length);
+      setTotalPages(directory.totalPages ?? 1);
       if (!("error" in teamsResult)) {
         setTeamRegistry((teamsResult.teams || []).map((t) => String(t.name)).filter(Boolean));
       }
@@ -75,7 +91,35 @@ export default function OyuncuYonetimi() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, debouncedSearch, selectedTeam, lifecycleFilter]);
+
+  useEffect(() => {
+    void fetchPlayers();
+  }, [fetchPlayers]);
+
+  useEffect(() => {
+    if (workspace !== "teams") return;
+    let cancelled = false;
+    void (async () => {
+      const summary = await listManagementDirectory({ view: "summary" });
+      if (cancelled || "error" in summary) return;
+      const counts: Record<string, number> = {};
+      for (const athlete of summary.athletes) {
+        const teamName = (athlete.team || "").trim();
+        if (!teamName) continue;
+        counts[teamName] = (counts[teamName] ?? 0) + 1;
+      }
+      setTeamAthleteCounts(counts);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, players]);
+
+  const availableTeams = useMemo(() => {
+    const teams = new Set(teamRegistry);
+    return ["Tüm Takımlar", ...Array.from(teams)];
+  }, [teamRegistry]);
 
   async function refreshTeamsList() {
     const teamsResult = await listTeamsForActor();
@@ -246,24 +290,16 @@ export default function OyuncuYonetimi() {
     }
   };
 
-  const filteredPlayers = useMemo(() => {
-    const rows = players.filter((player) => {
-      const nameMatch = player.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesTeam = selectedTeam === "Tüm Takımlar" || player.team === selectedTeam;
-      const active = profileRowIsActive(player.is_active);
-      const lifecycleOk =
-        lifecycleFilter === "all" ||
-        (lifecycleFilter === "active" && active) ||
-        (lifecycleFilter === "inactive" && !active);
-      return nameMatch && matchesTeam && lifecycleOk;
-    });
-    return [...rows].sort((a, b) => {
-      const ac = profileRowIsActive(a.is_active) ? 0 : 1;
-      const bc = profileRowIsActive(b.is_active) ? 0 : 1;
-      if (ac !== bc) return ac - bc;
-      return (a.full_name || "").localeCompare(b.full_name || "", "tr");
-    });
-  }, [players, searchTerm, selectedTeam, lifecycleFilter]);
+  const displayedPlayers = useMemo(
+    () =>
+      [...players].sort((a, b) => {
+        const ac = profileRowIsActive(a.is_active) ? 0 : 1;
+        const bc = profileRowIsActive(b.is_active) ? 0 : 1;
+        if (ac !== bc) return ac - bc;
+        return (a.full_name || "").localeCompare(b.full_name || "", "tr");
+      }),
+    [players]
+  );
 
   return (
     <div className="ui-page-loose animate-in fade-in duration-700 min-w-0 overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
@@ -314,7 +350,7 @@ export default function OyuncuYonetimi() {
         <TeamsListPanel
           teamsList={teamsList}
           teamsLoading={teamsLoading}
-          players={players}
+          teamAthleteCounts={teamAthleteCounts}
           newTeamNameInput={newTeamNameInput}
           setNewTeamNameInput={setNewTeamNameInput}
           teamCreateBusy={teamCreateBusy}
@@ -411,8 +447,8 @@ export default function OyuncuYonetimi() {
                 <SkeletonCard rows={4} />
                 <SkeletonCard rows={4} />
               </>
-            ) : filteredPlayers.length > 0 ? (
-              filteredPlayers.map((player) => (
+            ) : displayedPlayers.length > 0 ? (
+              displayedPlayers.map((player) => (
                 <AthleteCard
                   key={player.id}
                   player={player}
@@ -421,7 +457,7 @@ export default function OyuncuYonetimi() {
                   onHardDelete={handleHardDelete}
                 />
               ))
-            ) : players.length === 0 ? (
+            ) : totalAthletes === 0 && !debouncedSearch && selectedTeam === "Tüm Takımlar" && lifecycleFilter === "active" ? (
               <div className="col-span-full">
                 <EmptyState
                   variant="onboarding"
@@ -449,6 +485,32 @@ export default function OyuncuYonetimi() {
               </div>
             )}
           </div>
+
+          {!loading && totalPages > 1 ? (
+            <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                {totalAthletes} sporcu · sayfa {page}/{totalPages}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="min-h-10 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
+                >
+                  Önceki
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="min-h-10 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

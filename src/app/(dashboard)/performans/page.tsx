@@ -184,6 +184,11 @@ export default function PerformanceAnalytics() {
             .filter((a) => profileRowIsActive(a.is_active))
             .map((a) => ({ id: a.id, full_name: a.full_name }))
         );
+        setCapWarning(
+          "orgAthleteCap" in dir && dir.orgAthleteCap?.capped
+            ? { cap: dir.orgAthleteCap.cap, total: dir.orgAthleteCap.total }
+            : null
+        );
         setLoadError(null);
         setLoadErrorKind(null);
         // Faz 9.1 — Hook'a tz-aware 28 gün varsayılan uygulanır.
@@ -638,8 +643,7 @@ export default function PerformanceAnalytics() {
           className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-200"
           role="alert"
         >
-          Veri kapsamı sınırlandı: {capWarning.total} sporcudan ilk {capWarning.cap} tanesi analize dahil edildi. Tarih
-          aralığını daraltın veya tek sporcu görünümünü kullanın.
+          Veri kapsamı sınırlandı: {capWarning.total} sporcudan ilk {capWarning.cap} tanesi toplu analiz/CSV dışa aktarımına dahil edilir. Tek sporcu görünümü etkilenmez; tarih aralığını daraltın.
         </p>
       ) : null}
 
