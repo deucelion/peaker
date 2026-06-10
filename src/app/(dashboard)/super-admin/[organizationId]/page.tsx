@@ -92,7 +92,17 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
         <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">
           Durum: <span className="text-white">{ORGANIZATION_STATUS_LABELS[orgStatus]}</span>
         </p>
+        <a
+          href="#kullanici-sifreleri"
+          className="inline-flex min-h-10 mt-3 items-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#ddd6fe] touch-manipulation sm:hover:bg-[#7c3aed]/20"
+        >
+          Kullanıcı şifrelerine git
+        </a>
       </header>
+
+      <div id="kullanici-sifreleri" className="scroll-mt-6">
+        <SuperAdminOrgUsersPasswordPanel profiles={profiles} />
+      </div>
 
       <SuperAdminLicensePanel
         organizationId={org.id}
@@ -111,8 +121,6 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
       />
 
       <SuperAdminAddCoachForm organizationId={org.id} />
-
-      <SuperAdminOrgUsersPasswordPanel profiles={profiles} />
 
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 min-w-0">
         <Mini label="Admin" value={admins} />

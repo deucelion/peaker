@@ -3,15 +3,18 @@ import Image from "next/image";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Eye, EyeOff, Search, Loader2, User, Lock, ShieldCheck, Mail, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Search, Loader2, User, Lock, ShieldCheck, Mail, CheckCircle2, KeyRound } from "lucide-react";
 import type { ProfileBasic } from "@/types/domain";
 import Notification from "@/components/Notification";
 import type { AthletePermissionKey, AthletePermissions } from "@/lib/types";
 import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import { listAthletesWithPermissionsForSettings, updateAthletePermissions } from "@/lib/actions/athletePermissionActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { getSafeRole } from "@/lib/auth/roleMatrix";
+import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import { buildPasswordResetRedirectUrl } from "@/lib/auth/passwordResetRedirect";
+import { SuperAdminPasswordHub } from "@/components/admin/SuperAdminPasswordHub";
 
 interface AthleteProfile extends ProfileBasic {
   permissions?: AthletePermissions;
@@ -36,6 +39,7 @@ export default function AyarlarPage() {
 
   const checkUser = useCallback(async () => {
     setLoading(true);
+    setSecurityMessage(null);
     try {
       const rolePayload = await fetchMeRoleClient();
       if (!rolePayload.ok) {
@@ -61,7 +65,30 @@ export default function AyarlarPage() {
             return;
           }
         }
-        setSecurityMessage("Profil bilgisi alinamadi.");
+
+        const { data: authData } = await supabase.auth.getUser();
+        const authUser = authData.user;
+        if (authUser) {
+          const { data: profileRow } = await supabase
+            .from("profiles")
+            .select("role, full_name, organization_id")
+            .eq("id", authUser.id)
+            .maybeSingle();
+          const bootRole = getSafeRole(profileRow?.role);
+          if (bootRole === "super_admin" || looksLikeSuperAdminRole(profileRow?.role)) {
+            setRole("super_admin");
+            setActiveTab("platform");
+            setUserProfile({
+              id: authUser.id,
+              full_name: profileRow?.full_name ?? authUser.email ?? "Super Admin",
+              organization_id: null,
+              email: authUser.email ?? null,
+            } as UserProfile);
+            return;
+          }
+        }
+
+        setSecurityMessage("Profil bilgisi alınamadı.");
         return;
       }
       const resolvedRole = rolePayload.role;
@@ -73,7 +100,9 @@ export default function AyarlarPage() {
         email: rolePayload.email ?? null,
       } as UserProfile);
 
-      if (resolvedRole === "coach" || resolvedRole === "admin") {
+      if (resolvedRole === "super_admin") {
+        setActiveTab("platform");
+      } else if (resolvedRole === "coach" || resolvedRole === "admin") {
         setActiveTab("yetkiler");
         const listRes = await listAthletesWithPermissionsForSettings();
         if ("error" in listRes) {
@@ -89,6 +118,7 @@ export default function AyarlarPage() {
       }
     } catch (err) {
       console.error("Kullanıcı kontrol hatası:", err);
+      setSecurityMessage("Ayarlar yüklenirken beklenmeyen bir hata oluştu.");
     } finally {
       setLoading(false);
     }
@@ -132,7 +162,8 @@ export default function AyarlarPage() {
     setUpdatingId(null);
   };
 
-  const isCoach = role === 'coach' || role === 'admin';
+  const isCoach = role === "coach" || role === "admin";
+  const isSuperAdmin = role === "super_admin";
 
   if (loading) return (
     <div className="flex flex-col justify-center items-center min-h-[50dvh] gap-4 px-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
@@ -147,16 +178,43 @@ export default function AyarlarPage() {
     <div className="space-y-6 sm:space-y-10 pb-[max(5rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden animate-in fade-in duration-700">
       <header className="min-w-0">
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-          {isCoach ? "SİSTEM" : "HESAP"} <span className="text-[#7c3aed]">AYARLARI</span>
+          {isSuperAdmin ? "PLATFORM" : isCoach ? "SİSTEM" : "HESAP"}{" "}
+          <span className="text-[#7c3aed]">AYARLARI</span>
         </h1>
         <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[#7c3aed] pl-3 sm:pl-4 min-w-0">
           <ShieldCheck size={14} className="text-[#7c3aed] shrink-0 mt-0.5" aria-hidden />
-          <span className="break-words">{isCoach ? "PANEL GÖRÜNÜRLÜK VE YETKİ YÖNETİMİ" : "KİŞİSEL TERCİHLER VE GÜVENLİK"}</span>
+          <span className="break-words">
+            {isSuperAdmin
+              ? "PLATFORM YÖNETİMİ VE KULLANICI ŞİFRELERİ"
+              : isCoach
+                ? "PANEL GÖRÜNÜRLÜK VE YETKİ YÖNETİMİ"
+                : "KİŞİSEL TERCİHLER VE GÜVENLİK"}
+          </span>
         </div>
       </header>
 
+      {securityMessage && activeTab !== "guvenlik" ? (
+        <div className="min-w-0 break-words">
+          <Notification message={securityMessage} variant="error" />
+        </div>
+      ) : null}
+
       {/* TABS NAVIGATION */}
       <div className="flex flex-wrap gap-2 p-1.5 bg-[#121215] border border-white/5 rounded-[1.5rem] w-full min-w-0 sm:w-fit">
+        {isSuperAdmin ? (
+          <button
+            type="button"
+            onClick={() => setActiveTab("platform")}
+            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${
+              activeTab === "platform"
+                ? "bg-[#7c3aed] text-white shadow-xl shadow-[#7c3aed]/20"
+                : "text-gray-500 sm:hover:text-white"
+            }`}
+          >
+            <KeyRound size={14} aria-hidden /> Şifre yönetimi
+          </button>
+        ) : null}
+
         <button 
           type="button"
           onClick={() => setActiveTab("profil")}
@@ -189,6 +247,15 @@ export default function AyarlarPage() {
           <Lock size={14} aria-hidden /> Güvenlik
         </button>
       </div>
+
+      {activeTab === "platform" && isSuperAdmin ? (
+        <div className="space-y-5 sm:space-y-6 animate-in slide-in-from-bottom-2 duration-500 min-w-0">
+          <SuperAdminPasswordHub />
+          <div className="rounded-[1.5rem] border border-white/10 bg-[#121215] p-4 sm:p-5 text-[11px] text-gray-400 font-semibold break-words">
+            İpucu: Ana super admin panelinde bir organizasyona tıklayıp sayfada <strong className="text-white">Kullanıcı şifreleri</strong> bölümünden de aynı işlemi yapabilirsiniz.
+          </div>
+        </div>
+      ) : null}
 
       {/* TAB CONTENT: YETKİLER */}
       {activeTab === "yetkiler" && isCoach && (
@@ -310,7 +377,7 @@ export default function AyarlarPage() {
              </h3>
              <div className="space-y-6">
                 <InfoBox label="Tam Adınız" value={userProfile?.full_name ?? ""} />
-                <InfoBox label="Bağlı Organizasyon" value={userProfile?.organization_id ? "PEAKER ELITE" : "GENEL"} highlight />
+                <InfoBox label="Bağlı Organizasyon" value={isSuperAdmin ? "SYSTEM (Platform)" : userProfile?.organization_id ? "PEAKER ELITE" : "GENEL"} highlight />
                 <div className="grid grid-cols-2 gap-4">
                   <InfoBox label="Rol" value={role ? role.toUpperCase() : ""} />
                   <InfoBox label="Numara" value={`#${userProfile?.number || "00"}`} />

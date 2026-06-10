@@ -16,6 +16,7 @@ import type { SuperAdminOrganizationSummary } from "@/lib/types";
 import type { SystemHealthReport } from "@/lib/types/diagnostics";
 import { ORGANIZATION_STATUS_LABELS, parseOrganizationStatus, type OrganizationStatus } from "@/lib/organization/lifecycle";
 import SuperAdminCreateOrgForm from "./SuperAdminCreateOrgForm";
+import { SuperAdminPasswordHub } from "@/components/admin/SuperAdminPasswordHub";
 
 function orgStatusChipClass(s: OrganizationStatus): string {
   switch (s) {
@@ -285,6 +286,8 @@ export default async function SuperAdminPage() {
           Tüm organizasyonlar için üst seviye operasyon paneli
         </p>
       </header>
+
+      <SuperAdminPasswordHub />
 
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-2 sm:gap-3 min-w-0">
         <KpiCard label="Toplam Org" value={orgSummaries.length} />

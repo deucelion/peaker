@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { isUuid } from "@/lib/validation/uuid";
@@ -12,36 +12,32 @@ import {
   type PasswordAdminActor,
 } from "@/lib/auth/adminPasswordPolicy";
 import { mapAuthPasswordError, readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
+import { assertSuperAdmin } from "@/lib/actions/superAdminActions";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
 }
 
 async function resolvePasswordAdminActor(): Promise<PasswordAdminActor | { error: string }> {
-  const sessionClient = await createServerSupabaseClient();
-  const { data: authData } = await sessionClient.auth.getUser();
-  if (!authData.user) return { error: "Gecersiz oturum." };
+  const result = await resolveSessionActor();
+  if ("error" in result) {
+    return { error: result.error === "Profil dogrulanamadi." ? "Kullanıcı profili doğrulanamadı." : result.error };
+  }
 
-  const { data: actor } = await sessionClient
-    .from("profiles")
-    .select("id, role, organization_id")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-  if (!actor) return { error: "Kullanici profili dogrulanamadi." };
-
-  const role = getSafeRole(actor.role);
-  if (role === "super_admin") {
+  const { actor } = result;
+  if (actor.role === "super_admin") {
     return { kind: "super_admin", actorId: actor.id, actorRole: actor.role };
   }
-  if (role === "admin" && actor.organization_id) {
+  if (actor.role === "admin" && actor.organizationId) {
     return {
       kind: "admin",
       actorId: actor.id,
       actorRole: actor.role,
-      organizationId: actor.organization_id,
+      organizationId: actor.organizationId,
     };
   }
-  return { error: "Bu islem yalnizca organizasyon admini veya super admin icindir." };
+  return { error: "Bu işlem yalnızca organizasyon admini veya super admin içindir." };
 }
 
 /** Org admin: kendi orgundaki koc/sporcu. Super admin: tum orglardaki tum roller (super_admin dahil). */
@@ -103,5 +99,22 @@ export async function setUserPasswordByAdmin(targetUserId: string, newPassword: 
     }
 
     return { success: true as const };
+  });
+}
+
+/** Super admin ayarlar / hub: sifre atamasi icin org listesi. */
+export async function listOrganizationsForSuperAdminPasswordHub() {
+  return withServerActionGuard("admin.listOrganizationsForSuperAdminPasswordHub", async () => {
+    const guard = await assertSuperAdmin();
+    if ("error" in guard) return { error: guard.error ?? "Yetkisiz." };
+
+    const adminClient = createSupabaseAdminClient();
+    const { data, error } = await adminClient
+      .from("organizations")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (error) return { error: `Organizasyon listesi alinamadi: ${error.message}` };
+    return { organizations: data || [] };
   });
 }
