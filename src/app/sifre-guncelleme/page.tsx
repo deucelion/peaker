@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  clearAuthParamsFromUrl,
+  establishRecoverySession,
+} from "@/lib/auth/establishRecoverySession";
 import { useRouter } from "next/navigation";
 import { Lock, Loader2, CheckCircle2 } from "lucide-react";
 import Notification from "@/components/Notification";
@@ -17,25 +21,21 @@ export default function UpdatePasswordPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error && !cancelled) {
-          setMessage(
-            "Sifre sifirlama baglantisi gecersiz veya suresi dolmus. Lutfen tekrar sifre sifirlama isteyin."
-          );
-          setCheckingSession(false);
-          return;
-        }
-        window.history.replaceState({}, "", window.location.pathname);
+      const result = await establishRecoverySession();
+      if (cancelled) return;
+
+      if (result.ok && result.method !== "existing") {
+        clearAuthParamsFromUrl();
       }
+
       const { data } = await supabase.auth.getSession();
       if (!cancelled) {
         setSessionReady(!!data.session);
         if (!data.session) {
+          const recoveryError = !result.ok ? result.error : undefined;
           setMessage(
-            "Oturum bulunamadi. Lutfen e-postanizdaki sifre sifirlama baglantisini tekrar kullanin veya yeni bir baglanti isteyin."
+            recoveryError ??
+              "Oturum bulunamadi. Lutfen e-postanizdaki sifre sifirlama baglantisini tekrar kullanin veya yeni bir baglanti isteyin."
           );
         }
         setCheckingSession(false);

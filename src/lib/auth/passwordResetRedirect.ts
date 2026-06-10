@@ -1,7 +1,6 @@
 import { PATHS } from "@/lib/navigation/routeRegistry";
 
-/** Şifre sıfırlama e-postası: PKCE code exchange için /auth/callback üzerinden yönlendir. */
+/** Şifre sıfırlama e-postası: doğrudan şifre güncelleme sayfasına (PKCE code client-side). */
 export function buildPasswordResetRedirectUrl(origin: string): string {
-  const next = encodeURIComponent(PATHS.passwordReset);
-  return `${origin}/auth/callback?next=${next}`;
+  return `${origin}${PATHS.passwordReset}`;
 }

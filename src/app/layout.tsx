@@ -2,6 +2,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import "./(dashboard)/globals.css";
+import { AuthRecoveryRedirect } from "@/components/auth/AuthRecoveryRedirect";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({
             ekleyerek organizasyon güvenliğini kökten çözeceğiz.
         */}
 
+        <AuthRecoveryRedirect />
         <main className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-x-hidden">
           {children}
         </main>
