@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { deleteAthleteProfileDependents } from "@/lib/auth/deleteAthleteProfileDependents";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
+import { mapAuthPasswordError, readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 
 async function resolveActorProfileWithFallback(userId: string) {
@@ -54,13 +55,13 @@ export async function addPlayer(formData: FormData) {
   // 1. VERİLERİ TEMİZLE VE AL
   const email = normalizeEmailInput(formData.get("email")?.toString());
   const fullName = formData.get("fullName")?.toString().trim();
-  const password = formData.get("password")?.toString();
+  const password = readPasswordInput(formData.get("password")?.toString());
   const position = formData.get("position")?.toString();
   const team = formData.get("team")?.toString().trim() || null;
 
-  // 2. SIKI DOĞRULAMA
-  if (!email || !SIMPLE_EMAIL_RE.test(email) || !password || password.length < 6) {
-    return { error: "Geçerli bir e-posta ve en az 6 karakterli şifre zorunludur." };
+  const passwordIssue = validatePasswordMinLength(password);
+  if (!email || !SIMPLE_EMAIL_RE.test(email) || passwordIssue) {
+    return { error: passwordIssue || "Geçerli bir e-posta ve en az 6 karakterli şifre zorunludur." };
   }
 
   try {
@@ -133,7 +134,7 @@ export async function addPlayer(formData: FormData) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Beklenmedik bir hata oluştu.";
     console.error("Sistem Hatası:", message);
-    return { error: message };
+    return { error: mapAuthPasswordError(message) };
   }
   });
 }

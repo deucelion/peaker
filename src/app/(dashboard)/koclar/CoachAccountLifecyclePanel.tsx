@@ -2,27 +2,36 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { deactivateCoachAction, reactivateCoachAction } from "@/lib/actions/coachLifecycleActions";
+import { deactivateCoachAction, hardDeleteCoach, reactivateCoachAction } from "@/lib/actions/coachLifecycleActions";
 
 type Props = {
   coachId: string;
   coachName: string;
   isActive: boolean;
+  listHref?: string;
 };
 
-export default function CoachAccountLifecyclePanel({ coachId, coachName, isActive }: Props) {
+export default function CoachAccountLifecyclePanel({ coachId, coachName, isActive, listHref = "/koclar" }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function run(label: string, action: () => Promise<{ success?: true; error?: string } | { error: string }>) {
+  function run(
+    label: string,
+    action: () => Promise<{ success?: true; error?: string } | { error: string }>,
+    opts?: { redirectTo?: string }
+  ) {
     setError(null);
     setMessage(null);
     startTransition(async () => {
       const res = await action();
       if ("error" in res && res.error) {
         setError(res.error);
+        return;
+      }
+      if (opts?.redirectTo) {
+        router.push(opts.redirectTo);
         return;
       }
       setMessage(`${label} tamamlandı.`);
@@ -36,6 +45,7 @@ export default function CoachAccountLifecyclePanel({ coachId, coachName, isActiv
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase break-words">Hesap durumu</h3>
         <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wide sm:tracking-wider break-words">
           Pasif koç oturum açabilir ancak ders, yoklama ve operasyonel işlem yapamaz. Veriler korunur.
+          Kalıcı silme yalnızca organizasyon admini ve super admin tarafından yapılabilir; geri alınamaz.
         </p>
       </div>
       {message ? (
@@ -76,6 +86,23 @@ export default function CoachAccountLifecyclePanel({ coachId, coachName, isActiv
             Hesabı aktif et
           </button>
         )}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            if (
+              !window.confirm(
+                `${coachName} hesabını kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz; koçun özel ders oturumları da silinir.`
+              )
+            ) {
+              return;
+            }
+            run("Kalıcı silme", () => hardDeleteCoach(coachId), { redirectTo: listHref });
+          }}
+          className="min-h-11 w-full sm:w-auto rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-[10px] font-black uppercase text-red-200 sm:hover:bg-red-500/15 disabled:opacity-40 touch-manipulation"
+        >
+          Kalıcı olarak sil
+        </button>
       </div>
     </section>
   );

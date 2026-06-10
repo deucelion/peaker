@@ -10,6 +10,7 @@ import { mapCoach } from "@/lib/mappers";
 import type { CoachProfile } from "@/lib/types";
 import { addCoach, loadCoachesPageData } from "@/lib/actions/coachActions";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 
 function CoachesPageContent() {
   const searchParams = useSearchParams();
@@ -242,13 +243,14 @@ function CoachesPageContent() {
                 <label className="mb-1 block text-[10px] font-black uppercase text-gray-500">Geçici Şifre</label>
                 <input
                   required
-                  type="text"
+                  type="password"
                   minLength={6}
                   autoComplete="new-password"
                   value={coachForm.password}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, password: e.target.value }))}
-                  className="ui-input min-h-11 w-full bg-black/40"
-                  placeholder="Geçici Şifre"
+                  className="ui-input min-h-11 w-full bg-black/40 normal-case"
+                  placeholder="Geçici şifre (en az 6 karakter)"
+                  {...PASSWORD_FIELD_PROPS}
                 />
               </div>
               <button

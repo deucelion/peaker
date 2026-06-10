@@ -11,6 +11,7 @@ import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
 import { captureServerActionSignal, withServerActionGuard } from "@/lib/observability/serverActionError";
 import { deleteAthleteProfileDependents } from "@/lib/auth/deleteAthleteProfileDependents";
+import { mapAuthPasswordError, readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
 
 type OnboardingMode = "none" | "private_lesson" | "monthly_subscription";
 
@@ -87,7 +88,7 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
 
   const fullName = formData.get("fullName")?.toString().trim() || "";
   const email = normalizeEmailInput(formData.get("email")?.toString());
-  const password = formData.get("password")?.toString().trim() || "";
+  const password = readPasswordInput(formData.get("password")?.toString());
   const phone = formData.get("phone")?.toString().trim() || null;
   const teamId = formData.get("teamId")?.toString().trim() || "";
   const position = formData.get("position")?.toString().trim() || null;
@@ -98,7 +99,8 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
 
   if (!fullName) return { error: "Ad soyad zorunludur." };
   if (!email || !SIMPLE_EMAIL_RE.test(email)) return { error: "Geçerli bir e-posta girin." };
-  if (!password || password.length < 6) return { error: "Şifre en az 6 karakter olmalıdır." };
+  const passwordIssue = validatePasswordMinLength(password);
+  if (passwordIssue) return { error: passwordIssue };
   if (!["none", "private_lesson", "monthly_subscription"].includes(onboardingMode)) {
     return { error: "Geçersiz onboarding tipi." };
   }
@@ -145,7 +147,9 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
         onboarding_started_at: new Date().toISOString(),
       },
     });
-    if (authErr || !authData.user) return { error: authErr?.message || "Sporcu auth hesabı oluşturulamadı." };
+    if (authErr || !authData.user) {
+      return { error: mapAuthPasswordError(authErr?.message || "Sporcu auth hesabı oluşturulamadı.") };
+    }
     createdAuthUserId = authData.user.id;
 
     let coachId: string | null = packageCoachId;

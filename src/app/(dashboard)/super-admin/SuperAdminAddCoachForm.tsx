@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { addCoach } from "@/lib/actions/coachActions";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 import Notification from "@/components/Notification";
 
 type Props = {
@@ -78,13 +79,14 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
         />
         <input
           type="password"
-          className="w-full min-w-0 bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#7c3aed]/50 touch-manipulation"
-          placeholder="Gecici sifre (min 6)"
+          className="w-full min-w-0 bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#7c3aed]/50 touch-manipulation normal-case"
+          placeholder="Geçici şifre (min 6)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           minLength={6}
           autoComplete="new-password"
           required
+          {...PASSWORD_FIELD_PROPS}
         />
         <button
           type="submit"

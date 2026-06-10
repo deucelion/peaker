@@ -9,6 +9,7 @@ import { PATHS } from "@/lib/navigation/routeRegistry";
 import Notification from "@/components/Notification";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
 import { buildPasswordResetRedirectUrl } from "@/lib/auth/passwordResetRedirect";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -162,11 +163,12 @@ export default function LoginPage() {
             />
             <input 
               type="password" 
-              placeholder="ŞİFRE" 
+              placeholder="Şifre" 
               autoComplete="current-password"
-              className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-black py-3.5 pl-12 pr-4 text-base font-bold uppercase italic text-white outline-none transition-all placeholder:opacity-50 focus:border-[#7c3aed]/50 sm:pl-14 sm:text-xs"
+              className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-black py-3.5 pl-12 pr-4 text-base font-bold italic text-white outline-none transition-all placeholder:opacity-50 focus:border-[#7c3aed]/50 sm:pl-14 sm:text-xs"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              {...PASSWORD_FIELD_PROPS}
               required
             />
           </div>

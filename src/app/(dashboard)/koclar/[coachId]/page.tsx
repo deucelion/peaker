@@ -230,7 +230,12 @@ function CoachProfilePageInner() {
         </form>
       </section>
 
-      <CoachAccountLifecyclePanel coachId={coach.id} coachName={coach.fullName} isActive={coach.isActive} />
+      <CoachAccountLifecyclePanel
+        coachId={coach.id}
+        coachName={coach.fullName}
+        isActive={coach.isActive}
+        listHref={listOrgId ? `/koclar?org=${encodeURIComponent(listOrgId)}` : "/koclar"}
+      />
 
       <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-4">
         <SummaryCard label="Bugünkü Ders" value={todayLessons.length} />

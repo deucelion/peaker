@@ -6,6 +6,7 @@ import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { isUuid } from "@/lib/validation/uuid";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
+import { deleteCoachProfileDependents } from "@/lib/auth/deleteCoachProfileDependents";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -85,4 +86,67 @@ export async function deactivateCoachAction(coachId: string) {
 
 export async function reactivateCoachAction(coachId: string) {
   return setCoachAccountActive(coachId, true);
+}
+
+/** Kalici silme: profile + auth user (geri alinamaz). Yalnizca org admin ve super admin. */
+export async function hardDeleteCoach(coachId: string) {
+  return withServerActionGuard("coachLifecycle.hardDeleteCoach", async () => {
+    if (!assertUuid(coachId)) return { error: "Gecersiz koc kimligi." };
+
+    const resolved = await resolveAdminOrg();
+    if ("error" in resolved) return { error: resolved.error };
+    if (resolved.actorId === coachId) {
+      return { error: "Kendi hesabinizi kalici olarak silemezsiniz." };
+    }
+
+    const adminClient = createSupabaseAdminClient();
+    let targetQuery = adminClient
+      .from("profiles")
+      .select("id, role, organization_id, email")
+      .eq("id", coachId);
+    if (resolved.kind === "admin") {
+      targetQuery = targetQuery.eq("organization_id", resolved.organizationId);
+    }
+    const { data: target, error: fetchErr } = await targetQuery.maybeSingle();
+
+    if (fetchErr || !target?.organization_id) {
+      return { error: "Koc bulunamadi veya bu organizasyona ait degil." };
+    }
+    if (getSafeRole(target.role) !== "coach") {
+      return { error: "Yalnizca koc hesaplari kalici olarak silinebilir." };
+    }
+
+    const depErr = await deleteCoachProfileDependents(adminClient, coachId, target.organization_id);
+    if (depErr.error) return { error: depErr.error };
+
+    const { error: deleteProfileErr } = await adminClient
+      .from("profiles")
+      .delete()
+      .eq("id", coachId)
+      .eq("organization_id", target.organization_id);
+    if (deleteProfileErr) {
+      return { error: `Koc profili silinemedi: ${deleteProfileErr.message}` };
+    }
+
+    const { error: deleteAuthErr } = await adminClient.auth.admin.deleteUser(coachId);
+    if (deleteAuthErr) {
+      return { error: `Auth hesabi silinemedi: ${deleteAuthErr.message}` };
+    }
+
+    await logAuditEvent({
+      organizationId: target.organization_id,
+      actorUserId: resolved.actorId,
+      actorRole: resolved.actorRole,
+      action: "coach.lifecycle.update",
+      entityType: "coach",
+      entityId: coachId,
+      metadata: { hardDelete: true, email: target.email },
+    });
+
+    revalidatePath("/koclar");
+    revalidatePath(`/koclar/${coachId}`);
+    revalidatePath("/super-admin");
+    revalidatePath(`/super-admin/${target.organization_id}`);
+    return { success: true as const };
+  });
 }

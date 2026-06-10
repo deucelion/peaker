@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { createOrganizationWithAdmin } from "@/lib/actions/superAdminActions";
 import Notification from "@/components/Notification";
 import { listSupportedTimeZones } from "@/lib/organization/timeZoneOptions";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 
 export default function SuperAdminCreateOrgForm() {
   const [submitting, setSubmitting] = useState(false);
@@ -74,12 +75,14 @@ export default function SuperAdminCreateOrgForm() {
         />
         <input
           required
+          type="password"
           minLength={6}
           autoComplete="new-password"
           value={form.tempPassword}
           onChange={(e) => setForm((prev) => ({ ...prev, tempPassword: e.target.value }))}
-          placeholder="GECICI SIFRE (MIN 6)"
-          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
+          placeholder="Geçici şifre (min 6)"
+          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none normal-case"
+          {...PASSWORD_FIELD_PROPS}
         />
         <label className="block min-w-0">
           <span className="mb-1 block text-[9px] font-black uppercase tracking-wider text-gray-500">

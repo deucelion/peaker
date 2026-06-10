@@ -20,6 +20,7 @@ import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { runProfileIntegrityRepair } from "@/lib/diagnostics/profileIntegrity";
 import { isUuid } from "@/lib/validation/uuid";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
+import { readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
 import { captureServerActionError, withServerActionGuard } from "@/lib/observability/serverActionError";
 
 function assertOrganizationId(id: string | null | undefined): id is string {
@@ -70,11 +71,12 @@ export async function createOrganizationWithAdmin(formData: FormData) {
   const orgName = formData.get("organizationName")?.toString().trim();
   const adminEmail = normalizeEmailInput(formData.get("adminEmail")?.toString());
   const adminFullName = formData.get("adminFullName")?.toString().trim() || "Organization Admin";
-  const tempPassword = formData.get("tempPassword")?.toString().trim();
+  const tempPassword = readPasswordInput(formData.get("tempPassword")?.toString());
   const timeZoneRaw = formData.get("timeZone")?.toString().trim() || "";
 
-  if (!orgName || !adminEmail || !SIMPLE_EMAIL_RE.test(adminEmail) || !tempPassword || tempPassword.length < 6) {
-    return { error: "Organizasyon adi, gecerli admin e-postasi ve en az 6 karakter sifre zorunludur." };
+  const tempPasswordIssue = validatePasswordMinLength(tempPassword);
+  if (!orgName || !adminEmail || !SIMPLE_EMAIL_RE.test(adminEmail) || tempPasswordIssue) {
+    return { error: tempPasswordIssue || "Organizasyon adi, gecerli admin e-postasi ve en az 6 karakter sifre zorunludur." };
   }
 
   const { isLikelyIanaTimeZone } = await import("@/lib/organization/timeZone");

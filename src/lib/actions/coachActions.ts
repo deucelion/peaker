@@ -10,6 +10,7 @@ import { normalizeCoachPermissions } from "@/lib/auth/coachPermissions";
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { isUuid } from "@/lib/validation/uuid";
 import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize";
+import { mapAuthPasswordError, readPasswordInput, validatePasswordMinLength } from "@/lib/auth/passwordInput";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -459,11 +460,12 @@ export async function addCoach(formData: FormData) {
   return withServerActionGuard("coach.addCoach", async () => {
   const email = normalizeEmailInput(formData.get("email")?.toString());
   const fullName = formData.get("fullName")?.toString().trim();
-  const password = formData.get("password")?.toString();
+  const password = readPasswordInput(formData.get("password")?.toString());
   const organizationIdRaw = formData.get("organizationId")?.toString().trim() || "";
 
-  if (!email || !fullName || !password || password.length < 6) {
-    return { error: "Email, ad soyad ve en az 6 karakter sifre zorunludur." };
+  const passwordIssue = validatePasswordMinLength(password);
+  if (!email || !fullName || passwordIssue) {
+    return { error: passwordIssue || "Email, ad soyad ve en az 6 karakter sifre zorunludur." };
   }
   if (!SIMPLE_EMAIL_RE.test(email)) {
     return { error: "Gecerli bir e-posta adresi girin (ornek: koc@gmail.com)." };
@@ -602,7 +604,7 @@ export async function addCoach(formData: FormData) {
         return { success: true as const, repairedOrphan: true as const };
       }
 
-      return { error: msg || "Coach auth hesabi olusturulamadi." };
+      return { error: mapAuthPasswordError(msg || "Coach auth hesabi olusturulamadi.") };
     }
 
     const userId = createdAuth.user.id;

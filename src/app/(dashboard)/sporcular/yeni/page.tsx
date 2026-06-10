@@ -9,6 +9,7 @@ import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { createAthleteWithPackageAndPayment } from "@/lib/actions/athleteOnboardingActions";
 import { createTeamAction, listTeamsForActor } from "@/lib/actions/teamActions";
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 
 type OnboardingMode = "none" | "private_lesson" | "monthly_subscription";
 
@@ -96,7 +97,7 @@ export default function NewAthleteOnboardingPage() {
     if (step === 0) {
       if (!form.fullName.trim()) return "Ad soyad zorunludur.";
       if (!form.email.trim()) return "E-posta zorunludur.";
-      if ((form.password || "").trim().length < 6) return "Şifre en az 6 karakter olmalıdır.";
+      if ((form.password || "").length < 6) return "Şifre en az 6 karakter olmalıdır.";
     }
     if (step === 3 && mode === "private_lesson") {
       if (!form.totalLessons) return "Toplam ders sayısı zorunludur.";
@@ -263,7 +264,7 @@ export default function NewAthleteOnboardingPage() {
             </label>
             <label className="ui-field">
               <span className="ui-label">Şifre</span>
-              <input className="ui-input" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} />
+              <input className="ui-input normal-case" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} minLength={6} autoComplete="new-password" {...PASSWORD_FIELD_PROPS} />
             </label>
             <label className="ui-field sm:col-span-2">
               <span className="ui-label">Telefon (opsiyonel)</span>

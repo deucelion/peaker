@@ -17,6 +17,7 @@ import { listUpcomingPrivateLessonSessionsForCoach } from "@/lib/actions/private
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
+import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
 import EmptyStateCard from "@/components/EmptyStateCard";
 import OnboardingChecklist, {
   type OnboardingProgress,
@@ -949,13 +950,14 @@ export default function Dashboard() {
                 />
                 <input
                   required
-                  type="text"
+                  type="password"
                   autoComplete="new-password"
                   minLength={6}
                   value={coachForm.password}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, password: e.target.value }))}
-                  placeholder="GECICI SIFRE (EN AZ 6)"
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold uppercase italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  placeholder="Geçici şifre (en az 6 karakter)"
+                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs normal-case"
+                  {...PASSWORD_FIELD_PROPS}
                 />
 
                 <button
