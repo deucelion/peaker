@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
@@ -142,6 +144,7 @@ type InjuryNoteTableRow = {
 };
 
 export async function listAthleteInjuryNotesForManagement(athleteId: string) {
+  return withServerActionGuard("injuryNote.listAthleteInjuryNotesForManagement", async () => {
   if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
   const resolved = await resolveManagementActor(false);
   if ("error" in resolved) return { error: resolved.error };
@@ -162,9 +165,11 @@ export async function listAthleteInjuryNotesForManagement(athleteId: string) {
 
   const records = await mapRowsToRecords((data || []) as InjuryNoteTableRow[]);
   return { notes: records };
+  });
 }
 
 export async function listMyAthleteInjuryNotes() {
+  return withServerActionGuard("injuryNote.listMyAthleteInjuryNotes", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -185,9 +190,11 @@ export async function listMyAthleteInjuryNotes() {
 
   const records = await mapRowsToRecords((data || []) as InjuryNoteTableRow[]);
   return { notes: records };
+  });
 }
 
 export async function createAthleteInjuryNote(formData: FormData) {
+  return withServerActionGuard("injuryNote.createAthleteInjuryNote", async () => {
   const athleteId = formData.get("athleteId")?.toString() || "";
   if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
 
@@ -267,12 +274,14 @@ export async function createAthleteInjuryNote(formData: FormData) {
   revalidatePath(`/sporcu/${athleteId}`);
   revalidatePath("/sporcu");
   return { success: true as const };
+  });
 }
 
 export async function updateAthleteInjuryNote(
   noteId: string,
   updates: { injuryType: string; note: string }
 ) {
+  return withServerActionGuard("injuryNote.updateAthleteInjuryNote", async () => {
   if (!assertUuid(noteId)) return { error: "Gecersiz sakatlik kaydi kimligi." as const };
   const resolved = await resolveManagementActor(true);
   if ("error" in resolved) return { error: resolved.error };
@@ -312,9 +321,11 @@ export async function updateAthleteInjuryNote(
   revalidatePath(`/sporcu/${existing.athlete_id}`);
   revalidatePath("/sporcu");
   return { success: true as const };
+  });
 }
 
 export async function deactivateAthleteInjuryNote(noteId: string) {
+  return withServerActionGuard("injuryNote.deactivateAthleteInjuryNote", async () => {
   if (!assertUuid(noteId)) return { error: "Gecersiz sakatlik kaydi kimligi." as const };
   const resolved = await resolveManagementActor(true);
   if ("error" in resolved) return { error: resolved.error };
@@ -349,4 +360,5 @@ export async function deactivateAthleteInjuryNote(noteId: string) {
   revalidatePath(`/sporcu/${existing.athlete_id}`);
   revalidatePath("/sporcu");
   return { success: true as const };
+  });
 }

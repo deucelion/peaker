@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -13,6 +15,7 @@ export async function updateCoachProfileByAdmin(
   coachId: string,
   payload: { fullName: string; phone: string; specialization: string }
 ) {
+  return withServerActionGuard("coachProfile.updateCoachProfileByAdmin", async () => {
   if (!assertUuid(coachId)) {
     return { error: "Gecersiz koc kimligi." };
   }
@@ -77,4 +80,5 @@ export async function updateCoachProfileByAdmin(
   revalidatePath(`/koclar/${coachId}`);
   revalidatePath("/");
   return { success: true as const };
+  });
 }

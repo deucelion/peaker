@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -61,6 +63,7 @@ async function ensureCoachPermissionsRow(
  * Org admin veya super_admin (hedef org) için koç listesi — RLS / rol string tutarsızlığından etkilenmez.
  */
 export async function listCoachesForOrgAdmin(organizationId: string) {
+  return withServerActionGuard("coach.listCoachesForOrgAdmin", async () => {
   if (!assertUuid(organizationId)) {
     return { error: "Gecersiz organizasyon kimligi." as const };
   }
@@ -114,6 +117,7 @@ export async function listCoachesForOrgAdmin(organizationId: string) {
 
   const coaches = (data || []).filter((row) => getSafeRole(row.role) === "coach");
   return { coaches };
+  });
 }
 
 /**
@@ -121,6 +125,7 @@ export async function listCoachesForOrgAdmin(organizationId: string) {
  * Tarayıcıdan `training_schedule` / `organizations` okumayı önler.
  */
 export async function loadCoachesPageData(orgFromQuery: string | null | undefined) {
+  return withServerActionGuard("coach.loadCoachesPageData", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) {
@@ -257,9 +262,11 @@ export async function loadCoachesPageData(orgFromQuery: string | null | undefine
     upcomingCountByCoach,
     lessonCountersByCoach,
   };
+  });
 }
 
 export async function getCoachProfileRowForOrgAdmin(coachId: string, organizationId: string) {
+  return withServerActionGuard("coach.getCoachProfileRowForOrgAdmin", async () => {
   if (!assertUuid(coachId) || !assertUuid(organizationId)) {
     return { error: "Gecersiz kimlik." as const };
   }
@@ -316,12 +323,14 @@ export async function getCoachProfileRowForOrgAdmin(coachId: string, organizatio
   }
 
   return { row };
+  });
 }
 
 /**
  * Koç detay (?org=): admin / super_admin organizationId — client /api/me-role yok.
  */
 export async function resolveOrganizationIdForCoachAdminDetail(orgFromQuery: string | null | undefined) {
+  return withServerActionGuard("coach.resolveOrganizationIdForCoachAdminDetail", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) {
@@ -374,6 +383,7 @@ export async function resolveOrganizationIdForCoachAdminDetail(orgFromQuery: str
     error:
       "Bu sayfaya erisim icin organizasyon admini veya super admin rolune ihtiyaciniz var." as const,
   };
+  });
 }
 
 export type CoachAdminScheduleRow = {
@@ -387,6 +397,7 @@ export type CoachAdminScheduleRow = {
  * Koç detay (admin/super_admin): profil satırı + ders programı + coach_permissions — tarayıcı Supabase okuması yok.
  */
 export async function loadCoachAdminDetailBundle(coachId: string, organizationId: string) {
+  return withServerActionGuard("coach.loadCoachAdminDetailBundle", async () => {
   const base = await getCoachProfileRowForOrgAdmin(coachId, organizationId);
   if ("error" in base) {
     return { error: base.error };
@@ -441,9 +452,11 @@ export async function loadCoachAdminDetailBundle(coachId: string, organizationId
     scheduleRows: [...((scheduleRows || []) as CoachAdminScheduleRow[]), ...mappedPrivateRows],
     permissions: normalizeCoachPermissions((permissionRow ?? null) as Partial<CoachPermissions> | null),
   };
+  });
 }
 
 export async function addCoach(formData: FormData) {
+  return withServerActionGuard("coach.addCoach", async () => {
   const email = normalizeEmailInput(formData.get("email")?.toString());
   const fullName = formData.get("fullName")?.toString().trim();
   const password = formData.get("password")?.toString();
@@ -556,8 +569,9 @@ export async function addCoach(formData: FormData) {
             revalidatePath(`/super-admin/${targetOrganizationId}`);
             return { success: true as const, alreadyExisted: true as const };
           }
+          // FAZ 31: cross-org hesap varligi/rolu ifsa edilmez — jenerik mesaj.
           return {
-            error: `Bu e-posta baska bir rol veya organizasyonla kayitli (${r}). Ayni e-posta ile ikinci koc olusturulamaz.`,
+            error: "Bu e-posta ile farkli bir hesap zaten kayitli. Lutfen baska bir e-posta kullanin.",
           };
         }
 
@@ -630,4 +644,5 @@ export async function addCoach(formData: FormData) {
     }
     return { error: message };
   }
+  });
 }

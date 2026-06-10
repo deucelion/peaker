@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -34,6 +36,7 @@ async function resolveActor() {
 }
 
 export async function createAthleteProgram(formData: FormData) {
+  return withServerActionGuard("program.createAthleteProgram", async () => {
   const schemaError = await assertCriticalSchemaReady([
     "coach_permissions",
     "athlete_programs_lifecycle",
@@ -155,9 +158,11 @@ export async function createAthleteProgram(formData: FormData) {
   revalidatePath("/programlarim");
   revalidatePath("/bildirimler");
   return { success: true };
+  });
 }
 
 export async function markProgramRead(programId: string) {
+  return withServerActionGuard("program.markProgramRead", async () => {
   const schemaError = await assertCriticalSchemaReady(["athlete_programs_lifecycle"]);
   if (schemaError) return { error: schemaError };
   const resolved = await resolveActor();
@@ -187,9 +192,11 @@ export async function markProgramRead(programId: string) {
 
   revalidatePath("/programlarim");
   return { success: true };
+  });
 }
 
 export async function setProgramActive(programId: string, isActive: boolean) {
+  return withServerActionGuard("program.setProgramActive", async () => {
   const schemaError = await assertCriticalSchemaReady(["athlete_programs_lifecycle", "coach_permissions"]);
   if (schemaError) return { error: schemaError };
   const resolved = await resolveActor();
@@ -225,9 +232,11 @@ export async function setProgramActive(programId: string, isActive: boolean) {
   revalidatePath("/notlar-haftalik-program");
   revalidatePath("/programlarim");
   return { success: true };
+  });
 }
 
 export async function updateAthleteProgramContent(formData: FormData) {
+  return withServerActionGuard("program.updateAthleteProgramContent", async () => {
   const schemaError = await assertCriticalSchemaReady([
     "coach_permissions",
     "athlete_programs_lifecycle",
@@ -297,11 +306,13 @@ export async function updateAthleteProgramContent(formData: FormData) {
   revalidatePath("/notlar-haftalik-program");
   revalidatePath("/programlarim");
   return { success: true };
+  });
 }
 
 export async function listRecentAthleteProgramsForDashboard(): Promise<
   { programs: unknown[] } | { error: string }
 > {
+  return withServerActionGuard("program.listRecentAthleteProgramsForDashboard", async () => {
   const schemaError = await assertCriticalSchemaReady(["athlete_programs_lifecycle"]);
   if (schemaError) return { error: schemaError };
 
@@ -352,11 +363,13 @@ export async function listRecentAthleteProgramsForDashboard(): Promise<
   }
 
   return { programs: [] };
+  });
 }
 
 export async function listAthleteProgramsForManagementUI(): Promise<
   { programs: unknown[] } | { error: string }
 > {
+  return withServerActionGuard("program.listAthleteProgramsForManagementUI", async () => {
   const schemaError = await assertCriticalSchemaReady([
     "athlete_programs_lifecycle",
     "coach_permissions",
@@ -383,11 +396,13 @@ export async function listAthleteProgramsForManagementUI(): Promise<
     .order("created_at", { ascending: false });
   if (error) return { error: `Programlar alinamadi: ${error.message}` };
   return { programs: data ?? [] };
+  });
 }
 
 export async function listAthleteProgramsForAthleteView(): Promise<
   { programs: unknown[] } | { error: string }
 > {
+  return withServerActionGuard("program.listAthleteProgramsForAthleteView", async () => {
   const schemaError = await assertCriticalSchemaReady([
     "athlete_programs_lifecycle",
     "athlete_permissions",
@@ -424,4 +439,5 @@ export async function listAthleteProgramsForAthleteView(): Promise<
     .order("created_at", { ascending: false });
   if (error) return { error: `Programlar alinamadi: ${error.message}` };
   return { programs: data ?? [] };
+  });
 }

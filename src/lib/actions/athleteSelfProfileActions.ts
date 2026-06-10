@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -28,6 +30,7 @@ function clampStr(s: string | null | undefined, max: number) {
 }
 
 export async function updateAthleteSelfProfile(formData: FormData) {
+  return withServerActionGuard("athleteSelfProfile.updateAthleteSelfProfile", async () => {
   const resolved = await resolveActiveAthlete();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -70,9 +73,11 @@ export async function updateAthleteSelfProfile(formData: FormData) {
 
   revalidatePath("/sporcu");
   return { success: true as const };
+  });
 }
 
 export async function uploadAthleteAvatar(formData: FormData) {
+  return withServerActionGuard("athleteSelfProfile.uploadAthleteAvatar", async () => {
   const resolved = await resolveActiveAthlete();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -112,4 +117,5 @@ export async function uploadAthleteAvatar(formData: FormData) {
 
   revalidatePath("/sporcu");
   return { success: true as const, publicUrl };
+  });
 }

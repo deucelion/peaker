@@ -9,7 +9,7 @@ import { normalizeEmailInput, SIMPLE_EMAIL_RE } from "@/lib/email/emailNormalize
 import { extractSessionOrganizationId, extractSessionRole } from "@/lib/auth/sessionClaims";
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { assertCriticalSchemaReady } from "@/lib/diagnostics/systemHealth";
-import { captureServerActionSignal } from "@/lib/observability/serverActionError";
+import { captureServerActionSignal, withServerActionGuard } from "@/lib/observability/serverActionError";
 
 type OnboardingMode = "none" | "private_lesson" | "monthly_subscription";
 
@@ -58,6 +58,7 @@ async function resolveActorProfileWithFallback(userId: string) {
 }
 
 export async function createAthleteWithPackageAndPayment(formData: FormData) {
+  return withServerActionGuard("athleteOnboarding.createAthleteWithPackageAndPayment", async () => {
   const schemaError = await assertCriticalSchemaReady([
     "private_lesson_packages_ready",
     "private_lesson_payments_ready",
@@ -269,9 +270,11 @@ export async function createAthleteWithPackageAndPayment(formData: FormData) {
     }
     return { error: message };
   }
+  });
 }
 
 export async function inspectAthleteOnboardingAuthIntegrity(options?: { staleMinutes?: number; limit?: number }) {
+  return withServerActionGuard("athleteOnboarding.inspectAthleteOnboardingAuthIntegrity", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: userData, error: userError } = await sessionClient.auth.getUser();
   if (userError || !userData.user) return { error: "Oturum doğrulanamadı." };
@@ -333,6 +336,7 @@ export async function inspectAthleteOnboardingAuthIntegrity(options?: { staleMin
     }));
 
   return { success: true as const, staleMinutes, count: candidates.length, candidates };
+  });
 }
 
 export async function cleanupStaleAthleteOnboardingAuthUsers(input: {
@@ -340,6 +344,7 @@ export async function cleanupStaleAthleteOnboardingAuthUsers(input: {
   staleMinutes?: number;
   limit?: number;
 }) {
+  return withServerActionGuard("athleteOnboarding.cleanupStaleAthleteOnboardingAuthUsers", async () => {
   if (input.confirmation !== "DELETE_STALE_ONBOARDING_USERS") {
     return { error: "Onay metni geçersiz. Güvenlik için işlem durduruldu." };
   }
@@ -366,4 +371,5 @@ export async function cleanupStaleAthleteOnboardingAuthUsers(input: {
     }
   }
   return { success: true as const, deleted, failed };
+  });
 }

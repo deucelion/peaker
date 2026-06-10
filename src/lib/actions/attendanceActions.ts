@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -53,6 +55,7 @@ async function canManageTraining(actor: { id: string; role: string; organization
 }
 
 export async function addTrainingParticipant(trainingId: string, profileId: string) {
+  return withServerActionGuard("attendance.addTrainingParticipant", async () => {
   if (!assertUuid(trainingId) || !assertUuid(profileId)) {
     return { error: "Gecersiz ders veya sporcu kimligi." };
   }
@@ -98,9 +101,11 @@ export async function addTrainingParticipant(trainingId: string, profileId: stri
   revalidatePath("/antrenman-yonetimi");
   revalidatePath(`/dersler/${trainingId}`);
   return { success: true };
+  });
 }
 
 export async function setAttendanceStatus(trainingId: string, profileId: string, status: AttendanceStatus) {
+  return withServerActionGuard("attendance.setAttendanceStatus", async () => {
   if (!assertUuid(trainingId) || !assertUuid(profileId)) {
     return { error: "Gecersiz ders veya sporcu kimligi." };
   }
@@ -163,8 +168,11 @@ export async function setAttendanceStatus(trainingId: string, profileId: string,
   revalidatePath("/antrenman-yonetimi");
   revalidatePath(`/dersler/${trainingId}`);
   return { success: true };
+  });
 }
 
 export async function setTrainingAttendance(trainingId: string, profileId: string, status: boolean) {
+  return withServerActionGuard("attendance.setTrainingAttendance", async () => {
   return setAttendanceStatus(trainingId, profileId, status ? "attended" : "missed");
+  });
 }

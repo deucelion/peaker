@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { resolveSessionActor, toTenantProfileRow } from "@/lib/auth/resolveSessionActor";
@@ -18,12 +20,14 @@ export type GetMyNotificationPreferencesResult =
   | { error: string };
 
 export async function getMyNotificationPreferences(): Promise<GetMyNotificationPreferencesResult> {
+  return withServerActionGuard("notificationPreference.getMyNotificationPreferences", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const actor = toTenantProfileRow(resolved.actor);
   const adminClient = createSupabaseAdminClient();
   const preference = await getPreferenceForUser(adminClient, actor.id, actor.organization_id ?? null);
   return { ok: true, preference };
+  });
 }
 
 export type UpdateMyNotificationPreferencesInput = {
@@ -35,6 +39,7 @@ export type UpdateMyNotificationPreferencesInput = {
 export async function updateMyNotificationPreferences(
   input: UpdateMyNotificationPreferencesInput
 ): Promise<{ ok: true } | { error: string }> {
+  return withServerActionGuard("notificationPreference.updateMyNotificationPreferences", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const actor = toTenantProfileRow(resolved.actor);
@@ -52,4 +57,5 @@ export async function updateMyNotificationPreferences(
 
   revalidatePath("/bildirimler");
   return { ok: true };
+  });
 }

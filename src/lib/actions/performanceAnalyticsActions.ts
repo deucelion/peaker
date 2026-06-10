@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { getCoachPermissions, hasCoachPermission } from "@/lib/auth/coachPermissions";
@@ -72,6 +74,7 @@ export async function listPerformanceAnalyticsData(
   athleteProfileId: string | null,
   dateRange?: PerformanceAnalyticsDateRange | null
 ) {
+  return withServerActionGuard("performance.listPerformanceAnalyticsData", async () => {
   if (!assertUuid(organizationId)) {
     return { error: "Gecersiz organizasyon kimligi." as const, errorKind: "invalid_input" as const };
   }
@@ -376,6 +379,7 @@ export async function listPerformanceAnalyticsData(
       };
     }),
   };
+  });
 }
 
 /**
@@ -403,6 +407,7 @@ export async function exportPerformanceSummaryCSV(
   organizationId: string,
   dateRange?: PerformanceAnalyticsDateRange | null
 ) {
+  return withServerActionGuard("performance.exportPerformanceSummaryCSV", async () => {
   if (!assertUuid(organizationId)) {
     return { error: "Geçersiz organizasyon kimliği.", errorKind: "invalid_input" as PerformanceAnalyticsErrorKind };
   }
@@ -659,4 +664,5 @@ export async function exportPerformanceSummaryCSV(
     };
   }
   return jobResult.data;
+  });
 }

@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -111,6 +113,7 @@ async function resolveFieldTestActor() {
 
 /** Saha testi PDF basligi icin org gorunen adi (sol ust). */
 export async function getFieldTestOrganizationDisplayName() {
+  return withServerActionGuard("fieldTest.getFieldTestOrganizationDisplayName", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -124,9 +127,11 @@ export async function getFieldTestOrganizationDisplayName() {
 
   const trimmed = data?.name?.trim();
   return { orgName: trimmed && trimmed.length >= 2 ? trimmed : "PEAKER" };
+  });
 }
 
 export async function createFieldTestDefinition(formData: FormData) {
+  return withServerActionGuard("fieldTest.createFieldTestDefinition", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -201,9 +206,11 @@ export async function createFieldTestDefinition(formData: FormData) {
 
   revalidatePath("/saha-testleri");
   return { success: true as const, metric: inserted };
+  });
 }
 
 export async function listFieldTestDefinitionsForActor() {
+  return withServerActionGuard("fieldTest.listFieldTestDefinitionsForActor", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -252,6 +259,7 @@ export async function listFieldTestDefinitionsForActor() {
 
   if (listError) return { error: `Metrikler alinamadi: ${listError.message ?? "bilinmeyen hata"}` as const };
   return { metrics: (listData || []) as Array<Record<string, unknown>> };
+  });
 }
 
 export async function updateFieldTestDefinition(input: {
@@ -262,6 +270,7 @@ export async function updateFieldTestDefinition(input: {
   valueType: MetricValueType;
   improvementDirection?: MetricImprovementDirection;
 }) {
+  return withServerActionGuard("fieldTest.updateFieldTestDefinition", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
   if (!assertUuid(input.testDefinitionId)) return { error: "Gecersiz metrik." as const };
@@ -320,9 +329,11 @@ export async function updateFieldTestDefinition(input: {
   if (updateError) return { error: `Metrik guncellenemedi: ${updateError.message ?? "bilinmeyen hata"}` as const };
   revalidatePath("/saha-testleri");
   return { success: true as const };
+  });
 }
 
 export async function saveFieldTestDefinitionOrder(input: { orderedMetricIds: string[] }) {
+  return withServerActionGuard("fieldTest.saveFieldTestDefinitionOrder", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
   if (!Array.isArray(input.orderedMetricIds) || input.orderedMetricIds.length === 0) {
@@ -349,9 +360,11 @@ export async function saveFieldTestDefinitionOrder(input: { orderedMetricIds: st
 
   revalidatePath("/saha-testleri");
   return { success: true as const };
+  });
 }
 
 export async function deleteFieldTestDefinition(testDefinitionId: string) {
+  return withServerActionGuard("fieldTest.deleteFieldTestDefinition", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -384,6 +397,7 @@ export async function deleteFieldTestDefinition(testDefinitionId: string) {
   revalidatePath("/saha-testleri");
   revalidatePath("/saha-testleri/genel-rapor");
   return { success: true as const };
+  });
 }
 
 export type AthleticResultCell = {
@@ -403,6 +417,7 @@ export async function saveAthleticFieldResults(input: {
   cells: AthleticResultCell[];
   notes?: Array<{ profileId: string; note: string | null }>;
 }): Promise<FieldTestSaveResult> {
+  return withServerActionGuard("fieldTest.saveAthleticFieldResults", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) {
     return fieldTestSaveFailure(resolved.error ?? "Yetki doğrulanamadı.", {
@@ -637,6 +652,7 @@ export async function saveAthleticFieldResults(input: {
   revalidatePath("/saha-testleri/genel-rapor");
   revalidatePath("/sporcu");
   return { success: true };
+  });
 }
 
 /**
@@ -711,6 +727,7 @@ export async function summarizeFieldTestSignalsForAthlete(input: {
   athleteId: string;
   sinceDays?: number;
 }): Promise<{ error: string } | FieldTestSignalSummary> {
+  return withServerActionGuard("fieldTest.summarizeFieldTestSignalsForAthlete", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error ?? "Yetki kontrolu basarisiz." };
 
@@ -893,6 +910,7 @@ export async function summarizeFieldTestSignalsForAthlete(input: {
     trends,
     trendCounts,
   };
+  });
 }
 
 /** Saha testleri tablosu: seçili gün için org içi sporcu sonuçları (RLS yerine admin + tenant doğrulama). */
@@ -900,6 +918,7 @@ export async function listAthleticResultsForActorByDate(input: {
   profileIds: string[];
   testDate: string;
 }) {
+  return withServerActionGuard("fieldTest.listAthleticResultsForActorByDate", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -943,6 +962,7 @@ export async function listAthleticResultsForActorByDate(input: {
   }
 
   return { results: (chunkedRes.data || []) as AthleticResultRow[] };
+  });
 }
 
 export type AthleticResultNoteRow = {
@@ -952,6 +972,7 @@ export type AthleticResultNoteRow = {
 };
 
 export async function listAthleticResultNotesByDate(input: { profileIds: string[]; testDate: string }) {
+  return withServerActionGuard("fieldTest.listAthleticResultNotesByDate", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -973,6 +994,7 @@ export async function listAthleticResultNotesByDate(input: { profileIds: string[
   );
   if (chunkedNotes.error) return { error: `Genel notlar alinamadi: ${chunkedNotes.error.message}` as const };
   return { notes: (chunkedNotes.data || []) as AthleticResultNoteRow[] };
+  });
 }
 
 export type FieldTestTeamChartRow = {
@@ -984,6 +1006,7 @@ export type FieldTestTeamChartRow = {
 
 /** Genel rapor: kadro sayısı + tüm saha sonuçları (org içi, admin/koç + can_view_reports). */
 export async function loadFieldTestTeamReportForActor() {
+  return withServerActionGuard("fieldTest.loadFieldTestTeamReportForActor", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -1036,6 +1059,7 @@ export async function loadFieldTestTeamReportForActor() {
     totalPlayers: count ?? 0,
     chartRows,
   };
+  });
 }
 
 /**
@@ -1060,6 +1084,7 @@ export async function exportFieldTestResultsCSV(input: {
   dateTo?: string | null;
   athleteProfileId?: string | null;
 } = {}) {
+  return withServerActionGuard("fieldTest.exportFieldTestResultsCSV", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error ?? "Yetki kontrolu başarısız." };
 
@@ -1193,4 +1218,5 @@ export async function exportFieldTestResultsCSV(input: {
     truncated,
     cap: FIELD_TEST_EXPORT_HARD_CAP,
   };
+  });
 }

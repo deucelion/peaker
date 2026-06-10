@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -130,6 +132,7 @@ function isDueInInclusiveWallRange(dueIso: string | null, fromKey: string, toKey
 export async function loadReceivablesDashboard(
   raw: ReceivableDashboardFilters = {}
 ): Promise<{ snapshot: ReceivableDashboardSnapshot } | { error: string }> {
+  return withServerActionGuard("receivable.loadReceivablesDashboard", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -388,4 +391,5 @@ export async function loadReceivablesDashboard(
       options: { athletes, teamHints },
     },
   };
+  });
 }

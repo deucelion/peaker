@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -104,9 +106,11 @@ async function upsertTrainingLoadCompat(args: {
 }
 
 export async function getRpeSurveyEligibility() {
+  return withServerActionGuard("trainingLoadSurvey.getRpeSurveyEligibility", async () => {
   const r = await resolveAthleteForSurvey();
   if ("error" in r) return { allowed: false as const };
   return { allowed: true as const };
+  });
 }
 
 export async function submitAthleteTrainingLoadSurvey(input: {
@@ -115,6 +119,7 @@ export async function submitAthleteTrainingLoadSurvey(input: {
   rpeScore: number;
   sessionType: string;
 }) {
+  return withServerActionGuard("trainingLoadSurvey.submitAthleteTrainingLoadSurvey", async () => {
   const resolved = await resolveAthleteForSurvey();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -155,4 +160,5 @@ export async function submitAthleteTrainingLoadSurvey(input: {
   revalidatePath("/anket");
   revalidatePath("/performans");
   return { success: true as const };
+  });
 }

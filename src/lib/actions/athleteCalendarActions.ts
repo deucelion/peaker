@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
@@ -27,6 +29,7 @@ export async function listAthleteCalendarTrainings(): Promise<
   | { allowed: false; trainings: [] }
   | { error: string }
 > {
+  return withServerActionGuard("athleteCalendar.listAthleteCalendarTrainings", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
   if ("error" in resolved) return { error: resolved.error };
   const actor = toTenantProfileRow(resolved.actor);
@@ -105,4 +108,5 @@ export async function listAthleteCalendarTrainings(): Promise<
   });
 
   return { allowed: true as const, trainings };
+  });
 }

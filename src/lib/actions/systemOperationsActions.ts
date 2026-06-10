@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 /**
  * Faz 10.6 — Sistem operasyonları paneli için server action.
  *
@@ -187,6 +189,7 @@ export async function getSystemOperationsSnapshot(options?: {
 }): Promise<
   SystemOperationsSnapshot | { error: string; errorKind?: "auth_required" | "permission_denied" | "fetch_error" }
 > {
+  return withServerActionGuard("systemOps.getSystemOperationsSnapshot", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error, errorKind: "auth_required" };
   const role = getSafeRole(resolved.actor.role);
@@ -695,4 +698,5 @@ export async function getSystemOperationsSnapshot(options?: {
     jobsScopeOrganizationId,
     generatedAt: new Date().toISOString(),
   };
+  });
 }

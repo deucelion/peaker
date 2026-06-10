@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfCoachCannotOperate } from "@/lib/coach/lifecycle";
@@ -47,6 +49,7 @@ async function resolveActorProfileWithFallback(userId: string) {
 }
 
 export async function addPlayer(formData: FormData) {
+  return withServerActionGuard("player.addPlayer", async () => {
   // 1. VERİLERİ TEMİZLE VE AL
   const email = normalizeEmailInput(formData.get("email")?.toString());
   const fullName = formData.get("fullName")?.toString().trim();
@@ -131,6 +134,7 @@ export async function addPlayer(formData: FormData) {
     console.error("Sistem Hatası:", message);
     return { error: message };
   }
+  });
 }
 
 async function assertCanMutateAthleteLifecycle(playerId: string) {
@@ -181,6 +185,7 @@ async function assertCanMutateAthleteLifecycle(playerId: string) {
 
 /** Auth kullanicisini silmez; profil `is_active: false` — gecmis veri korunur, panel erisimi kesilir. */
 export async function deactivateAthlete(playerId: string) {
+  return withServerActionGuard("player.deactivateAthlete", async () => {
   try {
     const gate = await assertCanMutateAthleteLifecycle(playerId);
     if ("error" in gate) return { error: gate.error };
@@ -211,9 +216,11 @@ export async function deactivateAthlete(playerId: string) {
     const message = error instanceof Error ? error.message : "Beklenmedik bir hata oluştu.";
     return { error: message };
   }
+  });
 }
 
 export async function reactivateAthlete(playerId: string) {
+  return withServerActionGuard("player.reactivateAthlete", async () => {
   try {
     const gate = await assertCanMutateAthleteLifecycle(playerId);
     if ("error" in gate) return { error: gate.error };
@@ -244,10 +251,12 @@ export async function reactivateAthlete(playerId: string) {
     const message = error instanceof Error ? error.message : "Beklenmedik bir hata oluştu.";
     return { error: message };
   }
+  });
 }
 
 /** Kalici silme: profile + auth user hard delete (geri alinmaz). */
 export async function hardDeleteAthlete(playerId: string) {
+  return withServerActionGuard("player.hardDeleteAthlete", async () => {
   try {
     const gate = await assertCanMutateAthleteLifecycle(playerId);
     if ("error" in gate) return { error: gate.error };
@@ -295,4 +304,5 @@ export async function hardDeleteAthlete(playerId: string) {
     const message = error instanceof Error ? error.message : "Beklenmedik bir hata oluştu.";
     return { error: message };
   }
+  });
 }

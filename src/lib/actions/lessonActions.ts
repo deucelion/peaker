@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -86,6 +88,7 @@ async function resolveActor(): Promise<{ actor: ActorProfile } | { error: string
 }
 
 export async function createLesson(formData: FormData) {
+  return withServerActionGuard("lesson.createLesson", async () => {
   const schemaError = await assertCriticalSchemaReady(["coach_permissions", "notifications_ready"]);
   if (schemaError) return { error: schemaError };
   const resolved = await resolveActor();
@@ -232,9 +235,11 @@ export async function createLesson(formData: FormData) {
   revalidatePath(`/dersler/${lessonRow.id}`);
   revalidatePath("/bildirimler");
   return { success: true, lessonId: lessonRow.id };
+  });
 }
 
 export async function addLessonParticipants(lessonId: string, participantIds: string[]) {
+  return withServerActionGuard("lesson.addLessonParticipants", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -332,9 +337,11 @@ export async function addLessonParticipants(lessonId: string, participantIds: st
   revalidatePath(`/dersler/${lessonId}`);
   revalidatePath("/bildirimler");
   return { success: true };
+  });
 }
 
 export async function removeLessonParticipant(lessonId: string, participantId: string) {
+  return withServerActionGuard("lesson.removeLessonParticipant", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -378,9 +385,11 @@ export async function removeLessonParticipant(lessonId: string, participantId: s
 
   revalidatePath(`/dersler/${lessonId}`);
   return { success: true };
+  });
 }
 
 export async function updateLesson(formData: FormData) {
+  return withServerActionGuard("lesson.updateLesson", async () => {
   const schemaError = await assertCriticalSchemaReady(["coach_permissions"]);
   if (schemaError) return { error: schemaError };
   const resolved = await resolveActor();
@@ -507,9 +516,11 @@ export async function updateLesson(formData: FormData) {
   revalidatePath(`/dersler/${lessonId}`);
   revalidatePath("/antrenman-yonetimi");
   return { success: true };
+  });
 }
 
 export async function cancelLesson(lessonId: string) {
+  return withServerActionGuard("lesson.cancelLesson", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -573,9 +584,11 @@ export async function cancelLesson(lessonId: string) {
   revalidatePath("/antrenman-yonetimi");
   revalidatePath("/bildirimler");
   return { success: true };
+  });
 }
 
 export async function hardDeleteLesson(lessonId: string) {
+  return withServerActionGuard("lesson.hardDeleteLesson", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -639,9 +652,11 @@ export async function hardDeleteLesson(lessonId: string) {
   revalidatePath("/antrenman-yonetimi");
   revalidatePath("/bildirimler");
   return { success: true };
+  });
 }
 
 export async function markNotificationRead(notificationId: string) {
+  return withServerActionGuard("lesson.markNotificationRead", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -655,6 +670,7 @@ export async function markNotificationRead(notificationId: string) {
   if (error) return { error: `Bildirim guncellenemedi: ${error.message}` };
   revalidatePath("/bildirimler");
   return { success: true };
+  });
 }
 
 /**
@@ -672,6 +688,7 @@ export async function markNotificationRead(notificationId: string) {
  *   - `success: true, updatedCount: N` (UI feedback için)
  */
 export async function markAllNotificationsReadForCurrentUser() {
+  return withServerActionGuard("lesson.markAllNotificationsReadForCurrentUser", async () => {
   const resolved = await resolveActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -686,6 +703,7 @@ export async function markAllNotificationsReadForCurrentUser() {
   if (error) return { error: `Bildirimler guncellenemedi: ${error.message}` };
   revalidatePath("/bildirimler");
   return { success: true as const, updatedCount: Array.isArray(data) ? data.length : 0 };
+  });
 }
 
 export type LessonManagementDetailAthlete = {
@@ -706,6 +724,7 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
     }
   | { error: string }
 > {
+  return withServerActionGuard("lesson.getLessonManagementDetail", async () => {
   if (!isUuid(lessonId.trim())) {
     return { error: "Gecersiz ders kimligi." };
   }
@@ -795,4 +814,5 @@ export async function getLessonManagementDetail(lessonId: string): Promise<
     participants,
     allAthletes,
   };
+  });
 }

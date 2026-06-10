@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
@@ -32,6 +34,7 @@ export type CoachPaymentRuleRow = {
 };
 
 export async function listCoachPaymentRulesForAccounting(orgIdFromClient: string | null) {
+  return withServerActionGuard("coachPaymentRule.listCoachPaymentRulesForAccounting", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = String(getSafeRole(resolved.actor.role));
@@ -53,9 +56,11 @@ export async function listCoachPaymentRulesForAccounting(orgIdFromClient: string
     return { error: `Koç ödeme kuralları alınamadı: ${error.message}` };
   }
   return { rules: (data || []) as CoachPaymentRuleRow[] };
+  });
 }
 
 export async function upsertCoachPaymentRule(formData: FormData) {
+  return withServerActionGuard("coachPaymentRule.upsertCoachPaymentRule", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = String(getSafeRole(resolved.actor.role));
@@ -128,4 +133,5 @@ export async function upsertCoachPaymentRule(formData: FormData) {
 
   revalidatePath("/muhasebe-finans");
   return { success: true as const };
+  });
 }

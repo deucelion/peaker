@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
@@ -9,6 +11,7 @@ import { toDisplayName } from "@/lib/profile/displayName";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { computeFinanceStatusSummary, sumPackageOpenBalance } from "@/lib/finance/paymentSummary";
 import type { PaymentRow } from "@/types/domain";
+import { chunkedInQuery } from "@/lib/db/chunkedIn";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
@@ -67,6 +70,7 @@ async function resolveManagementActor() {
 }
 
 export async function listManagementDirectory() {
+  return withServerActionGuard("managementDirectory.listManagementDirectory", async () => {
   const resolved = await resolveManagementActor();
   if ("error" in resolved) return { error: resolved.error };
 
@@ -227,9 +231,11 @@ export async function listManagementDirectory() {
     athletes,
     athleteCount: athletes.length,
   };
+  });
 }
 
 export async function listDailyTrainingLoadReports() {
+  return withServerActionGuard("managementDirectory.listDailyTrainingLoadReports", async () => {
   const resolved = await resolveManagementActor();
   if ("error" in resolved) {
     return {
@@ -259,35 +265,12 @@ export async function listDailyTrainingLoadReports() {
       errorKind: "fetch_error" as const,
     };
   }
-  const { data: loadRows, error: loadError } = await adminClient
-    .from("training_loads")
-    .select("id, profile_id, rpe_score, duration_minutes, total_load, measurement_date")
-    .gte("measurement_date", dayRange.from)
-    .lt("measurement_date", dayRange.toExclusive)
-    .order("measurement_date", { ascending: false });
-
-  if (loadError) {
-    return {
-      error: `Raporlar alinamadi: ${loadError.message}`,
-      errorKind: "fetch_error" as const,
-    };
-  }
-
-  const orgRows = (loadRows || []) as Array<{
-    id: string;
-    profile_id: string | null;
-    rpe_score: number;
-    duration_minutes: number;
-    total_load: number;
-    measurement_date: string;
-  }>;
-  const profileIds = Array.from(new Set(orgRows.map((r) => r.profile_id).filter(Boolean))) as string[];
-  if (profileIds.length === 0) return { reports: [] };
-
+  // FAZ 31: training_loads tablosunda organization_id kolonu yok; cross-org
+  // satirlarin service-role ile bellege yuklenmemesi icin once org sporcu
+  // profilleri cekilir, yuk sorgusu bu id'lerle sinirlanir.
   const { data: profileRows, error: profileError } = await adminClient
     .from("profiles")
     .select("id, full_name, position, number, organization_id")
-    .in("id", profileIds)
     .eq("organization_id", resolved.organizationId);
 
   if (profileError) {
@@ -296,6 +279,38 @@ export async function listDailyTrainingLoadReports() {
       errorKind: "fetch_error" as const,
     };
   }
+
+  const orgProfileIds = (profileRows || []).map((p) => p.id);
+  if (orgProfileIds.length === 0) return { reports: [] };
+
+  const loadResult = await chunkedInQuery(
+    orgProfileIds,
+    async (chunk) =>
+      await adminClient
+        .from("training_loads")
+        .select("id, profile_id, rpe_score, duration_minutes, total_load, measurement_date")
+        .in("profile_id", chunk)
+        .gte("measurement_date", dayRange.from)
+        .lt("measurement_date", dayRange.toExclusive)
+        .order("measurement_date", { ascending: false }),
+    { scope: "listDailyTrainingLoadReports.training_loads" }
+  );
+
+  if (loadResult.error) {
+    return {
+      error: `Raporlar alinamadi: ${loadResult.error.message}`,
+      errorKind: "fetch_error" as const,
+    };
+  }
+
+  const orgRows = ((loadResult.data || []) as Array<{
+    id: string;
+    profile_id: string | null;
+    rpe_score: number;
+    duration_minutes: number;
+    total_load: number;
+    measurement_date: string;
+  }>).sort((a, b) => b.measurement_date.localeCompare(a.measurement_date));
 
   const profileMap = new Map((profileRows || []).map((p) => [p.id, p]));
   const reports: DailyTrainingLoadReport[] = orgRows
@@ -319,4 +334,5 @@ export async function listDailyTrainingLoadReports() {
     .filter((row): row is DailyTrainingLoadReport => Boolean(row));
 
   return { reports };
+  });
 }

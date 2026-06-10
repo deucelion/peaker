@@ -1,8 +1,11 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function getUnreadNotificationCount(): Promise<{ count: number } | { error: string }> {
+  return withServerActionGuard("notification.getUnreadNotificationCount", async () => {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -18,4 +21,5 @@ export async function getUnreadNotificationCount(): Promise<{ count: number } | 
 
   if (error) return { error: error.message };
   return { count: count ?? 0 };
+  });
 }

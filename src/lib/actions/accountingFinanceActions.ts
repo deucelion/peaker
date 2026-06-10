@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -888,6 +890,7 @@ function buildCoachAggregates(lessons: AccountingFinanceLessonRow[]): Accounting
 export async function loadAccountingFinanceDashboard(
   rawFilters: AccountingFinanceFilters = {}
 ): Promise<{ snapshot: AccountingFinanceSnapshot } | { error: string }> {
+  return withServerActionGuard("accountingFinance.loadAccountingFinanceDashboard", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -1270,6 +1273,7 @@ export async function loadAccountingFinanceDashboard(
       mvFreshness,
     },
   };
+  });
 }
 
 async function resolvePrivateLessonPaymentActorIdForRpc(
@@ -1305,6 +1309,7 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
   athleteId: string;
   organizationId?: string | null;
 }): Promise<{ packages: AccountingFinancePackageOption[] } | { error: string }> {
+  return withServerActionGuard("accountingFinance.listPrivateLessonPackagesForAccounting", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -1390,9 +1395,11 @@ export async function listPrivateLessonPackagesForAccounting(payload: {
   const packages = filterPackagesEligibleForCollection((rows || []) as AccountingPackageRowInput[]);
 
   return { packages };
+  });
 }
 
 export async function createAccountingPayment(formData: FormData) {
+  return withServerActionGuard("accountingFinance.createAccountingPayment", async () => {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -1542,6 +1549,7 @@ export async function createAccountingPayment(formData: FormData) {
   revalidatePath("/tahsilat-merkezi");
   revalidatePath("/finans");
   return { success: true as const };
+  });
 }
 
 /**
@@ -1568,6 +1576,7 @@ export async function exportAccountingFinancePaymentsCSV(
   | { csv: string; filename: string; rowCount: number; truncated?: boolean; cap?: number }
   | { error: string }
 > {
+  return withServerActionGuard("accountingFinance.exportAccountingFinancePaymentsCSV", async () => {
   // Faz 11.7 — Rate limit.
   const resolvedForRl = await resolveSessionActor({ claimRequiresOrganization: false });
   if (!("error" in resolvedForRl)) {
@@ -1661,4 +1670,5 @@ export async function exportAccountingFinancePaymentsCSV(
     truncated: built.truncated || undefined,
     cap: built.truncated ? ACCOUNTING_EXPORT_HARD_CAP : undefined,
   };
+  });
 }

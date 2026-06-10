@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -18,6 +20,7 @@ import {
 
 /** Sabah raporu vb. formlar: sporcu organization_id sunucu doğrulamalı (RLS’e güvenilmez). */
 export async function getAthleteOrganizationIdForWellness() {
+  return withServerActionGuard("wellness.getAthleteOrganizationIdForWellness", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) {
@@ -36,9 +39,11 @@ export async function getAthleteOrganizationIdForWellness() {
   }
 
   return { organizationId: row.organization_id };
+  });
 }
 
 export async function getMorningReportEligibility() {
+  return withServerActionGuard("wellness.getMorningReportEligibility", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) return { allowed: false as const };
@@ -61,6 +66,7 @@ export async function getMorningReportEligibility() {
     .maybeSingle();
 
   return { allowed: (perm?.can_view_morning_report ?? true) as boolean };
+  });
 }
 
 function clampScale(n: number) {
@@ -78,6 +84,7 @@ export async function submitWellnessReportToday(input: {
   energy_level: number;
   resting_heart_rate: number;
 }) {
+  return withServerActionGuard("wellness.submitWellnessReportToday", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) return { error: "Gecersiz oturum." as const };
@@ -148,6 +155,7 @@ export async function submitWellnessReportToday(input: {
   revalidatePath("/sporcu/sabah-raporu");
   revalidatePath("/performans");
   return { success: true as const };
+  });
 }
 
 /** Koç / admin: organizasyon wellness arşivi (performans wellness-detay sayfası). */
@@ -177,6 +185,7 @@ export async function listWellnessArchiveForManagement(
     }
   | { error: string }
 > {
+  return withServerActionGuard("wellness.listWellnessArchiveForManagement", async () => {
   const isYyyyMmDdLike = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
   const resolved = await resolveSessionActor({ claimRequiresOrganization: true });
   if ("error" in resolved) return { error: resolved.error };
@@ -279,6 +288,7 @@ export async function listWellnessArchiveForManagement(
     page,
     pageSize: requestedSize,
   };
+  });
 }
 
 export type WellnessRadarRow = {
@@ -294,6 +304,7 @@ export type WellnessRadarRow = {
 export async function listWellnessReportsForAthleteRadar(): Promise<
   { rows: WellnessRadarRow[] } | { error: string }
 > {
+  return withServerActionGuard("wellness.listWellnessReportsForAthleteRadar", async () => {
   const sessionClient = await createServerSupabaseClient();
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   if (authError || !authData.user) {
@@ -339,4 +350,5 @@ export async function listWellnessReportsForAthleteRadar(): Promise<
   }
 
   return { rows: (data || []) as WellnessRadarRow[] };
+  });
 }

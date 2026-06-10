@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
@@ -150,6 +152,7 @@ function firstJoined<T>(value: T | T[] | null | undefined): T | undefined {
 export async function listWeeklyLessonScheduleSnapshot(
   filters: WeeklyScheduleFilters = {}
 ): Promise<WeeklyLessonScheduleSnapshot | { error: string }> {
+  return withServerActionGuard("snapshot.listWeeklyLessonScheduleSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -319,9 +322,11 @@ export async function listWeeklyLessonScheduleSnapshot(
     items,
     timeZone: orgTimeZone,
   };
+  });
 }
 
 export async function listLessonsSnapshot(page = 1, pageSize = 50) {
+  return withServerActionGuard("snapshot.listLessonsSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -431,9 +436,11 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
       .filter((row) => getSafeRole(row.role) === "sporcu")
       .map((row) => ({ id: row.id, full_name: toDisplayName(row.full_name, row.email, "Sporcu"), is_active: row.is_active ?? true })),
   };
+  });
 }
 
 export async function listCoachDayLessonsSnapshot(coachId: string, lessonDate: string) {
+  return withServerActionGuard("snapshot.listCoachDayLessonsSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -460,9 +467,11 @@ export async function listCoachDayLessonsSnapshot(coachId: string, lessonDate: s
     .order("start_time", { ascending: true });
   if (error) return { error: `Koç dersleri alinamadi: ${error.message}` };
   return { lessons: (data || []) as Array<{ id: string; title: string; start_time: string; end_time: string }> };
+  });
 }
 
 export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
+  return withServerActionGuard("snapshot.listAttendanceSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -532,9 +541,11 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
     pageSize: pager.pageSize,
     allPlayers: athletes,
   };
+  });
 }
 
 export async function listTrainingParticipantsSnapshot(trainingId: string, page = 1, pageSize = 200) {
+  return withServerActionGuard("snapshot.listTrainingParticipantsSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -616,9 +627,11 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
     };
   }) as Array<Record<string, unknown>>;
   return { participants, total: res.count || 0, page: pager.page, pageSize: pager.pageSize };
+  });
 }
 
 export async function listMyNotificationsSnapshot(page = 1, pageSize = 50) {
+  return withServerActionGuard("snapshot.listMyNotificationsSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -644,9 +657,11 @@ export async function listMyNotificationsSnapshot(page = 1, pageSize = 50) {
     .range(pager.from, pager.to);
   if (error) return { error: `Bildirimler alinamadi: ${error.message}` };
   return { items: (data || []).map((row) => mapNotification(row)), total: count || 0, page: pager.page, pageSize: pager.pageSize };
+  });
 }
 
 export async function getAthletePanelSnapshot() {
+  return withServerActionGuard("snapshot.getAthletePanelSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -714,9 +729,11 @@ export async function getAthletePanelSnapshot() {
       return { title: sched?.title || "Antrenman", at: row.marked_at || sched?.start_time || "", status: label };
     }),
   };
+  });
 }
 
 export async function getDashboardSnapshot() {
+  return withServerActionGuard("snapshot.getDashboardSnapshot", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
@@ -933,6 +950,7 @@ export async function getDashboardSnapshot() {
       },
     },
   };
+  });
 }
 
 /**
@@ -943,6 +961,7 @@ export async function bootstrapTenantHomeDashboard(): Promise<
   | { snapshot: Awaited<ReturnType<typeof getDashboardSnapshot>> }
   | { loadError: string }
 > {
+  return withServerActionGuard("snapshot.bootstrapTenantHomeDashboard", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) {
     const msg = resolved.error;
@@ -972,4 +991,5 @@ export async function bootstrapTenantHomeDashboard(): Promise<
     return { loadError: snapshot.error };
   }
   return { snapshot };
+  });
 }

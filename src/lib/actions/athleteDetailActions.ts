@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
@@ -16,6 +18,7 @@ function assertUuid(id: string | null | undefined): id is string {
 }
 
 export async function loadAthleteDetailForManagement(athleteId: string) {
+  return withServerActionGuard("athleteDetail.loadAthleteDetailForManagement", async () => {
   if (!assertUuid(athleteId)) {
     return { error: "Gecersiz sporcu kimligi." as const };
   }
@@ -295,6 +298,7 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
     },
     timelineEvents,
   };
+  });
 }
 
 async function resolveManagementActorForAthleteMutations() {
@@ -339,6 +343,7 @@ async function resolveManagementActorForAthleteMutations() {
 }
 
 export async function listPositionOptionsForManagement() {
+  return withServerActionGuard("athleteDetail.listPositionOptionsForManagement", async () => {
   const gate = await resolveManagementActorForAthleteMutations();
   if ("error" in gate) return { error: gate.error };
 
@@ -359,9 +364,11 @@ export async function listPositionOptionsForManagement() {
   ).sort((a, b) => a.localeCompare(b, "tr"));
 
   return { positions };
+  });
 }
 
 export async function updateAthletePositionForManagement(athleteId: string, nextPositionRaw: string) {
+  return withServerActionGuard("athleteDetail.updateAthletePositionForManagement", async () => {
   if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
 
   const gate = await resolveManagementActorForAthleteMutations();
@@ -390,6 +397,7 @@ export async function updateAthletePositionForManagement(athleteId: string, next
   revalidatePath(`/sporcu/${athleteId}`);
   revalidatePath("/oyuncular");
   return { success: true as const };
+  });
 }
 
 export async function updateAthleteProfileForManagement(
@@ -403,6 +411,7 @@ export async function updateAthleteProfileForManagement(
     weight: string;
   }
 ) {
+  return withServerActionGuard("athleteDetail.updateAthleteProfileForManagement", async () => {
   if (!assertUuid(athleteId)) return { error: "Gecersiz sporcu kimligi." as const };
   const gate = await resolveManagementActorForAthleteMutations();
   if ("error" in gate) return { error: gate.error };
@@ -455,4 +464,5 @@ export async function updateAthleteProfileForManagement(
   revalidatePath("/oyuncular");
   revalidatePath("/takimlar");
   return { success: true as const };
+  });
 }

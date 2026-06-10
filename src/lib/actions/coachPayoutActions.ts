@@ -1,5 +1,7 @@
 "use server";
 
+
+import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
@@ -23,6 +25,7 @@ function normalizeLessonStatus(status: string | null | undefined): "planned" | "
 }
 
 export async function addCoachPayoutItem(input: AddCoachPayoutItemInput) {
+  return withServerActionGuard("coachPayout.addCoachPayoutItem", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -120,9 +123,11 @@ export async function addCoachPayoutItem(input: AddCoachPayoutItemInput) {
 
   revalidatePath("/muhasebe-finans");
   return { success: true as const, payoutId: inserted.id, status: inserted.status as "eligible" | "included" | "paid" };
+  });
 }
 
 export async function markCoachPayoutAsPaid(payoutId: string, organizationIdInput?: string | null) {
+  return withServerActionGuard("coachPayout.markCoachPayoutAsPaid", async () => {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const role = getSafeRole(resolved.actor.role);
@@ -157,4 +162,5 @@ export async function markCoachPayoutAsPaid(payoutId: string, organizationIdInpu
 
   revalidatePath("/muhasebe-finans");
   return { success: true as const };
+  });
 }
