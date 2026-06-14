@@ -1,35 +1,40 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { isUuid } from "@/lib/validation/uuid";
 import { withServerActionGuard } from "@/lib/observability/serverActionError";
 import { deleteCoachProfileDependents } from "@/lib/auth/deleteCoachProfileDependents";
+import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
 }
 
 async function resolveAdminOrg() {
-  const sessionClient = await createServerSupabaseClient();
-  const { data: authData } = await sessionClient.auth.getUser();
-  if (!authData.user) return { error: "Gecersiz oturum." as const };
+  const result = await resolveSessionActor();
+  if ("error" in result) {
+    return {
+      error:
+        result.error === "Profil dogrulanamadi."
+          ? "Kullanıcı profili doğrulanamadı."
+          : result.error,
+    } as const;
+  }
 
-  const { data: actor } = await sessionClient
-    .from("profiles")
-    .select("id, role, organization_id")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-  if (!actor) return { error: "Kullanici profili dogrulanamadi." as const };
-
-  const r = getSafeRole(actor?.role);
-  if (r === "super_admin") {
+  const { actor } = result;
+  if (actor.role === "super_admin") {
     return { kind: "super_admin" as const, actorId: actor.id, actorRole: actor.role };
   }
-  if (r === "admin" && actor?.organization_id) {
-    return { kind: "admin" as const, organizationId: actor.organization_id as string, actorId: actor.id, actorRole: actor.role };
+  if (actor.role === "admin" && actor.organizationId) {
+    return {
+      kind: "admin" as const,
+      organizationId: actor.organizationId,
+      actorId: actor.id,
+      actorRole: actor.role,
+    };
   }
   return { error: "Bu islem yalnizca organizasyon admini veya super admin icindir." as const };
 }
