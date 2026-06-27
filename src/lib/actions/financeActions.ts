@@ -30,6 +30,16 @@ import {
   userFacingDataError,
   type RawPackageRow,
 } from "@/lib/schemaCompat";
+import type { AccountingFinancePackageOption } from "@/lib/actions/accountingFinanceActions";
+import {
+  filterPackagesEligibleForCollection,
+  type AccountingPackageRowInput,
+} from "@/lib/finance/accountingPackageOptions";
+import {
+  applyPrivateLessonPackagePaymentWithPaymentRow,
+  paymentBookkeepingFromPaidAtIso,
+} from "@/lib/privateLessons/packagePaymentSync";
+import { wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 
 function paymentEffectiveInstantMs(p: PaymentRow): number {
   const pd = p.payment_date?.trim();
@@ -156,6 +166,9 @@ function resolvePaymentDomain(input: {
     return { scope: "extra_charge", kind, paymentType: "aylik" };
   }
   if (scopeRaw === "private_lesson") {
+    return { scope: "private_lesson", kind: "private_lesson_package", paymentType: "paket" };
+  }
+  if (kindRaw === "private_lesson_package") {
     return { scope: "private_lesson", kind: "private_lesson_package", paymentType: "paket" };
   }
   if (typeRaw === "paket") {
@@ -468,6 +481,69 @@ export async function listOrgPaymentsForAdmin(): Promise<
   });
 }
 
+/** Koç / admin sporcu ödemeleri: tahsilat formunda paket dropdown (muhasebe akışı ile aynı filtre). */
+export async function listPrivateLessonPackagesForManagement(
+  athleteId: string
+): Promise<{ packages: AccountingFinancePackageOption[] } | { error: string }> {
+  return withServerActionGuard("finance.listPrivateLessonPackagesForManagement", async () => {
+    const resolved = await resolveFinanceActorForReadWrite(false);
+    if ("error" in resolved) return { error: resolved.error };
+
+    if (!assertUuid(athleteId)) return { error: "Geçersiz sporcu." };
+
+    const adminClient = createSupabaseAdminClient();
+    const baseSelect =
+      "id, package_name, remaining_lessons, total_lessons, used_lessons, total_price, amount_paid, payment_status, is_active";
+
+    const [{ data: athlete }, extended] = await Promise.all([
+      adminClient
+        .from("profiles")
+        .select("id, role, organization_id")
+        .eq("id", athleteId)
+        .maybeSingle(),
+      adminClient
+        .from("private_lesson_packages")
+        .select(`${baseSelect}, lifecycle_status, next_payment_due_at`)
+        .eq("organization_id", resolved.organizationId)
+        .eq("athlete_id", athleteId)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (!athlete || getSafeRole(athlete.role) !== "sporcu" || athlete.organization_id !== resolved.organizationId) {
+      return { error: "Sporcu bu organizasyonda bulunamadi." };
+    }
+
+    let rows: unknown[] | null = null;
+    let listError: { message?: string; code?: string } | null = null;
+
+    if (!extended.error) {
+      rows = extended.data;
+    } else {
+      const msg = (extended.error.message || "").toLowerCase();
+      const code = (extended.error.code || "").toLowerCase();
+      if (code === "42703" || msg.includes("lifecycle_status") || msg.includes("next_payment_due")) {
+        const legacy = await adminClient
+          .from("private_lesson_packages")
+          .select(baseSelect)
+          .eq("organization_id", resolved.organizationId)
+          .eq("athlete_id", athleteId)
+          .order("created_at", { ascending: false });
+        rows = legacy.data;
+        listError = legacy.error;
+      } else {
+        listError = extended.error;
+      }
+    }
+
+    if (listError) {
+      return { error: "Paketler su anda alinamadi." };
+    }
+
+    const packages = filterPackagesEligibleForCollection((rows || []) as AccountingPackageRowInput[]);
+    return { packages };
+  });
+}
+
 export async function createOrgPayment(formData: FormData) {
   return withServerActionGuard("finance.createOrgPayment", async () => {
   const resolved = await resolveFinanceActorForReadWrite(true);
@@ -497,6 +573,61 @@ export async function createOrgPayment(formData: FormData) {
 
   const desc = formData.get("desc")?.toString().trim().slice(0, 2000) || null;
   const displayName = formData.get("display_name")?.toString().trim().slice(0, 120) || null;
+  const descriptionWithLabel =
+    displayName && desc ? `${displayName} — ${desc}` : displayName || desc;
+
+  const packageIdRaw = formData.get("package_id")?.toString().trim() || "";
+  if (paymentKind === "private_lesson_package" || paymentScope === "private_lesson") {
+    if (!assertUuid(packageIdRaw)) {
+      return { error: "Ozel ders paketi icin paket secimi zorunludur." };
+    }
+
+    const adminClient = createSupabaseAdminClient();
+    const { data: athlete } = await adminClient
+      .from("profiles")
+      .select("id, role")
+      .eq("id", profileId)
+      .eq("organization_id", resolved.organizationId)
+      .maybeSingle();
+
+    if (!athlete || getSafeRole(athlete.role) !== "sporcu") {
+      return { error: "Sporcu bu organizasyonda bulunamadi." };
+    }
+
+    const tz = await resolveOrganizationTimeZone(resolved.organizationId);
+    const paymentDate =
+      dueRaw && /^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? dueRaw : new Date().toISOString().slice(0, 10);
+    const paidAt = wallClockInZoneToUtcIso(paymentDate, "00:00:00", tz) ?? new Date().toISOString();
+    const { dueDateKey, monthName, yearInt } = paymentBookkeepingFromPaidAtIso(paidAt, tz);
+
+    const sync = await applyPrivateLessonPackagePaymentWithPaymentRow({
+      organizationId: resolved.organizationId,
+      packageId: packageIdRaw,
+      athleteProfileId: profileId,
+      amount,
+      paidAtIso: paidAt,
+      dueDateKey,
+      monthName,
+      yearInt,
+      rpcActorProfileId: resolved.actorUserId,
+      paymentsDescription: descriptionWithLabel,
+      rpcNote: desc?.trim() || "Sporcu odemeleri — ozel ders paketi tahsilati",
+    });
+    if (!sync.ok) return { error: sync.error };
+
+    await logAuditEvent({
+      actorUserId: resolved.actorUserId,
+      actorRole: resolved.actorRole,
+      organizationId: resolved.organizationId,
+      action: "payment.create",
+      entityType: "payment",
+      entityId: sync.paymentRowId,
+    });
+
+    revalidatePath("/finans");
+    revalidatePath(`/finans/${profileId}`);
+    return { success: true as const };
+  }
 
   let totalSessions: number | null = null;
   let remainingSessions: number | null = null;

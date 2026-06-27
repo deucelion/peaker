@@ -9,6 +9,7 @@ import {
   listPrivateLessonPackagesForAccounting,
   type AccountingFinancePackageOption,
 } from "@/lib/actions/accountingFinanceActions";
+import { createOrgPayment, listPrivateLessonPackagesForManagement } from "@/lib/actions/financeActions";
 import { normalizeMoney, parseMoneyInput } from "@/lib/privateLessons/packageMath";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import {
@@ -39,6 +40,10 @@ function defaultFormState() {
 export type CollectionPaymentFormProps = {
   organizationIdFromUrl: string | null;
   athletes: { id: string; full_name: string }[];
+  /** accounting: muhasebe/tahsilat merkezi; management: koç/admin sporcu ödemeleri */
+  variant?: "accounting" | "management";
+  /** Sporcu detay sayfasında sporcu sabitlenir; dropdown gizlenir */
+  lockedProfileId?: string;
   /** Modal her açılışında artırın; form sıfırlanır ve `initialPrefill` uygulanır. */
   resetKey: number;
   initialPrefill?: {
@@ -57,6 +62,8 @@ export type CollectionPaymentFormProps = {
 export function CollectionPaymentForm({
   organizationIdFromUrl,
   athletes,
+  variant = "accounting",
+  lockedProfileId,
   resetKey,
   initialPrefill,
   layout,
@@ -84,21 +91,26 @@ export function CollectionPaymentForm({
     const tur = (initialPrefill?.paymentKind || "").trim();
     const kindOk =
       tur === "monthly_membership" || tur === "private_lesson_package" || tur === "extra_charge" ? tur : null;
+    const profileId = (lockedProfileId || initialPrefill?.profileId || "").trim();
     setPaymentForm({
       ...base,
-      profileId: (initialPrefill?.profileId || "").trim(),
+      profileId,
       packageId: (initialPrefill?.packageId || "").trim(),
       paymentKind: kindOk || "monthly_membership",
     });
-  }, [resetKey, initialPrefill?.profileId, initialPrefill?.packageId, initialPrefill?.paymentKind]);
+  }, [resetKey, initialPrefill?.profileId, initialPrefill?.packageId, initialPrefill?.paymentKind, lockedProfileId]);
 
   const fetchPackagesForAthlete = useCallback(
-    async (athleteId: string) =>
-      listPrivateLessonPackagesForAccounting({
+    async (athleteId: string) => {
+      if (variant === "management") {
+        return listPrivateLessonPackagesForManagement(athleteId);
+      }
+      return listPrivateLessonPackagesForAccounting({
         athleteId,
         organizationId: organizationIdFromUrl,
-      }),
-    [organizationIdFromUrl]
+      });
+    },
+    [variant, organizationIdFromUrl]
   );
 
   const loadPackageOptions = useCallback(async () => {
@@ -196,6 +208,57 @@ export function CollectionPaymentForm({
     setPaymentSubmitting(true);
     setPaymentSubmitError(null);
     try {
+      if (variant === "management") {
+        const fd = new FormData();
+        fd.set("profile_id", paymentForm.profileId);
+        fd.set("amount", paymentForm.amount);
+        fd.set("due_date", paymentForm.paymentDate);
+        fd.set("desc", paymentForm.description);
+        const kind =
+          paymentForm.paymentKind === "extra_charge"
+            ? paymentForm.extraPaymentKind
+            : paymentForm.paymentKind;
+        fd.set("payment_kind", kind);
+        if (paymentForm.paymentKind === "monthly_membership") {
+          fd.set("payment_scope", "membership");
+          fd.set("payment_type", "aylik");
+        } else if (paymentForm.paymentKind === "private_lesson_package") {
+          fd.set("payment_scope", "private_lesson");
+          fd.set("payment_type", "paket");
+          fd.set("package_id", paymentForm.packageId);
+        } else {
+          fd.set("payment_scope", "extra_charge");
+          fd.set("payment_type", "aylik");
+        }
+        const selectedPkg =
+          paymentForm.paymentKind === "private_lesson_package"
+            ? packageOptions.find((p) => p.id === paymentForm.packageId)
+            : null;
+        if (selectedPkg) {
+          const remaining =
+            selectedPkg.remainingBalance ?? normalizeMoney(selectedPkg.totalPrice - selectedPkg.amountPaid);
+          if (remaining > 0.001 && paymentAmountValue > remaining + 0.001) {
+            const msg = "Girilen tutar kalan bakiyeden yüksek olamaz.";
+            setPaymentSubmitError(msg);
+            onError?.(msg);
+            return;
+          }
+        }
+        const res = await withAsyncTimeout(
+          createOrgPayment(fd),
+          PAYMENT_SUBMIT_TIMEOUT_MS,
+          "Tahsilat kaydı zaman aşımına uğradı."
+        );
+        if ("error" in res) {
+          const msg = res.error || "Tahsilat kaydı oluşturulamadı.";
+          setPaymentSubmitError(msg);
+          onError?.(msg);
+          return;
+        }
+        await onSuccess();
+        return;
+      }
+
       const fd = new FormData();
       fd.set("organizationId", organizationIdFromUrl || "");
       fd.set("profileId", paymentForm.profileId);
@@ -261,18 +324,25 @@ export function CollectionPaymentForm({
     extraKindRequired,
     paymentAmountValue,
     onError,
+    variant,
   ]);
 
   return (
     <div className="space-y-5">
       {layout === "page" ? (
         <p className="text-[11px] font-semibold text-gray-500">
-          Kayıtlar <span className="text-gray-300">Muhasebe &amp; Finans</span> tahsilat listesi ile aynıdır. Özet ve
-          raporlar için{" "}
-          <Link href={PATHS.muhasebeFinans} className="text-emerald-400 underline-offset-2 hover:underline">
-            panele dönün
-          </Link>
-          .
+          {variant === "accounting" ? (
+            <>
+              Kayıtlar <span className="text-gray-300">Muhasebe &amp; Finans</span> tahsilat listesi ile aynıdır. Özet ve
+              raporlar için{" "}
+              <Link href={PATHS.muhasebeFinans} className="text-emerald-400 underline-offset-2 hover:underline">
+                panele dönün
+              </Link>
+              .
+            </>
+          ) : (
+            <>Tahsilat kayıtları sporcu finans özeti ve özel ders paketi defteri ile senkron kalır.</>
+          )}
         </p>
       ) : null}
       <fieldset
@@ -280,21 +350,23 @@ export function CollectionPaymentForm({
         className="min-w-0 space-y-5 border-0 p-0 disabled:pointer-events-none disabled:opacity-55"
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 sm:col-span-2">
-            <span className="text-[10px] font-black uppercase text-gray-500">Sporcu</span>
-            <select
-              className="ui-select min-h-11 w-full appearance-none bg-[#0f1115]"
-              value={paymentForm.profileId}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, profileId: e.target.value, packageId: "" }))}
-            >
-              <option value="">Sporcu seçin</option>
-              {athletes.map((athlete) => (
-                <option key={athlete.id} value={athlete.id}>
-                  {athlete.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!lockedProfileId ? (
+            <label className="flex flex-col gap-1.5 sm:col-span-2">
+              <span className="text-[10px] font-black uppercase text-gray-500">Sporcu</span>
+              <select
+                className="ui-select min-h-11 w-full appearance-none bg-[#0f1115]"
+                value={paymentForm.profileId}
+                onChange={(e) => setPaymentForm((prev) => ({ ...prev, profileId: e.target.value, packageId: "" }))}
+              >
+                <option value="">Sporcu seçin</option>
+                {athletes.map((athlete) => (
+                  <option key={athlete.id} value={athlete.id}>
+                    {athlete.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="flex flex-col gap-1.5">
             <span className="text-[10px] font-black uppercase text-gray-500">Tutar (₺)</span>
             <div className="relative">

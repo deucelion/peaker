@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
+import { CollectionPaymentForm } from "@/components/finance/CollectionPaymentForm";
 import {
-  createOrgPayment,
   getAthleteFinanceDetailForManagement,
   markPlannedAidatAsPaidForManagement,
   softDeleteOrgPayment,
@@ -69,18 +69,9 @@ export default function FinanceAthleteDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [planSaving, setPlanSaving] = useState(false);
   const [markingPlannedPaid, setMarkingPlannedPaid] = useState(false);
-  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentFormResetKey, setPaymentFormResetKey] = useState(0);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({ dueDate: "", amount: "" });
-  const [paymentForm, setPaymentForm] = useState({
-    amount: "",
-    dueDate: "",
-    description: "",
-    scope: "extra_charge",
-    kind: "extra_charge",
-    customKind: "",
-    displayName: "",
-  });
   const [activeTab, setActiveTab] = useState<FinanceTab>("tumu");
   const [unifiedFilter, setUnifiedFilter] = useState<UnifiedAthletePaymentFilter>("all");
   const [canOpenAccountingPanel, setCanOpenAccountingPanel] = useState(false);
@@ -181,37 +172,6 @@ export default function FinanceAthleteDetailPage() {
       await load();
     }
     setPlanSaving(false);
-  }
-
-  async function handleCreatePayment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!snapshot) return;
-    setPaymentSaving(true);
-    setMessage(null);
-    if (paymentForm.scope === "extra_charge" && !paymentForm.customKind.trim()) {
-      setMessage("Tahsilat adı zorunludur.");
-      setPaymentSaving(false);
-      return;
-    }
-    const fd = new FormData();
-    fd.append("profile_id", snapshot.athlete.id);
-    fd.append("payment_scope", paymentForm.scope);
-    fd.append("payment_kind", paymentForm.scope === "extra_charge" ? paymentForm.customKind : paymentForm.kind);
-    fd.append("display_name", paymentForm.displayName);
-    if (paymentForm.scope === "membership") fd.append("payment_type", "aylik");
-    if (paymentForm.scope === "private_lesson") fd.append("payment_type", "paket");
-    fd.append("amount", paymentForm.amount);
-    fd.append("due_date", paymentForm.dueDate);
-    fd.append("desc", paymentForm.description);
-    const res = await createOrgPayment(fd);
-    if ("error" in res) {
-      setMessage(res.error || "Tahsilat kaydi olusturulamadi.");
-    } else {
-      setMessage("Tahsilat kaydi olusturuldu.");
-      setPaymentForm((prev) => ({ ...prev, amount: "", dueDate: "", description: "", displayName: "", customKind: "" }));
-      await load();
-    }
-    setPaymentSaving(false);
   }
 
   async function handleDeletePayment(paymentId: string) {
@@ -605,68 +565,27 @@ export default function FinanceAthleteDetailPage() {
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleCreatePayment} className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
               <h2 className="text-sm font-black uppercase text-white">Manuel Tahsilat Ekle</h2>
-              <p className="text-[10px] font-semibold text-gray-500">Plan dışı ödeme/düzeltme kaydı</p>
-              <input
-                value={paymentForm.displayName}
-                onChange={(e) => setPaymentForm((p) => ({ ...p, displayName: e.target.value }))}
-                placeholder="Ödeme adı (örn: Yaz Kampı Katılım Bedeli)"
-                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+              <p className="text-[10px] font-semibold text-gray-500">
+                Özel ders paketi seçildiğinde mevcut paketler listelenir; paket yoksa uyarı gösterilir (muhasebe akışı ile
+                aynı).
+              </p>
+              <CollectionPaymentForm
+                variant="management"
+                lockedProfileId={snapshot.athlete.id}
+                organizationIdFromUrl={accountingOrgId}
+                athletes={[{ id: snapshot.athlete.id, full_name: snapshot.athlete.fullName }]}
+                resetKey={paymentFormResetKey}
+                layout="page"
+                onError={(err) => setMessage(err)}
+                onSuccess={async () => {
+                  setMessage("Tahsilat kaydi olusturuldu.");
+                  setPaymentFormResetKey((k) => k + 1);
+                  await load();
+                }}
               />
-              <select
-                value={paymentForm.kind}
-                onChange={(e) =>
-                  setPaymentForm((p) => ({
-                    ...p,
-                    kind: e.target.value,
-                    scope:
-                      e.target.value === "monthly_membership"
-                        ? "membership"
-                        : e.target.value === "private_lesson_package"
-                          ? "private_lesson"
-                          : "extra_charge",
-                  }))
-                }
-                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-              >
-                <option value="monthly_membership">Aylik Uyelik</option>
-                <option value="private_lesson_package">Ozel Ders Paketi</option>
-                <option value="extra_charge">Özelleştirilebilir tahsilat</option>
-              </select>
-              {paymentForm.scope === "extra_charge" ? (
-                <input
-                  value={paymentForm.customKind}
-                  onChange={(e) => setPaymentForm((p) => ({ ...p, customKind: e.target.value }))}
-                  placeholder="Tahsilat adı (örn: etkinlik kampı, lisans yenileme)"
-                  className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-                />
-              ) : null}
-              <input
-                type="number"
-                required
-                value={paymentForm.amount}
-                onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
-                placeholder="Tutar (₺)"
-                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-              />
-              <input
-                type="date"
-                required
-                value={paymentForm.dueDate}
-                onChange={(e) => setPaymentForm((p) => ({ ...p, dueDate: e.target.value }))}
-                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-              />
-              <input
-                value={paymentForm.description}
-                onChange={(e) => setPaymentForm((p) => ({ ...p, description: e.target.value }))}
-                placeholder="Açıklama"
-                className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
-              />
-              <button disabled={paymentSaving} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-[10px] font-black uppercase text-white">
-                {paymentSaving ? "İşleniyor..." : "Tahsilat Ekle"}
-              </button>
-            </form>
+            </div>
           )}
         </section>
       ) : null}
