@@ -654,9 +654,6 @@ export async function createOrgPayment(formData: FormData) {
     return { error: "Sporcu bu organizasyonda bulunamadi." };
   }
 
-  const descriptionWithLabel =
-    displayName && desc ? `${displayName} — ${desc}` : displayName || desc;
-
   let insertRes = await adminClient
     .from("payments")
     .insert({
@@ -713,11 +710,9 @@ export async function createOrgPayment(formData: FormData) {
   if (shouldNotifyFinancialEvent("payment_created", paymentScope, paymentKind)) {
     try {
       const typeLabel =
-        paymentScope === "private_lesson"
-          ? `ozel ders paketi (${totalSessions} seans)`
-          : paymentScope === "extra_charge"
-            ? (displayName || "ek tahsilat")
-            : "aylik aidat";
+        paymentScope === "extra_charge"
+          ? (displayName || "ek tahsilat")
+          : "aylik aidat";
       await insertNotificationsForUsers(
         [profileId],
         `Yeni odeme kaydi: ₺${amount} (${typeLabel}). Durum: bekliyor.`,
