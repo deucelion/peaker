@@ -13,6 +13,7 @@ import {
   Legend,
 } from "recharts";
 import { AthleteFieldTestPdfExport } from "./_components/AthleteFieldTestPdfExport";
+import { fieldTestResultRowDisplay } from "@/lib/fieldTests/hydrateFieldTestValuesFromResults";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 
 export type FieldTestResultRow = {
@@ -58,6 +59,41 @@ function aggregateAvgByTest(rows: FieldTestResultRow[]) {
 }
 
 const LINE_COLORS = ["#7c3aed", "#22d3ee", "#f59e0b", "#ef4444", "#22c55e", "#a78bfa", "#fb7185"];
+
+function FieldTestResultValue({ row }: { row: FieldTestResultRow }) {
+  const display = fieldTestResultRowDisplay({
+    value: row.value,
+    value_text: row.value_text,
+    value_type: row.test_definitions?.value_type,
+  });
+
+  if (display.kind === "empty") {
+    return <span className="text-xl font-black italic text-gray-600">—</span>;
+  }
+
+  if (display.kind === "text") {
+    return (
+      <p
+        className="min-w-0 text-sm font-semibold normal-case leading-relaxed text-white break-words [overflow-wrap:anywhere] line-clamp-6"
+        title={display.value}
+      >
+        {display.value}
+      </p>
+    );
+  }
+
+  return (
+    <div className="min-w-0 text-xl font-black italic text-white break-words">
+      {display.integerPart}
+      {display.decimalPart ? (
+        <>
+          <span className="text-xs opacity-80">.{display.decimalPart}</span>
+        </>
+      ) : null}
+      <span className="ml-1 text-[10px] text-[#7c3aed] not-italic uppercase">{row.test_definitions?.unit}</span>
+    </div>
+  );
+}
 
 export function AthleteFieldTestsPanel({
   results,
@@ -384,25 +420,23 @@ export function AthleteFieldTestsPanel({
             Grafik için bu aralıkta veri yok veya metrik seçilmedi
           </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-white/5 rounded-[2rem] overflow-hidden border border-white/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-white/5 rounded-[2rem] overflow-hidden border border-white/5 min-w-0">
             {rowsSorted.length > 0 ? (
               rowsSorted.map((m, idx) => (
-                <div key={`${m.test_date}-${testName(m)}-${idx}`} className="bg-[#121215] p-5 transition-all sm:hover:bg-[#7c3aed]/5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Calendar size={12} className="text-gray-600" aria-hidden />
-                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
+                <div
+                  key={`${m.test_date}-${testName(m)}-${idx}`}
+                  className="min-w-0 overflow-hidden bg-[#121215] p-5 transition-all sm:hover:bg-[#7c3aed]/5"
+                >
+                  <div className="mb-3 flex items-center gap-2 min-w-0">
+                    <Calendar size={12} className="shrink-0 text-gray-600" aria-hidden />
+                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest truncate">
                       {new Date(m.test_date).toLocaleDateString("tr-TR")}
                     </span>
                   </div>
-                  <div className="text-xl font-black italic text-white">
-                    {isTextMetricValueType(m.test_definitions?.value_type)
-                      ? (m.value_text || "—")
-                      : m.value}
-                    {!isTextMetricValueType(m.test_definitions?.value_type) ? (
-                      <span className="text-[10px] text-[#7c3aed] not-italic uppercase">{m.test_definitions?.unit}</span>
-                    ) : null}
+                  <FieldTestResultValue row={m} />
+                  <div className="mt-2 break-words text-[10px] font-black uppercase tracking-[0.15em] text-gray-500">
+                    {testName(m)}
                   </div>
-                  <div className="mt-2 break-words text-[10px] font-black uppercase tracking-[0.15em] text-gray-500">{testName(m)}</div>
                 </div>
               ))
             ) : (

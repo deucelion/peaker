@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { ProfileBasic } from "@/types/domain";
 import type { TrainingLoadRow, WellnessReportRow } from "@/types/performance";
 import { getLoadDate, processACWRData } from "@/lib/performance/loadSeries";
@@ -40,11 +40,14 @@ import {
 import { AthleteProfileForm } from "./_components/AthleteProfileForm";
 import { AthletePrivateLessonPackagesSection } from "./_components/AthletePrivateLessonPackagesSection";
 import { AdminSetPasswordPanel } from "@/components/admin/AdminSetPasswordPanel";
+import { resolveAthleteDetailBackLink } from "@/lib/navigation/athleteDetailBackLink";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = typeof params.id === "string" ? params.id : params.id?.[0];
+  const athleteBack = resolveAthleteDetailBackLink(searchParams.get("from"));
 
   // Faz 10.1c — Sporcu paneli için temel veriler (player, wellness, training,
   // injury) `useAthletePanel` hook'una taşındı. Geri kalan presentation state
@@ -324,6 +327,16 @@ export default function SporcuDetayDinamik() {
     void fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (loading || !player) return;
+    const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
+    if (!hash) return;
+    const id = requestAnimationFrame(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [loading, player?.id]);
+
   const handleProfileSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -424,7 +437,11 @@ export default function SporcuDetayDinamik() {
 
   return (
     <div className="space-y-5 md:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] text-white min-h-0 min-w-0 bg-black p-4 md:p-6 overflow-x-hidden">
-      <AthleteHeader acwrStatus={acwrStatus} />
+      <AthleteHeader
+        acwrStatus={acwrStatus}
+        backHref={athleteBack.href}
+        backLabel={athleteBack.label.toUpperCase()}
+      />
 
       <AthleteCriticalStatusBar
         athleteId={id}

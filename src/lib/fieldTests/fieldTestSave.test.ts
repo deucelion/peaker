@@ -37,6 +37,26 @@ describe("buildFieldTestCells", () => {
   it("normalizes yazılı not value_type", () => {
     expect(metricValueKindFromRow({ value_type: "yazılı" })).toBe("text");
   });
+
+  it("only includes dirty cell keys when onlyCellKeys is set", () => {
+    const profileId = "550e8400-e29b-41d4-a716-446655440000";
+    const t1 = "660e8400-e29b-41d4-a716-446655440001";
+    const t2 = "770e8400-e29b-41d4-a716-446655440002";
+    const { cells } = buildFieldTestCells({
+      selectedProfileIds: [profileId],
+      metrics: [
+        { id: t1, valueType: "number" },
+        { id: t2, valueType: "text" },
+      ],
+      testValues: {
+        [`${profileId}-${t1}`]: "5",
+        [`${profileId}-${t2}`]: "not",
+      },
+      onlyCellKeys: new Set([`${profileId}-${t1}`]),
+    });
+    expect(cells).toHaveLength(1);
+    expect(cells[0]?.testId).toBe(t1);
+  });
 });
 
 describe("buildAthleticResultUpsertRow", () => {

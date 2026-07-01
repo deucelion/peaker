@@ -9,20 +9,24 @@ import { ChevronLeft } from "lucide-react";
  */
 export function AthleteHeader({
   acwrStatus,
+  backHref = "/oyuncular",
+  backLabel = "KADRO ANALİZİNE DÖN",
 }: {
   acwrStatus: { ratio: number; label: string; color: string };
+  backHref?: string;
+  backLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center min-w-0">
       <Link
-        href="/oyuncular"
+        href={backHref}
         className="group inline-flex items-center gap-3 text-gray-500 sm:hover:text-white transition-all self-start min-h-11 touch-manipulation rounded-xl"
       >
         <div className="shrink-0 rounded-xl border border-white/5 bg-[#121215] p-2.5 shadow-lg transition-all sm:group-hover:bg-[#7c3aed]/20">
           <ChevronLeft size={18} aria-hidden />
         </div>
         <span className="text-[9px] font-black italic uppercase tracking-[0.2em] sm:tracking-[0.25em] text-white break-words">
-          KADRO ANALİZİNE DÖN
+          {backLabel}
         </span>
       </Link>
 

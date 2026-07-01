@@ -30,6 +30,7 @@ export const PATHS = {
   performansAyarlar: "/performans/ayarlar",
   performansWellnessDetay: "/performans/wellness-detay",
   sahaTestleri: "/saha-testleri",
+  sahaTestleriMetrikler: "/saha-testleri/metrikler",
   idmanRaporu: "/idman-raporu",
   oyuncular: "/oyuncular",
   sporcularYeni: "/sporcular/yeni",

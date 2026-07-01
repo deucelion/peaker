@@ -204,7 +204,7 @@ export async function createFieldTestDefinition(formData: FormData) {
 
   if (insertError) return { error: `Metrik eklenemedi: ${insertError.message ?? "bilinmeyen hata"}` };
 
-  revalidatePath("/saha-testleri");
+  revalidatePath("/saha-testleri", "layout");
   return { success: true as const, metric: inserted };
   });
 }
@@ -327,7 +327,7 @@ export async function updateFieldTestDefinition(input: {
   }
 
   if (updateError) return { error: `Metrik guncellenemedi: ${updateError.message ?? "bilinmeyen hata"}` as const };
-  revalidatePath("/saha-testleri");
+  revalidatePath("/saha-testleri", "layout");
   return { success: true as const };
   });
 }
@@ -358,7 +358,7 @@ export async function saveFieldTestDefinitionOrder(input: { orderedMetricIds: st
     if (upErr) return { error: `Metrik sirasi kaydedilemedi: ${upErr.message}` as const };
   }
 
-  revalidatePath("/saha-testleri");
+  revalidatePath("/saha-testleri", "layout");
   return { success: true as const };
   });
 }
@@ -394,7 +394,7 @@ export async function deleteFieldTestDefinition(testDefinitionId: string) {
 
   if (error) return { error: `Silinemedi: ${error.message}` };
 
-  revalidatePath("/saha-testleri");
+  revalidatePath("/saha-testleri", "layout");
   revalidatePath("/saha-testleri/genel-rapor");
   return { success: true as const };
   });
@@ -456,73 +456,125 @@ export async function saveAthleticFieldResults(input: {
   }
 
   const cells = input.cells.filter((c) => assertUuid(c.profileId) && assertUuid(c.testId) && selectedSet.has(c.profileId));
-  if (cells.length === 0) {
-    return fieldTestSaveFailure("Kaydedilecek hücre yok.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
-  }
-
-  const testIds = Array.from(new Set(cells.map((c) => c.testId)));
-  let orgShape: TestDefinitionOrgShape = { hasOrganizationId: true, hasOrgId: false };
-  try {
-    orgShape = await resolveTestDefinitionsOrgShape(resolved.adminClient);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return fieldTestSaveFailure("Metrik tablo yapısı okunamadı.", { rawMessage: message });
-  }
-  let defsQuery = resolved.adminClient.from("test_definitions").select("id, value_type").in("id", testIds);
-  if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
-    defsQuery = defsQuery.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
-  } else if (orgShape.hasOrganizationId) {
-    defsQuery = defsQuery.eq("organization_id", resolved.organizationId);
-  } else if (orgShape.hasOrgId) {
-    defsQuery = defsQuery.eq("org_id", resolved.organizationId);
-  }
-  const { data: defs } = await defsQuery;
-
-  const validTestIds = new Set((defs || []).map((d) => d.id));
-  const valueTypeByTestId = new Map<string, MetricValueType>(
-    (defs || []).map((d) => [String(d.id), normalizeMetricValueType(d.value_type) as MetricValueType])
-  );
-  for (const tid of testIds) {
-    if (!validTestIds.has(tid)) {
-      return fieldTestSaveFailure("Geçersiz veya başka organizasyona ait metrik.", {
-        diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
-      });
-    }
-  }
-
-  let writeShape;
-  try {
-    writeShape = await resolveAthleticResultsWriteShape(resolved.adminClient);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return fieldTestSaveFailure("Saha testi tablo yapısı okunamadı.", { rawMessage: message });
-  }
-
-  const hasTextCells = cells.some((c) => (valueTypeByTestId.get(c.testId) || "number") === "text" && (c.valueText?.trim() || ""));
-  if (hasTextCells && !writeShape.hasValueText) {
-    return fieldTestSaveFailure(
-      "Yazılı not metrikleri için veritabanı güncellemesi gerekli (value_text kolonu).",
-      { diagnosticsCode: FIELDTEST_DIAG_SCHEMA }
-    );
+  const notes = (input.notes || []).filter((n) => assertUuid(n.profileId) && selectedSet.has(n.profileId));
+  if (cells.length === 0 && notes.length === 0) {
+    return fieldTestSaveFailure("Kaydedilecek değişiklik yok.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
   }
 
   const orgId = resolved.organizationId;
 
-  if (process.env.NODE_ENV !== "production") {
-    logger.info("field_test.save.start", "field test save", {
-      testDate,
-      selectedCount: selected.length,
-      cellCount: cells.length,
-      organizationId: orgId,
-      writeShape,
-    });
-  }
+  if (cells.length > 0) {
+    const testIds = Array.from(new Set(cells.map((c) => c.testId)));
+    let orgShape: TestDefinitionOrgShape = { hasOrganizationId: true, hasOrgId: false };
+    try {
+      orgShape = await resolveTestDefinitionsOrgShape(resolved.adminClient);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return fieldTestSaveFailure("Metrik tablo yapısı okunamadı.", { rawMessage: message });
+    }
+    let defsQuery = resolved.adminClient.from("test_definitions").select("id, value_type").in("id", testIds);
+    if (orgShape.hasOrganizationId && orgShape.hasOrgId) {
+      defsQuery = defsQuery.or(`organization_id.eq.${resolved.organizationId},org_id.eq.${resolved.organizationId}`);
+    } else if (orgShape.hasOrganizationId) {
+      defsQuery = defsQuery.eq("organization_id", resolved.organizationId);
+    } else if (orgShape.hasOrgId) {
+      defsQuery = defsQuery.eq("org_id", resolved.organizationId);
+    }
+    const { data: defs } = await defsQuery;
 
-  for (const cell of cells) {
-    const valueType = valueTypeByTestId.get(cell.testId) || "number";
-    const normalizedText = cell.valueText?.trim() || null;
-    if (valueType === "number") {
-      if (cell.valueNumber === null || Number.isNaN(cell.valueNumber)) {
+    const validTestIds = new Set((defs || []).map((d) => d.id));
+    const valueTypeByTestId = new Map<string, MetricValueType>(
+      (defs || []).map((d) => [String(d.id), normalizeMetricValueType(d.value_type) as MetricValueType])
+    );
+    for (const tid of testIds) {
+      if (!validTestIds.has(tid)) {
+        return fieldTestSaveFailure("Geçersiz veya başka organizasyona ait metrik.", {
+          diagnosticsCode: FIELDTEST_DIAG_VALIDATION,
+        });
+      }
+    }
+
+    let writeShape;
+    try {
+      writeShape = await resolveAthleticResultsWriteShape(resolved.adminClient);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return fieldTestSaveFailure("Saha testi tablo yapısı okunamadı.", { rawMessage: message });
+    }
+
+    const hasTextCells = cells.some(
+      (c) => (valueTypeByTestId.get(c.testId) || "number") === "text" && (c.valueText?.trim() || "")
+    );
+    if (hasTextCells && !writeShape.hasValueText) {
+      return fieldTestSaveFailure(
+        "Yazılı not metrikleri için veritabanı güncellemesi gerekli (value_text kolonu).",
+        { diagnosticsCode: FIELDTEST_DIAG_SCHEMA }
+      );
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      logger.info("field_test.save.start", "field test save", {
+        testDate,
+        selectedCount: selected.length,
+        cellCount: cells.length,
+        organizationId: orgId,
+        writeShape,
+      });
+    }
+
+    for (const cell of cells) {
+      const valueType = valueTypeByTestId.get(cell.testId) || "number";
+      const normalizedText = cell.valueText?.trim() || null;
+      if (valueType === "number") {
+        if (cell.valueNumber === null || Number.isNaN(cell.valueNumber)) {
+          const { error: delErr } = await resolved.adminClient
+            .from("athletic_results")
+            .delete()
+            .eq("profile_id", cell.profileId)
+            .eq("test_id", cell.testId)
+            .eq("test_date", testDate);
+          if (delErr) {
+            return fieldTestSaveFailure("Saha testi kaydı silinemedi.", {
+              rawMessage: delErr.message,
+              pgCode: delErr.code,
+            });
+          }
+          continue;
+        }
+        const v = Number(cell.valueNumber);
+        if (!Number.isFinite(v)) {
+          return fieldTestSaveFailure("Geçersiz ölçüm değeri.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
+        }
+        const row = buildAthleticResultUpsertRow({
+          profileId: cell.profileId,
+          testId: cell.testId,
+          testDate,
+          organizationId: orgId,
+          valueType: "number",
+          valueNumber: v,
+          valueText: null,
+          shape: writeShape,
+        });
+        const { error: upErr } = await resolved.adminClient
+          .from("athletic_results")
+          .upsert(row, { onConflict: "profile_id,test_id,test_date" });
+        if (upErr) {
+          logger.warn("field_test.cell_write_failed", "upsert failed", {
+            profileId: cell.profileId,
+            testId: cell.testId,
+            valueType,
+            code: upErr.code,
+            ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
+          });
+          return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
+            rawMessage: upErr.message,
+            pgCode: upErr.code,
+          });
+        }
+        continue;
+      }
+
+      if (!normalizedText) {
         const { error: delErr } = await resolved.adminClient
           .from("athletic_results")
           .delete()
@@ -535,85 +587,37 @@ export async function saveAthleticFieldResults(input: {
             pgCode: delErr.code,
           });
         }
-        continue;
-      }
-      const v = Number(cell.valueNumber);
-      if (!Number.isFinite(v)) {
-        return fieldTestSaveFailure("Geçersiz ölçüm değeri.", { diagnosticsCode: FIELDTEST_DIAG_VALIDATION });
-      }
-      const row = buildAthleticResultUpsertRow({
-        profileId: cell.profileId,
-        testId: cell.testId,
-        testDate,
-        organizationId: orgId,
-        valueType: "number",
-        valueNumber: v,
-        valueText: null,
-        shape: writeShape,
-      });
-      const { error: upErr } = await resolved.adminClient
-        .from("athletic_results")
-        .upsert(row, { onConflict: "profile_id,test_id,test_date" });
-      if (upErr) {
-        logger.warn("field_test.cell_write_failed", "upsert failed", {
+      } else {
+        const row = buildAthleticResultUpsertRow({
           profileId: cell.profileId,
           testId: cell.testId,
-          valueType,
-          code: upErr.code,
-          ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
+          testDate,
+          organizationId: orgId,
+          valueType: "text",
+          valueNumber: null,
+          valueText: normalizedText,
+          shape: writeShape,
         });
-        return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
-          rawMessage: upErr.message,
-          pgCode: upErr.code,
-        });
-      }
-      continue;
-    }
-
-    if (!normalizedText) {
-      const { error: delErr } = await resolved.adminClient
-        .from("athletic_results")
-        .delete()
-        .eq("profile_id", cell.profileId)
-        .eq("test_id", cell.testId)
-        .eq("test_date", testDate);
-      if (delErr) {
-        return fieldTestSaveFailure("Saha testi kaydı silinemedi.", {
-          rawMessage: delErr.message,
-          pgCode: delErr.code,
-        });
-      }
-    } else {
-      const row = buildAthleticResultUpsertRow({
-        profileId: cell.profileId,
-        testId: cell.testId,
-        testDate,
-        organizationId: orgId,
-        valueType: "text",
-        valueNumber: null,
-        valueText: normalizedText,
-        shape: writeShape,
-      });
-      const { error: upErr } = await resolved.adminClient
-        .from("athletic_results")
-        .upsert(row, { onConflict: "profile_id,test_id,test_date" });
-      if (upErr) {
-        logger.warn("field_test.cell_write_failed", "upsert failed", {
-          profileId: cell.profileId,
-          testId: cell.testId,
-          valueType,
-          code: upErr.code,
-          ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
-        });
-        return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
-          rawMessage: upErr.message,
-          pgCode: upErr.code,
-        });
+        const { error: upErr } = await resolved.adminClient
+          .from("athletic_results")
+          .upsert(row, { onConflict: "profile_id,test_id,test_date" });
+        if (upErr) {
+          logger.warn("field_test.cell_write_failed", "upsert failed", {
+            profileId: cell.profileId,
+            testId: cell.testId,
+            valueType,
+            code: upErr.code,
+            ...(process.env.NODE_ENV !== "production" ? { message: upErr.message } : {}),
+          });
+          return fieldTestSaveFailure("Saha testi kaydı kaydedilemedi.", {
+            rawMessage: upErr.message,
+            pgCode: upErr.code,
+          });
+        }
       }
     }
   }
 
-  const notes = (input.notes || []).filter((n) => assertUuid(n.profileId) && selectedSet.has(n.profileId));
   for (const noteRow of notes) {
     const note = noteRow.note?.trim() || null;
     if (!note) {
@@ -648,7 +652,7 @@ export async function saveAthleticFieldResults(input: {
     }
   }
 
-  revalidatePath("/saha-testleri");
+  revalidatePath("/saha-testleri", "layout");
   revalidatePath("/saha-testleri/genel-rapor");
   revalidatePath("/sporcu");
   return { success: true };
@@ -913,6 +917,80 @@ export async function summarizeFieldTestSignalsForAthlete(input: {
   });
 }
 
+export type FieldTestSessionSummary = {
+  testDate: string;
+  athleteCount: number;
+  entryCount: number;
+  hasNotes: boolean;
+};
+
+/** Org içindeki saha test oturumları (distinct test_date, sonuç + not birleşimi). */
+export async function listFieldTestSessionSummariesForActor() {
+  return withServerActionGuard("fieldTest.listFieldTestSessionSummariesForActor", async () => {
+    const resolved = await resolveFieldTestActor();
+    if ("error" in resolved) return { error: resolved.error };
+
+    const orgId = resolved.organizationId;
+    const admin = resolved.adminClient;
+
+    const [resultsRes, notesRes] = await Promise.all([
+      admin
+        .from("athletic_results")
+        .select("test_date, profile_id, profiles!inner(organization_id)")
+        .eq("profiles.organization_id", orgId),
+      admin
+        .from("athletic_result_notes")
+        .select("test_date, profile_id, profiles!inner(organization_id)")
+        .eq("profiles.organization_id", orgId),
+    ]);
+
+    if (resultsRes.error) {
+      return { error: `Oturum listesi alinamadi: ${resultsRes.error.message}` as const };
+    }
+    if (notesRes.error) {
+      return { error: `Oturum listesi alinamadi: ${notesRes.error.message}` as const };
+    }
+
+    type ResultRow = { test_date?: string | null; profile_id?: string | null };
+    const byDate = new Map<string, { athletes: Set<string>; entries: number; hasNotes: boolean }>();
+
+    for (const row of (resultsRes.data || []) as ResultRow[]) {
+      const testDate = row.test_date?.trim();
+      if (!testDate) continue;
+      let slot = byDate.get(testDate);
+      if (!slot) {
+        slot = { athletes: new Set(), entries: 0, hasNotes: false };
+        byDate.set(testDate, slot);
+      }
+      if (row.profile_id) slot.athletes.add(row.profile_id);
+      slot.entries += 1;
+    }
+
+    for (const row of (notesRes.data || []) as ResultRow[]) {
+      const testDate = row.test_date?.trim();
+      if (!testDate) continue;
+      let slot = byDate.get(testDate);
+      if (!slot) {
+        slot = { athletes: new Set(), entries: 0, hasNotes: false };
+        byDate.set(testDate, slot);
+      }
+      slot.hasNotes = true;
+      if (row.profile_id) slot.athletes.add(row.profile_id);
+    }
+
+    const sessions: FieldTestSessionSummary[] = [...byDate.entries()]
+      .map(([testDate, slot]) => ({
+        testDate,
+        athleteCount: slot.athletes.size,
+        entryCount: slot.entries,
+        hasNotes: slot.hasNotes,
+      }))
+      .sort((a, b) => b.testDate.localeCompare(a.testDate));
+
+    return { sessions };
+  });
+}
+
 /** Saha testleri tablosu: seçili gün için org içi sporcu sonuçları (RLS yerine admin + tenant doğrulama). */
 export async function listAthleticResultsForActorByDate(input: {
   profileIds: string[];
@@ -962,6 +1040,66 @@ export async function listAthleticResultsForActorByDate(input: {
   }
 
   return { results: (chunkedRes.data || []) as AthleticResultRow[] };
+  });
+}
+
+export type FieldTestPreviousResultRow = {
+  profile_id: string;
+  test_id: string;
+  test_date: string;
+  value: number | null;
+  value_text: string | null;
+};
+
+/** Oturum tarihinden önceki son test sonuçları (profil + metrik başına en güncel). */
+export async function listPreviousFieldTestResultsForActor(input: {
+  profileIds: string[];
+  beforeTestDate: string;
+}) {
+  return withServerActionGuard("fieldTest.listPreviousFieldTestResultsForActor", async () => {
+    const resolved = await resolveFieldTestActor();
+    if ("error" in resolved) return { error: resolved.error };
+
+    const beforeTestDate = input.beforeTestDate?.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(beforeTestDate)) {
+      return { error: "Gecersiz test tarihi." as const };
+    }
+
+    const ids = input.profileIds.filter(assertUuid);
+    if (ids.length === 0) {
+      return { results: [] as FieldTestPreviousResultRow[] };
+    }
+
+    const { data: athletes } = await resolved.adminClient
+      .from("profiles")
+      .select("id")
+      .eq("organization_id", resolved.organizationId)
+      .eq("role", "sporcu")
+      .in("id", ids);
+
+    const allowed = new Set((athletes || []).map((a) => a.id));
+    const filteredIds = ids.filter((id) => allowed.has(id));
+    if (filteredIds.length === 0) {
+      return { results: [] as FieldTestPreviousResultRow[] };
+    }
+
+    const chunkedRes = await chunkedInQuery(
+      filteredIds,
+      async (chunk) =>
+        await resolved.adminClient
+          .from("athletic_results")
+          .select("profile_id, test_id, test_date, value, value_text")
+          .in("profile_id", chunk)
+          .lt("test_date", beforeTestDate)
+          .order("test_date", { ascending: false }),
+      { scope: "athleticFieldActions.listPreviousFieldTestResults" }
+    );
+
+    if (chunkedRes.error) {
+      return { error: `Onceki sonuclar alinamadi: ${chunkedRes.error.message}` as const };
+    }
+
+    return { results: (chunkedRes.data || []) as FieldTestPreviousResultRow[] };
   });
 }
 
