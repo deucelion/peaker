@@ -358,16 +358,27 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     return metrics.map((metric) => fieldTestCellKey(activeAthleteId, metric.id));
   }, [activeAthleteId, metrics]);
 
+  const pendingFocusAthleteRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (orderedCellKeys.length === 0) return;
+    if (activeAthleteId) {
+      pendingFocusAthleteRef.current = activeAthleteId;
+    }
+  }, [activeAthleteId]);
+
+  useEffect(() => {
+    if (!activeAthleteId || metrics.length === 0) return;
+    if (pendingFocusAthleteRef.current !== activeAthleteId) return;
+    pendingFocusAthleteRef.current = null;
+    const firstKey = fieldTestCellKey(activeAthleteId, metrics[0].id);
     const timeout = window.setTimeout(() => {
-      const first = cellRefs.current[orderedCellKeys[0]];
+      const first = cellRefs.current[firstKey];
       if (first && document.activeElement !== first) {
         first.focus();
       }
     }, 80);
     return () => window.clearTimeout(timeout);
-  }, [orderedCellKeys]);
+  }, [activeAthleteId, metrics.length, sessionDate]);
 
   const focusSiblingCell = (currentKey: string, direction: 1 | -1) => {
     const index = orderedCellKeys.indexOf(currentKey);
@@ -504,7 +515,9 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           setSaveMessage(null);
         }
         setSaveFeedback("saved");
-        void fetchData();
+        if (!options?.silent) {
+          void fetchData();
+        }
       }
     } catch (err) {
       console.error(err);

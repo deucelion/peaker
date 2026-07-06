@@ -19,15 +19,19 @@ import { getSchemaCapabilities, ledgerVoidUnavailableMessage } from "@/lib/schem
 import { diagnosticsCode, operationalError } from "@/lib/ui/operationalErrors";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
 
-async function assertFinanceAdmin() {
+async function assertFinanceAdmin(formData?: FormData | null) {
   const resolved = await resolveSessionActor({ claimRequiresOrganization: false });
   if ("error" in resolved) return { error: resolved.error } as const;
   const role = getSafeRole(resolved.actor.role);
   if (role !== "admin" && role !== "super_admin") return { error: "Bu işlem yalnızca yönetici içindir." } as const;
-  const organizationId = resolved.actor.organizationId || "";
   if (role === "super_admin") {
-    return { error: "Super admin için organizasyon bağlamı eksik; muhasebe ekranından deneyin." } as const;
+    const orgFromForm = formData?.get("organizationId")?.toString().trim() || "";
+    if (!isUuid(orgFromForm)) {
+      return { error: "Super admin için organizasyon bağlamı eksik; muhasebe ekranından deneyin." } as const;
+    }
+    return { actor: resolved.actor, organizationId: orgFromForm } as const;
   }
+  const organizationId = resolved.actor.organizationId || "";
   if (!organizationId) return { error: "Organizasyon bilgisi eksik." } as const;
   return { actor: resolved.actor, organizationId } as const;
 }
@@ -35,7 +39,7 @@ async function assertFinanceAdmin() {
 /** Canonical `payments` satırını iptal (soft delete — silinmez). */
 export async function cancelPaymentRecord(formData: FormData) {
   return withServerActionGuard("payment.cancelPaymentRecord", async () => {
-    const gate = await assertFinanceAdmin();
+    const gate = await assertFinanceAdmin(formData);
     if ("error" in gate) return { error: gate.error };
     const { actor, organizationId } = gate;
 
@@ -104,7 +108,7 @@ export async function cancelPaymentRecord(formData: FormData) {
  */
 export async function correctPaymentRecord(formData: FormData) {
   return withServerActionGuard("payment.correctPaymentRecord", async () => {
-    const gate = await assertFinanceAdmin();
+    const gate = await assertFinanceAdmin(formData);
     if ("error" in gate) return { error: gate.error };
     const { actor, organizationId } = gate;
 
@@ -236,7 +240,7 @@ export async function correctPaymentRecord(formData: FormData) {
 
 export async function voidPrivateLessonLedgerPayment(formData: FormData) {
   return withServerActionGuard("payment.voidPrivateLessonLedgerPayment", async () => {
-    const gate = await assertFinanceAdmin();
+    const gate = await assertFinanceAdmin(formData);
     if ("error" in gate) return { error: gate.error };
     const { actor, organizationId } = gate;
 
@@ -297,7 +301,7 @@ export async function voidPrivateLessonLedgerPayment(formData: FormData) {
 
 export async function correctPrivateLessonLedgerPayment(formData: FormData) {
   return withServerActionGuard("payment.correctPrivateLessonLedgerPayment", async () => {
-    const gate = await assertFinanceAdmin();
+    const gate = await assertFinanceAdmin(formData);
     if ("error" in gate) return { error: gate.error };
     const { actor, organizationId } = gate;
 

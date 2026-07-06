@@ -300,7 +300,7 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
       void (async () => {
         const me = await fetchMeRoleClient();
         if (cancelled || !me.ok) return;
-        setCanOpenAthletePayments(me.role === "admin");
+        setCanOpenAthletePayments(me.role === "admin" || me.role === "super_admin");
       })();
     }, 0);
     return () => {
@@ -649,6 +649,7 @@ export default function MuhasebeFinansPage({ embedded = false }: MuhasebeFinansP
         <MuhasebePaymentsTable
           rows={snapshot?.payments || []}
           canAdjustRecords={canOpenAthletePayments}
+          organizationId={readOrgFromUrl() || undefined}
           onRecordsAdjusted={() => void refreshDashboardHard()}
           onAddPayment={() => {
             setPaymentModalKey((k) => k + 1);

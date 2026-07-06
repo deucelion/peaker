@@ -41,6 +41,9 @@ import { AthleteProfileForm } from "./_components/AthleteProfileForm";
 import { AthletePrivateLessonPackagesSection } from "./_components/AthletePrivateLessonPackagesSection";
 import { AdminSetPasswordPanel } from "@/components/admin/AdminSetPasswordPanel";
 import { resolveAthleteDetailBackLink } from "@/lib/navigation/athleteDetailBackLink";
+import { AthleteBodyMeasurementSection } from "@/components/athlete/AthleteBodyMeasurementSection";
+import { listAthleteBodyMeasurementsForManagement } from "@/lib/actions/athleteBodyMeasurementActions";
+import type { AthleteBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
@@ -64,6 +67,8 @@ export default function SporcuDetayDinamik() {
   const [radarData, setRadarData] = useState<RadarPoint[]>([]);
   const [tableMetrics, setTableMetrics] = useState<FieldTestResultRow[]>([]);
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricRow[]>([]);
+  const [bodyMeasurements, setBodyMeasurements] = useState<AthleteBodyMeasurementRow[]>([]);
+  const [canRecordBodyMeasurements, setCanRecordBodyMeasurements] = useState(false);
   const [acwrStatus, setAcwrStatus] = useState({ ratio: 0, label: "Veri Bekleniyor", color: "text-gray-500" });
   const [weeklyLoads, setWeeklyLoads] = useState<WeeklyLoadPoint[]>([]);
   const [positionOptions, setPositionOptions] = useState<string[]>([]);
@@ -288,6 +293,11 @@ export default function SporcuDetayDinamik() {
       setTableMetrics(results);
       setWellnessReports((res.wellnessReports || []) as WellnessReportRow[]);
       setBodyMetrics((res.bodyMetrics || []) as BodyMetricRow[]);
+      const bodyListRes = await listAthleteBodyMeasurementsForManagement(id);
+      if (!("error" in bodyListRes)) {
+        setBodyMeasurements(bodyListRes.measurements);
+        setCanRecordBodyMeasurements(bodyListRes.canManage);
+      }
       setFinancePackage((res.financeAndPackage as never) || null);
       setTimelineEvents((res.timelineEvents || []) as TimelineEvent[]);
       setRadarData(buildAthleteRadarSpectrum(results));
@@ -503,6 +513,18 @@ export default function SporcuDetayDinamik() {
       </div>
 
       <AthletePerformanceHero radarData={radarData} weeklyLoads={weeklyLoads} />
+
+      <div id="boy-kilo-takibi">
+        <AthleteBodyMeasurementSection
+          mode="management"
+          athleteId={id || undefined}
+          canRecord={canRecordBodyMeasurements}
+          measurements={bodyMeasurements}
+          currentHeight={player?.height ?? null}
+          currentWeight={player?.weight ?? null}
+          onRecorded={() => void fetchData()}
+        />
+      </div>
 
       <AthleteTimelineSection
         events={timelineEvents}

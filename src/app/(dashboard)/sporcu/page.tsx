@@ -1,11 +1,10 @@
 "use client";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import {
+import { 
   Camera,
   Activity,
   CreditCard,
-  TrendingUp,
   Moon,
   Loader2,
   Clock,
@@ -13,12 +12,9 @@ import {
   User,
   ArrowUpRight,
 } from "lucide-react";
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer
-} from "recharts";
 
 import { updateAthleteSelfProfile, uploadAthleteAvatar } from "@/lib/actions/athleteSelfProfileActions";
+import { listMyBodyMeasurements } from "@/lib/actions/athleteBodyMeasurementActions";
 import { getAthletePanelSnapshot } from "@/lib/actions/snapshotActions";
 import { listMyAthleteInjuryNotes } from "@/lib/actions/injuryNoteActions";
 import { getMyFinanceDetailForAthlete } from "@/lib/actions/financeActions";
@@ -40,11 +36,13 @@ import { DEFAULT_ATHLETE_PERMISSIONS } from "@/lib/types";
 import type { AthleteInjuryNoteRecord } from "@/lib/types";
 import type { FinanceStatusSummary } from "@/lib/types";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
+import { AthleteBodyMeasurementSection } from "@/components/athlete/AthleteBodyMeasurementSection";
+import type { AthleteBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
 
 export default function SporcuPanel() {
   const [profile, setProfile] = useState<AthleteSelfProfile | null>(null);
   const [payment, setPayment] = useState<PaymentRow | null>(null);
-  const [metrics, setMetrics] = useState<Array<{ tarih: string; kilo: number | null; yag: number | null }>>([]);
+  const [bodyMeasurements, setBodyMeasurements] = useState<AthleteBodyMeasurementRow[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -67,7 +65,10 @@ export default function SporcuPanel() {
       setProfile(snapshot.profile as AthleteSelfProfile);
       setPermissions(snapshot.permissions);
       setPayment((snapshot.payment as PaymentRow | null) || null);
-      setMetrics(snapshot.metrics || []);
+      const bodyRes = await listMyBodyMeasurements();
+      if (!("error" in bodyRes)) {
+        setBodyMeasurements(bodyRes.measurements);
+      }
       setAttendancePreview((snapshot.attendancePreview || []).filter((r) => r.at));
       const injuryRes = await listMyAthleteInjuryNotes();
       if ("error" in injuryRes) {
@@ -94,6 +95,18 @@ export default function SporcuPanel() {
     try {
       const file = event.target.files?.[0];
       if (!file || !profile) return;
+
+      const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
+      if (file.size > MAX_AVATAR_BYTES) {
+        setProfileMessage("Dosya boyutu 4 MB altinda olmalidir.");
+        event.target.value = "";
+        return;
+      }
+      if (!file.type.startsWith("image/")) {
+        setProfileMessage("Yalnizca gorsel dosyalari yukleyebilirsiniz.");
+        event.target.value = "";
+        return;
+      }
 
       const fd = new FormData();
       fd.append("file", file);
@@ -467,35 +480,17 @@ export default function SporcuPanel() {
           </AthleteCard>
           )}
 
-          {permissions.can_view_performance_metrics && (
-          <AthleteCard className="shadow-lg" padding="sm">
-             <div className="mb-3 flex min-w-0 items-center gap-2">
-               <div className="shrink-0 rounded-xl bg-green-500/10 p-2 text-green-500"><TrendingUp size={18} aria-hidden /></div>
-               <h3 className="break-words text-sm font-black uppercase italic tracking-tight text-white">Kütle <span className="text-green-500">trendi</span></h3>
-             </div>
-             <div className="h-[min(50vw,16rem)] min-h-[180px] w-full min-w-0 sm:h-[240px]">
-                {metrics.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={metrics} margin={{ left: -20 }}>
-                      <defs><linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7c3aed" stopOpacity={0.4}/><stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/></linearGradient></defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                      <XAxis dataKey="tarih" stroke="#4b5563" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
-                      <YAxis stroke="#4b5563" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} domain={['auto', 'auto']} />
-                      <Tooltip contentStyle={{ backgroundColor: '#1c1c21', border: '1px solid #7c3aed33', borderRadius: '20px' }} />
-                      <Area type="monotone" dataKey="kilo" stroke="#7c3aed" strokeWidth={5} fill="url(#weightGrad)" dot={{fill: '#7c3aed', r: 5}} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <AthleteEmptyState
-                    compact
-                    title="Henüz kütle verisi yok"
-                    description="Ölçüm kaydı eklendikçe trend grafiği burada oluşur."
-                    hint="Koç veya siz profil ölçümlerini güncelledikçe grafik dolacaktır."
-                  />
-                )}
-             </div>
-          </AthleteCard>
+          {permissions.can_view_development_profile && (
+            <AthleteBodyMeasurementSection
+              mode="self"
+              canRecord
+              measurements={bodyMeasurements}
+              currentHeight={profile?.height}
+              currentWeight={profile?.weight}
+              onRecorded={() => void fetchData()}
+            />
           )}
+
         </main>
       </div>
     </div>

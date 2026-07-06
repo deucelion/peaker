@@ -54,6 +54,8 @@ export type MuhasebePaymentsTableProps = {
   onResetFilters: () => void;
   /** Yönetici: tahsilat iptal/düzelt (sunucu yine guard uygular) */
   canAdjustRecords?: boolean;
+  /** Super admin org bağlamı — düzeltme/iptal formuna eklenir */
+  organizationId?: string;
   onRecordsAdjusted?: () => void;
 };
 
@@ -62,6 +64,7 @@ export function MuhasebePaymentsTable({
   onAddPayment,
   onResetFilters,
   canAdjustRecords = false,
+  organizationId,
   onRecordsAdjusted,
 }: MuhasebePaymentsTableProps) {
   const isEmpty = rows.length === 0;
@@ -113,6 +116,7 @@ export function MuhasebePaymentsTable({
     if (dialog.mode === "cancel") {
       const fd = new FormData();
       fd.append("reason", r);
+      if (organizationId) fd.append("organizationId", organizationId);
       if (isLedger) {
         fd.append("plpId", dialog.row.ledgerRowId!);
         const res = await voidPrivateLessonLedgerPayment(fd);
@@ -140,6 +144,7 @@ export function MuhasebePaymentsTable({
       const fd = new FormData();
       fd.append("reason", r);
       fd.append("newAmount", String(parsed));
+      if (organizationId) fd.append("organizationId", organizationId);
       if (isLedger) {
         fd.append("plpId", dialog.row.ledgerRowId!);
         const res = await correctPrivateLessonLedgerPayment(fd);

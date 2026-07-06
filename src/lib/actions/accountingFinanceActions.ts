@@ -20,6 +20,8 @@ import {
   istanbulDateWallRangeToHalfOpenUtc,
   istanbulMonthToPayoutDateInclusiveBounds,
   istanbulMonthWallToHalfOpenUtc,
+  MAX_ACCOUNTING_CUSTOM_RANGE_DAYS,
+  wallDateRangeDayCountInclusive,
 } from "@/lib/accountingFinance/istanbulQueryRange";
 import { isoToZonedDateKey, SCHEDULE_APP_TIME_ZONE, wallClockInZoneToUtcIso } from "@/lib/schedule/scheduleWallTime";
 import { isPaymentsSchemaCompatibilityError } from "@/lib/payments/paymentsSchemaCompatibility";
@@ -918,6 +920,17 @@ export async function loadAccountingFinanceDashboard(
   const dateFrom = (rawFilters.dateFrom || "").trim();
   const dateTo = (rawFilters.dateTo || "").trim();
   const rangeMode = dateFrom && dateTo ? "custom_range" : "month";
+  if (rangeMode === "custom_range") {
+    const dayCount = wallDateRangeDayCountInclusive(dateFrom, dateTo);
+    if (dayCount == null) {
+      return { error: "Geçersiz tarih filtresi." };
+    }
+    if (dayCount > MAX_ACCOUNTING_CUSTOM_RANGE_DAYS) {
+      return {
+        error: `Özel tarih aralığı en fazla ${MAX_ACCOUNTING_CUSTOM_RANGE_DAYS} gün olabilir. Daha geniş aralık için ay görünümünü kullanın veya aralığı bölün.`,
+      };
+    }
+  }
   const timeRange: UtcHalfOpenRange | null =
     rangeMode === "custom_range"
       ? istanbulDateWallRangeToHalfOpenUtc(dateFrom, dateTo, orgTimeZone)

@@ -12,6 +12,8 @@ import { toDisplayName } from "@/lib/profile/displayName";
 import { applyPrivateLessonPaymentActiveFilter, getSchemaCapabilities } from "@/lib/schemaCompat";
 import { isUuid } from "@/lib/validation/uuid";
 import { PACKAGE_EVENT_LABEL_TR, type PackageEventType } from "@/lib/privateLessons/packageEventTypes";
+import { syncBodyMeasurementFromProfileUpdate } from "@/lib/actions/athleteBodyMeasurementActions";
+import { mapBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -120,10 +122,10 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
 
   const bodyRes = await adminClient
     .from("athlete_metrics")
-    .select("measurement_date, weight, body_fat")
+    .select("id, measurement_date, height, weight, body_fat, note, recorded_by")
     .eq("profile_id", athleteId)
     .order("measurement_date", { ascending: true });
-  const bodyMetrics = bodyRes.error ? [] : bodyRes.data ?? [];
+  const bodyMetrics = bodyRes.error ? [] : (bodyRes.data ?? []).map((row) => mapBodyMeasurementRow(row as Record<string, unknown>));
 
   const caps = await getSchemaCapabilities();
   const [packageRes, privatePaymentRes, aidatRes, lessonRes, injuryRes, programRes, financeNotesRes] =
@@ -459,6 +461,14 @@ export async function updateAthleteProfileForManagement(
     .eq("id", athleteId)
     .eq("organization_id", gate.actor.organization_id);
   if (error) return { error: `Sporcu profili guncellenemedi: ${error.message}` as const };
+
+  await syncBodyMeasurementFromProfileUpdate({
+    profileId: athleteId,
+    organizationId: gate.actor.organization_id,
+    recordedBy: gate.actor.id,
+    height: heightNum,
+    weight: weightNum,
+  });
 
   revalidatePath(`/sporcu/${athleteId}`);
   revalidatePath("/oyuncular");

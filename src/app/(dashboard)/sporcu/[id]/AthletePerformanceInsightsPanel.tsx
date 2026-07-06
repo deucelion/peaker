@@ -46,9 +46,12 @@ import { AthletePerformancePdfExport } from "./_components/AthletePerformancePdf
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 
 export type BodyMetricRow = {
+  id?: string;
   measurement_date: string;
+  height: number | null;
   weight: number | null;
   body_fat: number | null;
+  note?: string | null;
 };
 
 function wellnessCellTone(key: WellnessMetricKey, value: number | null | undefined): string {
@@ -483,6 +486,7 @@ export function AthletePerformanceInsightsPanel({
               <thead>
                 <tr className="border-b border-white/10 text-[8px] font-black uppercase text-gray-500">
                   <th className="py-2 pr-4">Tarih</th>
+                  <th className="py-2 pr-4">Boy (cm)</th>
                   <th className="py-2 pr-4">Kilo (kg)</th>
                   <th className="py-2">Yağ %</th>
                 </tr>
@@ -491,6 +495,7 @@ export function AthletePerformanceInsightsPanel({
                 {bodyMetrics.map((b, i) => (
                   <tr key={`${b.measurement_date}-${i}`} className="border-b border-white/5 text-white font-bold">
                     <td className="py-3 pr-4">{new Date(b.measurement_date).toLocaleDateString("tr-TR")}</td>
+                    <td className="py-3 pr-4 tabular-nums">{b.height ?? "—"}</td>
                     <td className="py-3 pr-4 tabular-nums">{b.weight ?? "—"}</td>
                     <td className="py-3 tabular-nums">{b.body_fat ?? "—"}</td>
                   </tr>
@@ -502,6 +507,7 @@ export function AthletePerformanceInsightsPanel({
               <LineChart
                 data={bodyMetrics.map((b) => ({
                   d: new Date(b.measurement_date).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+                  boy: b.height ?? undefined,
                   kilo: b.weight ?? 0,
                   yag: b.body_fat ?? 0,
                 }))}
@@ -510,6 +516,7 @@ export function AthletePerformanceInsightsPanel({
                 <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                <Line type="monotone" dataKey="boy" stroke="#a78bfa" strokeWidth={2} dot={{ r: 2 }} name="Boy" />
                 <Line type="monotone" dataKey="kilo" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Kilo" />
                 <Line type="monotone" dataKey="yag" stroke="#22d3ee" strokeWidth={2} dot={{ r: 2 }} name="Yağ %" />
               </LineChart>

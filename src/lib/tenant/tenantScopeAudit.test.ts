@@ -19,6 +19,7 @@ const AUDITED_BASELINE: Record<string, number> = {
   // Aktörün kendi satırı (actor.id) — self-scoped
   "src/lib/actions/athleteCalendarActions.ts :: athlete_permissions": 1,
   // L85-94 profil + org gate sorgudan önce (athleteId org doğrulanır)
+  "src/lib/actions/athleteBodyMeasurementActions.ts :: athlete_metrics": 3,
   "src/lib/actions/athleteDetailActions.ts :: athlete_metrics": 1,
   "src/lib/actions/athleteDetailActions.ts :: athletic_results": 1,
   "src/lib/actions/athleteDetailActions.ts :: training_loads": 1,

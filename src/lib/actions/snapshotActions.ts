@@ -16,6 +16,7 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { getWeekEndExclusiveIso, getWeekStartMondayIso } from "@/lib/schedule/weeklySchedule";
 import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
+import { normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
 
 type TrainingParticipantLite = { attendance_status?: string | null };
 type ScheduleSnippet = { title?: string | null; start_time?: string | null };
@@ -678,23 +679,13 @@ export async function getAthletePanelSnapshot() {
     .maybeSingle();
   if (pErr || !profile) return { error: "Sporcu profili alinamadi." };
 
-  const { data: permissionRow } = await adminClient
+  const { data: permissionRow, error: permErr } = await adminClient
     .from("athlete_permissions")
     .select("can_view_morning_report, can_view_programs, can_view_calendar, can_view_notifications, can_view_rpe_entry, can_view_development_profile, can_view_financial_status, can_view_performance_metrics, can_view_wellness_metrics, can_view_skill_radar")
     .eq("athlete_id", profile.id)
     .maybeSingle();
-  const permissions = {
-    can_view_morning_report: permissionRow?.can_view_morning_report ?? true,
-    can_view_programs: permissionRow?.can_view_programs ?? true,
-    can_view_calendar: permissionRow?.can_view_calendar ?? true,
-    can_view_notifications: permissionRow?.can_view_notifications ?? true,
-    can_view_rpe_entry: permissionRow?.can_view_rpe_entry ?? true,
-    can_view_development_profile: permissionRow?.can_view_development_profile ?? true,
-    can_view_financial_status: permissionRow?.can_view_financial_status ?? true,
-    can_view_performance_metrics: permissionRow?.can_view_performance_metrics ?? true,
-    can_view_wellness_metrics: permissionRow?.can_view_wellness_metrics ?? true,
-    can_view_skill_radar: permissionRow?.can_view_skill_radar ?? true,
-  };
+  if (permErr) return { error: "Izin bilgisi alinamadi." };
+  const permissions = normalizeAthletePermissions(permissionRow);
 
   const [paymentRes, metricRes, attendanceRes] = await Promise.all([
     permissions.can_view_financial_status
@@ -719,8 +710,9 @@ export async function getAthletePanelSnapshot() {
     payment: (paymentRes.data || [])[0] || null,
     metrics: (metricRes.data || []).map((m) => ({
       tarih: new Date(m.measurement_date).toLocaleDateString("tr-TR", { month: "short" }),
-      kilo: m.weight,
-      yag: m.body_fat,
+      boy: m.height != null ? Number(m.height) : null,
+      kilo: m.weight != null ? Number(m.weight) : null,
+      yag: m.body_fat != null ? Number(m.body_fat) : null,
     })),
     attendancePreview: (attendanceRes.data || []).map((row: AttendancePreviewJoinRow) => {
       const sched = firstScheduleSnippet(row.training_schedule);

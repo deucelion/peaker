@@ -2,7 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Loader2, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ChevronLeft, GripVertical, Loader2, Trash2 } from "lucide-react";
 import { FieldTestSessionSubNav } from "./FieldTestSessionSubNav";
 import {
   createFieldTestDefinition,
@@ -29,6 +47,115 @@ function metricIsText(m: TestDefinitionRow): boolean {
   return isTextMetricValueType(ext.value_type ?? ext.valueType);
 }
 
+type SortableMetricRowProps = {
+  metric: TestDefinitionRow;
+  index: number;
+  orderingBusy: boolean;
+  orderHighlightMetricId: string | null;
+  onUpdate: (metric: TestDefinitionRow, patch: Partial<TestDefinitionRow>) => void;
+  onDelete: (id: string) => void;
+};
+
+function SortableMetricRow({
+  metric: m,
+  index,
+  orderingBusy,
+  orderHighlightMetricId,
+  onUpdate,
+  onDelete,
+}: SortableMetricRowProps) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: m.id,
+    disabled: orderingBusy,
+  });
+
+  const isHighlighted = orderHighlightMetricId === m.id;
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex flex-col gap-3 rounded-xl border p-3 min-w-0 transition-[box-shadow,background-color,border-color] duration-200 ease-out group md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-x-3 md:gap-y-2 ${
+        isDragging
+          ? "z-10 border-[#a78bfa]/80 bg-[#7c3aed]/20 shadow-[0_12px_32px_-12px_rgba(124,58,237,0.85)]"
+          : isHighlighted
+            ? "border-[#a78bfa]/70 bg-[#7c3aed]/15 ring-2 ring-[#7c3aed]/50 shadow-[0_0_0_1px_rgba(124,58,237,0.5),0_8px_24px_-14px_rgba(124,58,237,0.9)]"
+            : "border-white/10 bg-white/[0.03] sm:hover:border-[#7c3aed]/35 sm:hover:bg-white/[0.05] sm:hover:shadow-[0_8px_24px_-16px_rgba(124,58,237,0.55)]"
+      }`}
+    >
+      <div className="flex items-start gap-3 min-w-0 md:col-span-1">
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          className={`flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-white/15 bg-black/30 text-gray-400 transition sm:hover:border-[#7c3aed]/40 sm:hover:text-[#c4b5fd] ${
+            orderingBusy ? "cursor-not-allowed opacity-50" : "cursor-grab active:cursor-grabbing"
+          }`}
+          aria-label={`${m.name} metriğini sürükleyerek sırala`}
+          disabled={orderingBusy}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical size={16} aria-hidden />
+        </button>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
+          {index + 1}
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="font-black text-sm uppercase tracking-tight line-clamp-2 break-words text-white">
+            {m.name}
+          </span>
+          <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-words">
+            Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 min-w-0 w-full md:col-span-1">
+        <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:flex-wrap sm:items-center">
+          <select
+            value={metricIsText(m) ? "text" : "number"}
+            onChange={(e) => void onUpdate(m, { value_type: e.target.value as MetricValueType })}
+            className="ui-select min-h-10 w-full min-w-0 sm:max-w-[11.5rem] sm:flex-1"
+            disabled={orderingBusy}
+          >
+            <option value="number">Sayısal Değer</option>
+            <option value="text">Yazılı Not</option>
+          </select>
+          {!metricIsText(m) ? (
+            <select
+              value={(m.improvement_direction ?? "unknown") as string}
+              onChange={(e) =>
+                void onUpdate(m, {
+                  improvement_direction: e.target.value as "higher_better" | "lower_better" | "unknown",
+                })
+              }
+              className="ui-select min-h-10 w-full min-w-0 sm:max-w-[13rem] sm:flex-1"
+              title="Bu metrikte iyileşme hangi yönde? (yüksek değer iyi vs. düşük değer iyi)"
+              disabled={orderingBusy}
+            >
+              <option value="unknown">Yön: belirsiz</option>
+              <option value="higher_better">↑ Yüksek daha iyi</option>
+              <option value="lower_better">↓ Düşük daha iyi</option>
+            </select>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void onDelete(m.id)}
+            disabled={orderingBusy}
+            className="shrink-0 min-h-10 min-w-10 self-end sm:self-auto flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 rounded-xl sm:hover:bg-red-500 sm:hover:text-white transition-all touch-manipulation disabled:opacity-50"
+            aria-label="Metriği sil"
+          >
+            <Trash2 size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FieldTestMetricsEditor() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -47,8 +174,14 @@ export function FieldTestMetricsEditor() {
     valueType: "number",
     improvementDirection: "unknown",
   });
-  const [orderingBusyMetricId, setOrderingBusyMetricId] = useState<string | null>(null);
+  const [orderingBusy, setOrderingBusy] = useState(false);
   const [orderHighlightMetricId, setOrderHighlightMetricId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
@@ -102,43 +235,33 @@ export function FieldTestMetricsEditor() {
     void fetchMetrics();
   };
 
-  const moveMetric = async (metricId: string, direction: -1 | 1) => {
-    if (orderingBusyMetricId) return;
-    setOrderingBusyMetricId(metricId);
-    setOrderHighlightMetricId(metricId);
-    setMetrics((prev) => {
-      const idx = prev.findIndex((m) => m.id === metricId);
-      if (idx === -1) return prev;
-      const nextIdx = idx + direction;
-      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
-      const clone = [...prev];
-      const temp = clone[idx];
-      clone[idx] = clone[nextIdx];
-      clone[nextIdx] = temp;
-      return clone;
-    });
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || orderingBusy) return;
 
-    const current = metrics.map((m) => m.id);
-    const idx = current.findIndex((id) => id === metricId);
-    const nextIdx = idx + direction;
-    if (idx < 0 || nextIdx < 0 || nextIdx >= current.length) {
-      setOrderingBusyMetricId(null);
-      return;
-    }
-    const nextOrder = [...current];
-    const tmp = nextOrder[idx];
-    nextOrder[idx] = nextOrder[nextIdx];
-    nextOrder[nextIdx] = tmp;
-    const res = await saveFieldTestDefinitionOrder({ orderedMetricIds: nextOrder });
+    const oldIndex = metrics.findIndex((m) => m.id === active.id);
+    const newIndex = metrics.findIndex((m) => m.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(metrics, oldIndex, newIndex);
+    const orderedMetricIds = reordered.map((m) => m.id);
+    const movedId = String(active.id);
+
+    setMetrics(reordered);
+    setOrderingBusy(true);
+    setOrderHighlightMetricId(movedId);
+
+    const res = await saveFieldTestDefinitionOrder({ orderedMetricIds });
     if ("error" in res) {
       setSaveMessage(res.error || "Metrik sırası kaydedilemedi.");
-      setOrderingBusyMetricId(null);
+      setOrderingBusy(false);
+      setOrderHighlightMetricId(null);
       void fetchMetrics();
       return;
     }
+
     window.setTimeout(() => setOrderHighlightMetricId(null), 700);
-    setOrderingBusyMetricId(null);
-    void fetchMetrics();
+    setOrderingBusy(false);
   };
 
   const handleMetricUpdate = async (metric: TestDefinitionRow, patch: Partial<TestDefinitionRow>) => {
@@ -192,7 +315,7 @@ export function FieldTestMetricsEditor() {
             SAHA TEST <span className="text-[#7c3aed]">METRİKLERİ</span>
           </h1>
           <p className="text-[11px] font-bold text-gray-500">
-            Veri girişinde kullanılan metrikleri tanımlayın, sıralayın ve düzenleyin.
+            Veri girişinde kullanılan metrikleri tanımlayın, sürükleyerek sıralayın ve düzenleyin.
           </p>
         </div>
 
@@ -235,7 +358,14 @@ export function FieldTestMetricsEditor() {
 
       <section className="mt-6 min-w-0 space-y-4">
         <div className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5 min-w-0">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Tanımlı metrikler</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Tanımlı metrikler</h2>
+            {metrics.length > 1 ? (
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-600">
+                {orderingBusy ? "Sıra kaydediliyor…" : "Sıralamak için sol tutamacı sürükleyin"}
+              </p>
+            ) : null}
+          </div>
           <div className="mt-4 space-y-2 min-w-0">
             {metrics.length === 0 ? (
               <EmptyState
@@ -246,98 +376,21 @@ export function FieldTestMetricsEditor() {
                 compact
               />
             ) : null}
-            {metrics.map((m, index) => {
-              const isFirst = index === 0;
-              const isLast = index === metrics.length - 1;
-              const isBusy = orderingBusyMetricId === m.id;
-              const isHighlighted = orderHighlightMetricId === m.id;
-              return (
-                <div
-                  key={m.id}
-                  className={`flex flex-col gap-3 rounded-xl border p-3 min-w-0 transition-all duration-200 ease-out group md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-x-3 md:gap-y-2 ${
-                    isHighlighted
-                      ? "border-[#a78bfa]/70 bg-[#7c3aed]/15 ring-2 ring-[#7c3aed]/50 shadow-[0_0_0_1px_rgba(124,58,237,0.5),0_8px_24px_-14px_rgba(124,58,237,0.9)]"
-                      : "border-white/10 bg-white/[0.03] sm:hover:border-[#7c3aed]/35 sm:hover:bg-white/[0.05] sm:hover:shadow-[0_8px_24px_-16px_rgba(124,58,237,0.55)]"
-                  }`}
-                >
-                  <div className="flex items-start gap-3 min-w-0 md:col-span-1">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
-                      {index + 1}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="font-black text-sm uppercase tracking-tight line-clamp-2 break-words text-white">
-                        {m.name}
-                      </span>
-                      <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-words">
-                        Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2 min-w-0 w-full md:col-span-1">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void moveMetric(m.id, -1)}
-                        disabled={isFirst || Boolean(orderingBusyMetricId)}
-                        className={`min-h-10 flex-1 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition sm:flex-none ${
-                          isFirst || orderingBusyMetricId
-                            ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
-                            : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
-                        }`}
-                      >
-                        Yukarı
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void moveMetric(m.id, 1)}
-                        disabled={isLast || Boolean(orderingBusyMetricId)}
-                        className={`min-h-10 flex-1 rounded-lg border px-2 text-[10px] font-black uppercase tracking-wide transition sm:flex-none ${
-                          isLast || orderingBusyMetricId
-                            ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-gray-600 opacity-60"
-                            : "border-white/15 bg-white/5 text-gray-300 sm:hover:border-[#7c3aed]/35 sm:hover:text-white"
-                        }`}
-                      >
-                        {isBusy ? "..." : "Aşağı"}
-                      </button>
-                    </div>
-                    <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:flex-wrap sm:items-center">
-                      <select
-                        value={metricIsText(m) ? "text" : "number"}
-                        onChange={(e) => void handleMetricUpdate(m, { value_type: e.target.value as MetricValueType })}
-                        className="ui-select min-h-10 w-full min-w-0 sm:max-w-[11.5rem] sm:flex-1"
-                      >
-                        <option value="number">Sayısal Değer</option>
-                        <option value="text">Yazılı Not</option>
-                      </select>
-                      {!metricIsText(m) ? (
-                        <select
-                          value={(m.improvement_direction ?? "unknown") as string}
-                          onChange={(e) =>
-                            void handleMetricUpdate(m, {
-                              improvement_direction: e.target.value as "higher_better" | "lower_better" | "unknown",
-                            })
-                          }
-                          className="ui-select min-h-10 w-full min-w-0 sm:max-w-[13rem] sm:flex-1"
-                          title="Bu metrikte iyileşme hangi yönde? (yüksek değer iyi vs. düşük değer iyi)"
-                        >
-                          <option value="unknown">Yön: belirsiz</option>
-                          <option value="higher_better">↑ Yüksek daha iyi</option>
-                          <option value="lower_better">↓ Düşük daha iyi</option>
-                        </select>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteMetric(m.id)}
-                        className="shrink-0 min-h-10 min-w-10 self-end sm:self-auto flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 rounded-xl sm:hover:bg-red-500 sm:hover:text-white transition-all touch-manipulation"
-                        aria-label="Metriği sil"
-                      >
-                        <Trash2 size={16} aria-hidden />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+              <SortableContext items={metrics.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                {metrics.map((m, index) => (
+                  <SortableMetricRow
+                    key={m.id}
+                    metric={m}
+                    index={index}
+                    orderingBusy={orderingBusy}
+                    orderHighlightMetricId={orderHighlightMetricId}
+                    onUpdate={(metric, patch) => void handleMetricUpdate(metric, patch)}
+                    onDelete={(id) => void handleDeleteMetric(id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         </div>
 

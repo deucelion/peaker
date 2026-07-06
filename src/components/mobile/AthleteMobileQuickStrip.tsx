@@ -11,7 +11,7 @@ export function AthleteMobileQuickStrip({ permissions }: { permissions: AthleteP
       : null,
     permissions.can_view_rpe_entry ? { href: "/anket", label: "RPE", icon: Zap } : null,
     permissions.can_view_calendar ? { href: "/takvim", label: "Takvim", icon: Calendar } : null,
-    { href: "/ozel-ders-paketlerim", label: "Paket", icon: Package },
+    permissions.can_view_programs ? { href: "/ozel-ders-paketlerim", label: "Paket", icon: Package } : null,
     permissions.can_view_notifications ? { href: "/bildirimler", label: "Bildirim", icon: Bell } : null,
     permissions.can_view_programs ? { href: "/programlarim", label: "Program", icon: FileText } : null,
   ].filter(Boolean) as Array<{ href: string; label: string; icon: typeof Moon }>;

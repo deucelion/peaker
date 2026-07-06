@@ -7,6 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole } from "@/lib/auth/roleMatrix";
 import { messageIfAthleteCannotOperate } from "@/lib/athlete/lifecycle";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
+import { syncBodyMeasurementFromProfileUpdate } from "@/lib/actions/athleteBodyMeasurementActions";
 
 const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
 const AVATAR_BUCKET = "avatars";
@@ -70,6 +71,14 @@ export async function updateAthleteSelfProfile(formData: FormData) {
     .eq("organization_id", resolved.organizationId);
 
   if (error) return { error: `Profil guncellenemedi: ${error.message}` };
+
+  await syncBodyMeasurementFromProfileUpdate({
+    profileId: resolved.userId,
+    organizationId: resolved.organizationId,
+    recordedBy: resolved.userId,
+    height,
+    weight,
+  });
 
   revalidatePath("/sporcu");
   return { success: true as const };

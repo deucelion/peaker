@@ -97,3 +97,17 @@ export function istanbulCustomRangeToPayoutDateInclusiveBounds(
   if (a > b) return null;
   return { fromKey: a, toKeyInclusive: b };
 }
+
+/** Duvar takvimi gün anahtarları arasındaki gün sayısı (her iki uç dahil). */
+export function wallDateRangeDayCountInclusive(dateFrom: string, dateTo: string): number | null {
+  const a = dateFrom.trim();
+  const b = dateTo.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b)) return null;
+  if (a > b) return null;
+  const start = Date.UTC(Number(a.slice(0, 4)), Number(a.slice(5, 7)) - 1, Number(a.slice(8, 10)));
+  const end = Date.UTC(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10)));
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+/** Muhasebe özel tarih aralığı üst sınırı (performans koruması). */
+export const MAX_ACCOUNTING_CUSTOM_RANGE_DAYS = 366;
