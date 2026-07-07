@@ -255,6 +255,10 @@ export default function DashboardLayout({
         ]
       : [];
 
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
+
   if (loading) {
     return (
       <div className="h-[100dvh] bg-[#09090b] flex flex-col items-center justify-center text-[#7c3aed]">
@@ -265,10 +269,6 @@ export default function DashboardLayout({
   }
 
   const closeMobileSidebar = () => setIsSidebarOpen(false);
-
-  useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [pathname]);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[#09090b]">
