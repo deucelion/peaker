@@ -53,9 +53,9 @@ export default function RootLayout({
         */}
 
         <AuthRecoveryRedirect />
-        <main className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-x-hidden">
+        <div className="relative flex min-h-[100dvh] min-w-0 flex-col">
           {children}
-        </main>
+        </div>
 
         {/* Style JSX yerine globals.css içine scrollbar kurallarını 
            atman daha performanslıdır, ancak burada kalacaksa 

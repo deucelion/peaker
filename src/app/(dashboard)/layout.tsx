@@ -270,112 +270,113 @@ export default function DashboardLayout({
 
   const closeMobileSidebar = () => setIsSidebarOpen(false);
 
+  const sidebarBody = (onNavigate?: () => void) => (
+    <>
+      <div className="flex items-center gap-2.5 p-6 mb-4">
+        <div className="w-8 h-8 bg-[#7c3aed] rounded-lg flex items-center justify-center font-black italic text-base text-white shadow-lg shadow-[#7c3aed]/20">P</div>
+        <div className="flex flex-col text-white">
+          <span className="text-xl font-black tracking-tighter italic leading-none">{organizationName}<span className="text-[#7c3aed]">.</span></span>
+          <span className="text-[8px] text-gray-600 font-bold tracking-[0.2em] uppercase mt-0.5">Powered by Peaker</span>
+        </div>
+      </div>
+
+      <nav className="flex-1 space-y-0.5 px-4 text-sm overflow-y-auto custom-scrollbar">
+        {isSuperAdmin && (
+          <div className="mb-6">
+            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SYSTEM OWNER</p>
+            {visibleNav("super_admin").map((item) => (
+              <NavItem
+                key={`${item.section}-${item.href}`}
+                href={item.href}
+                icon={NAV_ICONS[item.icon]}
+                label={item.label}
+                active={isDashboardNavItemActive(pathname, item)}
+                variant={item.variant}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        )}
+
+        {isCoachOrAdmin && (
+          <div className="mb-6">
+            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">İŞ AKIŞLARI</p>
+            {visibleNav("management").map((item) => (
+              <NavItem
+                key={`${item.section}-${item.href}`}
+                href={item.href}
+                icon={NAV_ICONS[item.icon]}
+                label={item.label}
+                active={isDashboardNavItemActive(pathname, item)}
+                variant={item.variant}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        )}
+        {isAthlete && (
+          <>
+            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SPORCU ERİŞİMİ</p>
+            {visibleNav("athlete").map((item) => (
+              <NavItem
+                key={`${item.section}-${item.href}`}
+                href={item.href}
+                icon={NAV_ICONS[item.icon]}
+                label={item.label}
+                active={isDashboardNavItemActive(pathname, item)}
+                variant={item.variant}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </>
+        )}
+      </nav>
+
+      <div className="p-4 border-t border-white/5 space-y-0.5">
+        {visibleNav("footer").map((item) => (
+          <NavItem
+            key={`${item.section}-${item.href}`}
+            href={item.href}
+            icon={NAV_ICONS[item.icon]}
+            label={item.label}
+            active={isDashboardNavItemActive(pathname, item)}
+            variant={item.variant}
+            onNavigate={onNavigate}
+          />
+        ))}
+        <button type="button" onClick={handleLogout} className="flex min-h-11 w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[11px] font-bold italic tracking-wider text-red-500/40 transition-all sm:hover:bg-red-500/5 sm:hover:text-red-500">
+          <LogOut size={16} aria-hidden /> ÇIKIŞ YAP
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-[#09090b]">
+    <>
       {isSidebarOpen ? (
-        <button
-          type="button"
-          aria-label="Menüyü kapat"
-          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
-          onClick={closeMobileSidebar}
-        />
+        <>
+          <button
+            type="button"
+            aria-label="Menüyü kapat"
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={closeMobileSidebar}
+          />
+          <aside
+            id="dashboard-sidebar"
+            className="fixed left-0 top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)] z-[110] flex w-64 flex-col border-r border-white/5 bg-[#0b0b0d] lg:hidden"
+          >
+            {sidebarBody(closeMobileSidebar)}
+          </aside>
+        </>
       ) : null}
 
-      {/* SIDEBAR - mobilde kapalıyken DOM'dan gizlenir; tıklama engelini önler */}
-      <aside
-        id="dashboard-sidebar"
-        className={`
-        w-64 shrink-0 border-r border-white/5 bg-[#0b0b0d] flex flex-col
-        lg:relative lg:flex lg:self-stretch
-        top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)]
-        ${
-          isSidebarOpen
-            ? "max-lg:fixed max-lg:left-0 max-lg:z-40 max-lg:translate-x-0 max-lg:transition-transform max-lg:duration-500"
-            : "max-lg:hidden"
-        }
-      `}
-      >
-        <div className="flex items-center gap-2.5 p-6 mb-4">
-          <div className="w-8 h-8 bg-[#7c3aed] rounded-lg flex items-center justify-center font-black italic text-base text-white shadow-lg shadow-[#7c3aed]/20">P</div>
-          <div className="flex flex-col text-white">
-            <span className="text-xl font-black tracking-tighter italic leading-none">{organizationName}<span className="text-[#7c3aed]">.</span></span>
-            <span className="text-[8px] text-gray-600 font-bold tracking-[0.2em] uppercase mt-0.5">Powered by Peaker</span>
-          </div>
-        </div>
+      <div className="flex min-h-[100dvh] bg-[#09090b]">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
+          {sidebarBody()}
+        </aside>
 
-        <nav className="flex-1 space-y-0.5 px-4 text-sm overflow-y-auto custom-scrollbar">
-          {isSuperAdmin && (
-            <div className="mb-6">
-              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SYSTEM OWNER</p>
-              {visibleNav("super_admin").map((item) => (
-                <NavItem
-                  key={`${item.section}-${item.href}`}
-                  href={item.href}
-                  icon={NAV_ICONS[item.icon]}
-                  label={item.label}
-                  active={isDashboardNavItemActive(pathname, item)}
-                  variant={item.variant}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-            </div>
-          )}
-
-          {isCoachOrAdmin && (
-            <div className="mb-6">
-              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">İŞ AKIŞLARI</p>
-              {visibleNav("management").map((item) => (
-                <NavItem
-                  key={`${item.section}-${item.href}`}
-                  href={item.href}
-                  icon={NAV_ICONS[item.icon]}
-                  label={item.label}
-                  active={isDashboardNavItemActive(pathname, item)}
-                  variant={item.variant}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-            </div>
-          )}
-          {isAthlete && (
-            <>
-              <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SPORCU ERİŞİMİ</p>
-              {visibleNav("athlete").map((item) => (
-                <NavItem
-                  key={`${item.section}-${item.href}`}
-                  href={item.href}
-                  icon={NAV_ICONS[item.icon]}
-                  label={item.label}
-                  active={isDashboardNavItemActive(pathname, item)}
-                  variant={item.variant}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-            </>
-          )}
-        </nav>
-
-        <div className="p-4 border-t border-white/5 space-y-0.5">
-          {visibleNav("footer").map((item) => (
-            <NavItem
-              key={`${item.section}-${item.href}`}
-              href={item.href}
-              icon={NAV_ICONS[item.icon]}
-              label={item.label}
-              active={isDashboardNavItemActive(pathname, item)}
-              variant={item.variant}
-              onNavigate={closeMobileSidebar}
-            />
-          ))}
-          <button type="button" onClick={handleLogout} className="flex min-h-11 w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[11px] font-bold italic tracking-wider text-red-500/40 transition-all sm:hover:bg-red-500/5 sm:hover:text-red-500">
-            <LogOut size={16} aria-hidden /> ÇIKIŞ YAP
-          </button>
-        </div>
-      </aside>
-
-      {/* CONTENT AREA - Ölçüler Eski Kompakt Haline Getirildi */}
-      <main className="relative z-20 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:z-10 lg:pt-0">
-        <header className="relative z-50 flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 backdrop-blur-md sm:px-6">
+        <main className="flex min-w-0 flex-1 flex-col bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
+        <header className="flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -440,7 +441,7 @@ export default function DashboardLayout({
 
         {/* ANA İÇERİK - children'ın kendi padding yapısına saygı duyan kapsayıcı */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-          <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto animate-in fade-in duration-500">
+          <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto">
             <DashboardOfflineShell organizationId={organizationId} userId={userId} />
             {isCoachOrAdmin && !permissionsLoading ? (
               <div className="mb-4">
@@ -451,8 +452,9 @@ export default function DashboardLayout({
             {process.env.NODE_ENV === "development" ? <PeakerDebugInstaller /> : null}
           </div>
         </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   );
 }
 
