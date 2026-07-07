@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { 
   ChevronLeft, Calendar, Heart, Battery, Moon, 
   Activity, Brain, Zap, Search, Loader2, MessageSquare
@@ -19,21 +20,31 @@ import {
 import { buildReadinessSparklineSvg } from "@/lib/wellness/wellnessSparkline";
 import Notification from "@/components/Notification";
 import { LoadMoreButton } from "@/components/ui/data-display";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PATHS } from "@/lib/navigation/routeRegistry";
+import { parseWellnessArchiveSearchParams } from "@/lib/navigation/wellnessArchiveLinks";
 
 export default function WellnessDetay() {
+  const searchParams = useSearchParams();
+  const initialFilters = parseWellnessArchiveSearchParams({
+    sporcu: searchParams.get("sporcu"),
+    q: searchParams.get("q"),
+    from: searchParams.get("from"),
+    to: searchParams.get("to"),
+  });
   const [reports, setReports] = useState<WellnessReportRow[]>([]);
   const [totalAthletes, setTotalAthletes] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   // Faz 9.5 — date filter UI; default empty (tüm arşiv).
-  const [draftFromDate, setDraftFromDate] = useState("");
-  const [draftToDate, setDraftToDate] = useState("");
-  const [appliedFromDate, setAppliedFromDate] = useState("");
-  const [appliedToDate, setAppliedToDate] = useState("");
+  const [draftFromDate, setDraftFromDate] = useState(initialFilters.fromDate);
+  const [draftToDate, setDraftToDate] = useState(initialFilters.toDate);
+  const [appliedFromDate, setAppliedFromDate] = useState(initialFilters.fromDate);
+  const [appliedToDate, setAppliedToDate] = useState(initialFilters.toDate);
   const [filterFeedback, setFilterFeedback] = useState<string | null>(null);
   const pageSize = WELLNESS_ARCHIVE_DEFAULT_PAGE_SIZE;
 
@@ -139,15 +150,15 @@ export default function WellnessDetay() {
     );
   }
 
-  const filteredReports = reports.filter((r) => 
-    (() => {
-      const profile = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-      const fullName = (profile?.full_name || "").toLowerCase();
-      const term = searchTerm.toLowerCase().trim();
-      if (!term) return true;
-      return fullName.includes(term);
-    })()
-  );
+  const filteredReports = reports.filter((r) => {
+    const profile = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+    const fullName = (profile?.full_name || "").toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
+    const athleteFilter = initialFilters.athleteId;
+    if (athleteFilter && r.profile_id !== athleteFilter) return false;
+    if (!term) return true;
+    return fullName.includes(term);
+  });
 
   const avgHeartRate =
     reports.length > 0
@@ -175,6 +186,14 @@ export default function WellnessDetay() {
             <ChevronLeft size={24} className="sm:group-hover:-translate-x-1 transition-transform" aria-hidden />
           </Link>
           <div className="min-w-0 flex-1">
+            <PerformanceBreadcrumb
+              className="mb-2"
+              items={[
+                { label: "Performans", href: PATHS.performans },
+                { label: "Yük Analizi", href: PATHS.performans },
+                { label: "Wellness Arşivi" },
+              ]}
+            />
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-tight break-words">
               WELLNESS <span className="text-[#7c3aed]">ARŞİVİ</span>
             </h1>

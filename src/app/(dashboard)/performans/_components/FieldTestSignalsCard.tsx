@@ -63,6 +63,12 @@ export function FieldTestSignalsCard({ signal }: { signal: FieldTestSignalSummar
         >
           Saha testlerine git →
         </Link>
+        <Link
+          href="/saha-testleri/genel-rapor"
+          className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[9px] tracking-wider text-cyan-100 hover:border-cyan-300/60"
+        >
+          Takım raporu →
+        </Link>
       </div>
 
       {showTrendBar && (

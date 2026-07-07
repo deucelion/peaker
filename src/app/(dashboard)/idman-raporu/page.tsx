@@ -5,6 +5,9 @@ import Link from "next/link";
 import { listDailyTrainingLoadReports, listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
 import type { ReactNode } from "react";
 import type { ProfileBasic } from "@/types/domain";
+import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 
 interface TrainingLoadReport {
   id: string;
@@ -16,11 +19,6 @@ interface TrainingLoadReport {
 }
 
 export default function GunlukIdmanRaporu() {
-  const performanceTabs = [
-    { key: "yuk", label: "Yük Analizi", href: "/performans" },
-    { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
-    { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
-  ] as const;
   const [userRole, setUserRole] = useState<string | null>(null);
   const [reports, setReports] = useState<TrainingLoadReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,22 +126,21 @@ export default function GunlukIdmanRaporu() {
           </button>
         </div>
       </header>
-      <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-        {performanceTabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-              tab.href === "/idman-raporu"
-                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-            }`}
-            aria-current={tab.href === "/idman-raporu" ? "page" : undefined}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <PerformanceBreadcrumb
+        className="mt-1"
+        items={[
+          { label: "Performans", href: PATHS.performans },
+          { label: "İdman Raporu" },
+        ]}
+      />
+      <p className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+        Bu veriler{" "}
+        <Link href={PATHS.performans} className="text-[#c4b5fd] hover:text-white">
+          Yük Analizi
+        </Link>{" "}
+        grafiklerini besler.
+      </p>
+      <PerformanceTabsNav activeKey="rapor" className="mt-2" />
 
       {/* ÖZET KARTLARI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5 min-w-0">

@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Image from "next/image";
+import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   XAxis,
   YAxis,
@@ -29,8 +30,9 @@ import {
   FileText,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { SkeletonCard, SkeletonChart, SkeletonStatGrid } from "@/components/ui/skeletons";
-import { listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
+import { listDailyTrainingLoadReports, listManagementDirectory } from "@/lib/actions/managementDirectoryActions";
 import {
   exportPerformanceSummaryCSV,
   listPerformanceAnalyticsData,
@@ -79,6 +81,16 @@ import {
   usePerformanceDashboard,
   type PerformancePresetKey,
 } from "@/lib/hooks/usePerformanceDashboard";
+import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PerformanceOrgSummaryBand } from "@/components/performance/PerformanceOrgSummaryBand";
+import { PerformanceTeamListView } from "@/components/performance/PerformanceTeamListView";
+import { PartialDataNotice } from "@/components/performance/PartialDataNotice";
+import { PerformanceExportHint } from "@/components/performance/PerformanceExportHint";
+import { hrefWellnessArchive } from "@/lib/navigation/wellnessArchiveLinks";
+import { hrefAthleteDetailWithRange, parsePerformansSearchParams } from "@/lib/navigation/performanceLinks";
+import { loadPerformancePreferences, savePerformancePreferences } from "@/lib/performance/performancePreferences";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 
 /** Sporcu seçilmediği başlangıç durumu için boş değer. Performans takibi sporcu bazlıdır; takım geneli görünümü kaldırıldı. */
 const NO_ATHLETE_VALUE = "";
@@ -94,6 +106,7 @@ function formatTrRangeLabel(fromKey: string, toKey: string): string {
 }
 
 export default function PerformanceAnalytics() {
+  const searchParams = useSearchParams();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgTimeZone, setOrgTimeZone] = useState<string>("Europe/Istanbul");
   const [orgLoading, setOrgLoading] = useState(true);
@@ -158,6 +171,8 @@ export default function PerformanceAnalytics() {
   const acwrChartRef = useRef<HTMLDivElement>(null);
   const ewmaChartRef = useRef<HTMLDivElement>(null);
   const [exportFeedback, setExportFeedback] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
+  const [viewMode, setViewMode] = useState<"chart" | "team">("chart");
+  const [dailyReports, setDailyReports] = useState<Array<{ profile_id?: string | null; rpe_score?: number }>>([]);
   // FAZ 32: sunucu tarafindaki sporcu hard-cap kesintisi gorunur uyariya baglanir.
   const [capWarning, setCapWarning] = useState<{ cap: number; total: number } | null>(null);
 
@@ -202,6 +217,38 @@ export default function PerformanceAnalytics() {
       cancelled = true;
     };
   }, [resetToDefault, setLoadError, setLoadErrorKind]);
+
+  useEffect(() => {
+    const prefs = loadPerformancePreferences();
+    if (prefs.viewMode) setViewMode(prefs.viewMode);
+    const url = parsePerformansSearchParams({
+      sporcu: searchParams.get("sporcu"),
+      range: searchParams.get("range"),
+    });
+    if (url.athleteId) setSelectedAthleteId(url.athleteId);
+    else if (prefs.selectedAthleteId) setSelectedAthleteId(prefs.selectedAthleteId);
+    if (url.range) {
+      setRangeMode("preset");
+      setDraftPreset(url.range);
+    } else if (prefs.appliedPreset) {
+      setDraftPreset(prefs.appliedPreset);
+    }
+  }, [searchParams, setSelectedAthleteId, setRangeMode, setDraftPreset]);
+
+  useEffect(() => {
+    if (selectedAthleteId) {
+      savePerformancePreferences({ selectedAthleteId, appliedPreset: appliedPreset ?? undefined, viewMode });
+    }
+  }, [selectedAthleteId, appliedPreset, viewMode]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await listDailyTrainingLoadReports();
+      if (!("error" in res)) {
+        setDailyReports((res.reports || []) as Array<{ profile_id?: string | null; rpe_score?: number }>);
+      }
+    })();
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!orgId || !appliedFrom || !appliedTo) return;
@@ -440,12 +487,10 @@ export default function PerformanceAnalytics() {
 
   const loadKpisAvailable = acwrData.length > 0;
   const readinessHasData = riskStats.readinessReportCount > 0;
-
-  const performanceTabs = [
-    { key: "yuk", label: "Yük Analizi", href: "/performans" },
-    { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
-    { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
-  ] as const;
+  const partialMissing: Array<"wellness" | "rpe" | "field-test"> = [];
+  if (selectedAthleteId && wellnessReports.length === 0) partialMissing.push("wellness");
+  if (selectedAthleteId && acwrData.length === 0) partialMissing.push("rpe");
+  if (selectedAthleteId && !fieldTestSignal?.totalMeasurements) partialMissing.push("field-test");
 
   return (
     <div className="ui-page-loose min-w-0 overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
@@ -650,22 +695,70 @@ export default function PerformanceAnalytics() {
         </p>
       ) : null}
 
-      <nav className="mt-6 flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-        {performanceTabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-              tab.href === "/performans"
-                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
+      <PerformanceBreadcrumb
+        className="mt-2"
+        items={[{ label: "Performans ve Raporlar" }, { label: "Yük Analizi" }]}
+      />
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <PerformanceTabsNav activeKey="yuk" className="!static !mx-0 !bg-transparent !p-0 !backdrop-blur-none flex-1" sticky={false} />
+        <div className="flex rounded-full border border-white/10 bg-white/[0.03] p-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("chart");
+              savePerformancePreferences({ viewMode: "chart" });
+            }}
+            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${
+              viewMode === "chart" ? "bg-[#7c3aed]/20 text-[#c4b5fd]" : "text-gray-400"
             }`}
-            aria-current={tab.href === "/performans" ? "page" : undefined}
           >
-            {tab.label}
+            Grafik
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("team");
+              savePerformancePreferences({ viewMode: "team" });
+            }}
+            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${
+              viewMode === "team" ? "bg-[#7c3aed]/20 text-[#c4b5fd]" : "text-gray-400"
+            }`}
+          >
+            Takım listesi
+          </button>
+        </div>
+      </div>
+
+      <PerformanceOrgSummaryBand athleteCount={athletes.length} className="mt-4" />
+
+      {viewMode === "team" ? (
+        <PerformanceTeamListView athletes={athletes} dailyReports={dailyReports} className="mt-4" />
+      ) : null}
+
+      {viewMode === "chart" && partialMissing.length > 0 ? (
+        <PartialDataNotice missing={partialMissing} className="mt-4" />
+      ) : null}
+
+      {viewMode === "chart" ? (
+      <>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[9px] font-bold uppercase tracking-wide text-gray-500">
+        <span>
+          Bugün {dailyReports.length} RPE girişi ·{" "}
+          <Link href={PATHS.idmanRaporu} className="text-[#c4b5fd] hover:text-white">
+            İdman raporunu aç
           </Link>
-        ))}
-      </nav>
+        </span>
+        {selectedAthleteId ? (
+          <Link
+            href={hrefAthleteDetailWithRange(selectedAthleteId, { from: "performans", hash: "performans-analitigi", range: appliedPreset ?? "28" })}
+            className="text-[#c4b5fd] hover:text-white"
+          >
+            Sporcu detayında aç →
+          </Link>
+        ) : null}
+      </div>
+      <PerformanceExportHint scope="performans" className="mt-2" />
 
       <section
         className="mt-5 rounded-2xl border border-white/8 bg-[#121215]/80 p-4 sm:p-5 space-y-4 min-w-0"
@@ -1123,7 +1216,10 @@ export default function PerformanceAnalytics() {
           </div>
 
           <Link
-            href="/performans/wellness-detay"
+            href={hrefWellnessArchive({
+              athleteId: selectedAthleteId || undefined,
+              athleteName: athletes.find((a) => a.id === selectedAthleteId)?.full_name,
+            })}
             className="mt-6 block min-h-12 w-full touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] py-4 text-center text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 transition-all sm:mt-8 sm:py-5 sm:tracking-[0.3em] sm:hover:text-[#7c3aed]"
           >
             ARŞİVİ GÖRÜNTÜLE →
@@ -1147,6 +1243,8 @@ export default function PerformanceAnalytics() {
           ))}
         </ul>
       </section>
+      </>
+      ) : null}
     </div>
   );
 }

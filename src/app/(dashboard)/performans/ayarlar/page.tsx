@@ -178,7 +178,7 @@ export default function AyarlarPage() {
     <div className="space-y-6 sm:space-y-10 pb-[max(5rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden animate-in fade-in duration-700">
       <header className="min-w-0">
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-          {isSuperAdmin ? "PLATFORM" : isCoach ? "SİSTEM" : "HESAP"}{" "}
+          {isSuperAdmin ? "PLATFORM" : isCoach ? "HESAP VE SPORCU" : "HESAP"}{" "}
           <span className="text-[#7c3aed]">AYARLARI</span>
         </h1>
         <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[#7c3aed] pl-3 sm:pl-4 min-w-0">
@@ -265,6 +265,9 @@ export default function AyarlarPage() {
               <Notification message="Sporcu gorunurluk ayarlari icin yetkiniz yok." variant="error" />
             </div>
           )}
+          <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[9px] font-bold leading-relaxed text-gray-500">
+            Sabah Raporu → /sporcu/sabah-raporu · RPE → /anket · Gelişim Profili → /sporcu · Performans metrikleri koç panelinde sporcu detayında görünür.
+          </p>
           <div className="relative w-full max-w-md min-w-0">
             <Search className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" size={18} aria-hidden />
             <input 

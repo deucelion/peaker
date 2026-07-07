@@ -25,6 +25,7 @@ import OnboardingChecklist, {
 } from "@/components/onboarding/OnboardingChecklist";
 import { LiveStatusBadge } from "@/components/realtime/LiveStatusPrimitives";
 import { CoachMobileQuickStrip } from "@/components/mobile/CoachMobileQuickStrip";
+import { PerformanceOrgSummaryBand } from "@/components/performance/PerformanceOrgSummaryBand";
 import { CompactListRow, CompactMetricCard } from "@/components/compact";
 import { useLiveAttendanceDashboard } from "@/lib/hooks/useLiveAttendanceDashboard";
 import { useOrgPresenceCounts } from "@/lib/hooks/useOrgPresenceCounts";
@@ -330,6 +331,7 @@ export default function Dashboard() {
   const canCreateLessons = Boolean(coachPermissions?.can_create_lessons);
   const canTakeAttendance = Boolean(coachPermissions?.can_take_attendance);
   const canManageTrainingNotes = Boolean(coachPermissions?.can_manage_training_notes);
+  const canViewReports = Boolean(coachPermissions?.can_view_reports);
 
   if (role === "coach") {
     return (
@@ -390,6 +392,18 @@ export default function Dashboard() {
             </Link>
           </div>
         </section>
+
+        {canViewReports ? (
+          <section className="ui-card min-w-0">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="ui-h2-sm">Performans özeti</h3>
+              <Link href={PATHS.performans} className="text-[9px] font-black uppercase text-[#c4b5fd] hover:text-white">
+                Performans merkezi →
+              </Link>
+            </div>
+            <PerformanceOrgSummaryBand athleteCount={coachOpsMetrics?.activeAthletes ?? 0} />
+          </section>
+        ) : null}
 
         <section className="ui-card min-w-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">

@@ -101,7 +101,7 @@ function openPdfPreview(url: string): void {
 
 export async function downloadPdfBytes(bytes: Uint8Array, filename: string): Promise<PdfDownloadOutcome> {
   const safeName = ensurePdfExtension(filename);
-  const blob = new Blob([bytes], { type: "application/pdf" });
+  const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
 
   if (resolvePdfDownloadMethod() === "share") {
     const shareResult = await trySharePdf(blob, safeName);

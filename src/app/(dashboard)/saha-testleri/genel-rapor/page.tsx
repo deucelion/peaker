@@ -11,6 +11,8 @@ import {
 import type { ReactNode } from "react";
 import Notification from "@/components/Notification";
 import { loadFieldTestTeamReportForActor, type FieldTestTeamChartRow } from "@/lib/actions/athleticFieldActions";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 
 export default function GenelTakimRaporu() {
   const [stats, setStats] = useState<FieldTestTeamChartRow[]>([]);
@@ -102,6 +104,14 @@ export default function GenelTakimRaporu() {
         </div>
         <div className="hidden lg:block w-32 shrink-0" /> 
       </div>
+
+      <PerformanceBreadcrumb
+        items={[
+          { label: "Performans", href: PATHS.performans },
+          { label: "Saha Testleri", href: PATHS.sahaTestleri },
+          { label: "Takım Raporu" },
+        ]}
+      />
 
       {/* ÖZET KARTLARI */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 min-w-0">

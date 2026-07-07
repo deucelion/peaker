@@ -17,7 +17,7 @@ import {
   LayoutDashboard, Users, Settings, User, Calendar,
   Activity, LogOut,   Trophy, Bell, Bolt, ClipboardCheck, 
   TrendingUp, Loader2, BarChart3, Menu, X, CreditCard, FileText, Plus,
-  Shield,
+  Shield, Moon,
 } from "lucide-react";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
@@ -30,6 +30,7 @@ import { PeakerDebugInstaller } from "@/components/dev/PeakerDebugInstaller";
 import { DashboardOfflineShell } from "@/components/offline";
 import { CoachMobileQuickStrip } from "@/components/mobile/CoachMobileQuickStrip";
 import { clearAllOfflineActions } from "@/lib/offline/offlineActionQueue";
+import { hrefFieldTestSession, todayFieldTestSessionDate } from "@/lib/fieldTests/fieldTestSessionRoutes";
 
 const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
@@ -46,6 +47,7 @@ const NAV_ICONS: Record<DashboardNavIcon, React.ReactNode> = {
   TrendingUp: <TrendingUp size={16} />,
   Settings: <Settings size={16} />,
   Shield: <Shield size={16} />,
+  Moon: <Moon size={16} />,
 };
 
 export default function DashboardLayout({
@@ -229,7 +231,7 @@ export default function DashboardLayout({
                 { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
                 { label: "Sporcu Ekle", href: "/sporcular/yeni" },
                 { label: "Tahsilat Kaydet", href: hrefTahsilatKaydet() },
-                { label: "Saha Testi Girişi", href: "/saha-testleri" },
+                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()) },
               ]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_create_lessons
@@ -247,7 +249,7 @@ export default function DashboardLayout({
           ...(safeRole === "coach" && coachPermissions?.can_view_reports
             ? [
                 { label: "Tahsilat Kaydet", href: PATHS.finans },
-                { label: "Saha Testi Girişi", href: "/saha-testleri" },
+                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()) },
               ]
             : []),
         ]

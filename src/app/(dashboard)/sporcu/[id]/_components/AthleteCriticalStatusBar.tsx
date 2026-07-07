@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BarChart2, ClipboardList, CreditCard, FileText } from "lucide-react";
 import { QuickStat } from "./AthleteDetailPrimitives";
 import type { WellnessReportRow } from "@/types/performance";
+import { hrefWellnessArchive } from "@/lib/navigation/wellnessArchiveLinks";
 
 /**
  * Faz 7.7 — Sporcu özet / kritik durum çubuğu.
@@ -47,6 +48,10 @@ export function AthleteCriticalStatusBar({
   } | null;
   localizedPaymentStatus: string;
 }) {
+  const wellnessArchiveHref = athleteId
+    ? hrefWellnessArchive({ athleteId })
+    : hrefWellnessArchive();
+
   return (
     <section
       id="sporcu-ozet"
@@ -89,7 +94,7 @@ export function AthleteCriticalStatusBar({
               </a>
               ,{" "}
               <Link
-                href="/performans/wellness-detay"
+                href={wellnessArchiveHref}
                 className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
               >
                 wellness arşivini
@@ -157,7 +162,7 @@ export function AthleteCriticalStatusBar({
             <ClipboardList size={14} aria-hidden /> Sakatlık
           </a>
           <Link
-            href="/performans/wellness-detay"
+            href={wellnessArchiveHref}
             className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
           >
             <BarChart2 size={14} aria-hidden /> Wellness

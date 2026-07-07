@@ -17,13 +17,13 @@ describe("saha testleri metric editor layout", () => {
   });
 
   it("uses line-clamp and break-words for long metric names", () => {
-    expect(listBlock).toContain("line-clamp-2");
-    expect(listBlock).toContain("break-words");
+    expect(source).toContain("line-clamp-2");
+    expect(source).toContain("break-words");
   });
 
   it("stacks metric controls on narrow viewports", () => {
-    expect(listBlock).toContain("flex flex-col gap-2 min-w-0 w-full");
-    expect(listBlock).toContain("w-full min-w-0 sm:max-w");
+    expect(source).toContain("flex flex-col gap-2 min-w-0 w-full");
+    expect(source).toContain("w-full min-w-0 sm:max-w");
   });
 
   it("lives on dedicated metrikler page component", () => {

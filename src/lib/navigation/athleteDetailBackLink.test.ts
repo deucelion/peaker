@@ -8,14 +8,14 @@ describe("resolveAthleteDetailBackLink", () => {
   it("returns saha testleri when from=saha-testleri", () => {
     expect(resolveAthleteDetailBackLink("saha-testleri")).toEqual({
       href: "/saha-testleri",
-      label: "Saha testlerine dön",
+      label: "Saha test oturumuna dön",
     });
   });
 
   it("defaults to oyuncular for unknown from", () => {
     expect(resolveAthleteDetailBackLink("unknown")).toEqual({
       href: "/oyuncular",
-      label: "Kadro analizine dön",
+      label: "Kadro listesine dön",
     });
   });
 });

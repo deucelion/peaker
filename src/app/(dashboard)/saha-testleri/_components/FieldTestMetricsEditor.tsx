@@ -35,12 +35,9 @@ import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { InlineErrorState } from "@/components/ui/data-display/InlineErrorState";
 import { isTextMetricValueType, normalizeMetricValueType } from "@/lib/fieldTests/metricValueType";
-
-const performanceTabs = [
-  { key: "yuk", label: "Yük Analizi", href: "/performans" },
-  { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
-  { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
-] as const;
+import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 
 function metricIsText(m: TestDefinitionRow): boolean {
   const ext = m as TestDefinitionRow & { valueType?: unknown };
@@ -319,22 +316,14 @@ export function FieldTestMetricsEditor() {
           </p>
         </div>
 
-        <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-          {performanceTabs.map((tab) => (
-            <Link
-              key={tab.key}
-              href={tab.href}
-              className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                tab.key === "saha"
-                  ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                  : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-              }`}
-              aria-current={tab.key === "saha" ? "page" : undefined}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        <PerformanceBreadcrumb
+          items={[
+            { label: "Performans", href: PATHS.performans },
+            { label: "Saha Testleri", href: PATHS.sahaTestleri },
+            { label: "Metrikler" },
+          ]}
+        />
+        <PerformanceTabsNav activeKey="saha" />
 
         <FieldTestSessionSubNav />
       </header>

@@ -25,7 +25,8 @@ export type DashboardNavIcon =
   | "User"
   | "TrendingUp"
   | "Settings"
-  | "Shield";
+  | "Shield"
+  | "Moon";
 
 export type DashboardNavItem = {
   href: string;
@@ -149,6 +150,15 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     athleteNeeds: "can_view_rpe_entry",
     activeMatch: "exact",
     variant: "highlight",
+  },
+  {
+    href: PATHS.sporcuSabahRaporu,
+    icon: "Moon",
+    label: "Sabah Raporu",
+    section: "athlete",
+    roles: ["sporcu"],
+    athleteNeeds: "can_view_morning_report",
+    activeMatch: "exact",
   },
   { href: PATHS.takvim, icon: "Calendar", label: "Takvim", section: "athlete", roles: ["sporcu"], athleteNeeds: "can_view_calendar", activeMatch: "exact" },
   {

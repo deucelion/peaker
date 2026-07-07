@@ -48,6 +48,11 @@ import {
 } from "@/lib/offline/scopedFormDrafts";
 import { hrefFieldTestSession } from "@/lib/fieldTests/fieldTestSessionRoutes";
 import { shouldSkipFieldTestAutosave } from "@/lib/fieldTests/fieldTestAutosave";
+import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PerformanceExportHint } from "@/components/performance/PerformanceExportHint";
+import { FieldTestSessionNextSteps } from "@/components/performance/FieldTestSessionNextSteps";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 
 function metricIsText(m: TestDefinitionRow): boolean {
   const ext = m as TestDefinitionRow & { valueType?: unknown };
@@ -56,11 +61,7 @@ function metricIsText(m: TestDefinitionRow): boolean {
 
 export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) {
   const router = useRouter();
-  const performanceTabs = [
-    { key: "yuk", label: "Yük Analizi", href: "/performans" },
-    { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
-    { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
-  ] as const;
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -481,6 +482,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
             setSaveMessage(null);
           }
           setSaveFeedback("saved");
+          setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
         }
         return;
       }
@@ -515,6 +517,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           setSaveMessage(null);
         }
         setSaveFeedback("saved");
+        setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
         if (!options?.silent) {
           void fetchData();
         }
@@ -547,7 +550,12 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
 
   const contextStatus = (() => {
     if (saveFeedback === "saving") return { label: "Kaydediliyor...", tone: "text-amber-200 border-amber-500/30 bg-amber-500/10", dot: "bg-amber-400" };
-    if (saveFeedback === "saved") return { label: "Kaydedildi", tone: "text-emerald-200 border-emerald-500/30 bg-emerald-500/10", dot: "bg-emerald-400" };
+    if (saveFeedback === "saved")
+      return {
+        label: lastSavedAt ? `Kaydedildi · ${lastSavedAt}` : "Kaydedildi",
+        tone: "text-emerald-200 border-emerald-500/30 bg-emerald-500/10",
+        dot: "bg-emerald-400",
+      };
     if (saveFeedback === "error") return { label: "Kaydedilemedi", tone: "text-rose-200 border-rose-500/30 bg-rose-500/10", dot: "bg-rose-400" };
     if (saveFeedback === "dirty") return { label: "Kaydedilmemiş değişiklik var", tone: "text-amber-200 border-amber-500/30 bg-amber-500/10", dot: "bg-amber-400" };
     if (!activeAthleteId) return { label: "Sporcu seçimi bekleniyor", tone: "text-gray-300 border-white/15 bg-white/5", dot: "bg-gray-500" };
@@ -613,23 +621,16 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
             />
           ) : null}
         </div>
+        <PerformanceBreadcrumb
+          items={[
+            { label: "Performans", href: PATHS.performans },
+            { label: "Saha Testleri", href: PATHS.sahaTestleri },
+            { label: "Oturum" },
+          ]}
+        />
+        <PerformanceTabsNav activeKey="saha" />
         <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-          <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-            {performanceTabs.map((tab) => (
-              <Link
-                key={tab.key}
-                href={tab.href}
-                className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                  tab.key === "saha"
-                    ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                    : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-                }`}
-                aria-current={tab.key === "saha" ? "page" : undefined}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </nav>
+          <PerformanceExportHint scope="session-csv" className="max-w-xl" />
           <button
             type="button"
             disabled={exportBusy}
@@ -838,6 +839,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           className="mx-0"
         />
       ) : null}
+      {saveFeedback === "saved" ? <FieldTestSessionNextSteps sessionDate={sessionDate} className="mt-4" /> : null}
       {saveMessage && !saveErrorDetail ? (
         <div className="min-w-0 break-words">
           <Notification message={saveMessage} variant={saveFeedback === "error" ? "error" : "success"} className="px-6 py-4" />

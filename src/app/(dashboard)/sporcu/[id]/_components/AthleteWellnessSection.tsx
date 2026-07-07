@@ -8,12 +8,26 @@ import {
   wellnessToneToTextClass,
   WELLNESS_SCALE_MAX,
 } from "@/lib/wellness/wellnessScore";
+import { hrefWellnessArchive } from "@/lib/navigation/wellnessArchiveLinks";
 
 /**
  * Faz 7.7 — Son wellness aside.
  * Sadece görsel; parent'tan `latestWellness` alır.
  */
-export function AthleteWellnessSection({ latestWellness }: { latestWellness: WellnessReportRow | null }) {
+export function AthleteWellnessSection({
+  latestWellness,
+  athleteId,
+  athleteName,
+}: {
+  latestWellness: WellnessReportRow | null;
+  athleteId?: string;
+  athleteName?: string | null;
+}) {
+  const archiveHref = hrefWellnessArchive({
+    athleteId,
+    athleteName,
+  });
+
   return (
     <aside
       id="son-wellness"
@@ -24,7 +38,7 @@ export function AthleteWellnessSection({ latestWellness }: { latestWellness: Wel
           Son <span className="text-[#7c3aed]">wellness</span>
         </h2>
         <Link
-          href="/performans/wellness-detay"
+          href={archiveHref}
           className="shrink-0 text-[9px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
         >
           Arşiv
@@ -71,7 +85,7 @@ export function AthleteWellnessSection({ latestWellness }: { latestWellness: Wel
           <p className="mt-2 text-[10px] text-gray-600">
             Sabah raporu veya wellness girişi yapıldığında burada son kayıt görünür. Tüm arşiv için{" "}
             <Link
-              href="/performans/wellness-detay"
+              href={archiveHref}
               className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
             >
               wellness ekranına

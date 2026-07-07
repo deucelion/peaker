@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar, ChevronRight, Loader2, Plus } from "lucide-react";
 import { FieldTestSessionSubNav } from "./FieldTestSessionSubNav";
+import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
+import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 import {
   listFieldTestSessionSummariesForActor,
   type FieldTestSessionSummary,
@@ -15,12 +18,6 @@ import {
   hrefFieldTestSession,
   todayFieldTestSessionDate,
 } from "@/lib/fieldTests/fieldTestSessionRoutes";
-
-const performanceTabs = [
-  { key: "yuk", label: "Yük Analizi", href: "/performans" },
-  { key: "saha", label: "Saha Testleri", href: "/saha-testleri" },
-  { key: "rapor", label: "İdman Raporu", href: "/idman-raporu" },
-] as const;
 
 function formatSessionDateLabel(testDate: string): string {
   return new Date(`${testDate}T00:00:00`).toLocaleDateString("tr-TR", {
@@ -88,22 +85,14 @@ export function FieldTestSessionHub() {
           </p>
         </div>
 
-        <nav className="flex flex-wrap gap-2" aria-label="Performans alt gezinim">
-          {performanceTabs.map((tab) => (
-            <Link
-              key={tab.key}
-              href={tab.href}
-              className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                tab.key === "saha"
-                  ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                  : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-              }`}
-              aria-current={tab.key === "saha" ? "page" : undefined}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        <PerformanceBreadcrumb
+          items={[
+            { label: "Performans", href: PATHS.performans },
+            { label: "Saha Testleri", href: PATHS.sahaTestleri },
+            { label: "Oturum hub" },
+          ]}
+        />
+        <PerformanceTabsNav activeKey="saha" />
 
         <FieldTestSessionSubNav />
       </header>

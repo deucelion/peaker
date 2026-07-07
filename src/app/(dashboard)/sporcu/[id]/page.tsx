@@ -44,13 +44,19 @@ import { resolveAthleteDetailBackLink } from "@/lib/navigation/athleteDetailBack
 import { AthleteBodyMeasurementSection } from "@/components/athlete/AthleteBodyMeasurementSection";
 import { listAthleteBodyMeasurementsForManagement } from "@/lib/actions/athleteBodyMeasurementActions";
 import type { AthleteBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
+import { AthleteDetailSectionNav } from "@/components/performance/AthleteDetailSectionNav";
+import { useScrollRestore } from "@/lib/hooks/useScrollRestore";
+import { CoachReportsAccessBanner } from "@/components/performance/CoachReportsAccessBanner";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = typeof params.id === "string" ? params.id : params.id?.[0];
-  const athleteBack = resolveAthleteDetailBackLink(searchParams.get("from"));
+  const athleteBack = resolveAthleteDetailBackLink(searchParams.get("from"), {
+    sessionDate: searchParams.get("oturum"),
+  });
 
   // Faz 10.1c — Sporcu paneli için temel veriler (player, wellness, training,
   // injury) `useAthletePanel` hook'una taşındı. Geri kalan presentation state
@@ -98,6 +104,20 @@ export default function SporcuDetayDinamik() {
     packageSummary: { totalLessons: number; usedLessons: number; totalPrice: number; amountPaid: number } | null;
   } | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [showCoachReportsBanner, setShowCoachReportsBanner] = useState(false);
+
+  useScrollRestore(id ? `athlete-detail-${id}` : "athlete-detail", Boolean(id));
+
+  useEffect(() => {
+    void (async () => {
+      const me = await fetchMeAccessClient();
+      if (!me.ok || me.role !== "coach") {
+        setShowCoachReportsBanner(false);
+        return;
+      }
+      setShowCoachReportsBanner(me.coachPermissions?.can_view_reports === false);
+    })();
+  }, []);
 
   const latestWellness = useMemo(() => {
     if (!wellnessReports.length) return null;
@@ -453,6 +473,10 @@ export default function SporcuDetayDinamik() {
         backLabel={athleteBack.label.toUpperCase()}
       />
 
+      {showCoachReportsBanner ? <CoachReportsAccessBanner /> : null}
+
+      <AthleteDetailSectionNav />
+
       <AthleteCriticalStatusBar
         athleteId={id}
         criticalSignals={criticalSignals}
@@ -509,7 +533,11 @@ export default function SporcuDetayDinamik() {
           onCreate={handleInjuryCreate}
           onDeactivate={handleInjuryDeactivate}
         />
-        <AthleteWellnessSection latestWellness={latestWellness} />
+        <AthleteWellnessSection
+          latestWellness={latestWellness}
+          athleteId={id}
+          athleteName={player.full_name}
+        />
       </div>
 
       <AthletePerformanceHero radarData={radarData} weeklyLoads={weeklyLoads} />
