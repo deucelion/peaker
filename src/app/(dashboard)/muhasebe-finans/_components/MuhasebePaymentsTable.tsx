@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Ban, Loader2, Pencil, X } from "lucide-react";
+import { Ban, Loader2, MoreHorizontal, Pencil, X } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { DataTablePagination } from "@/components/ui/data-display";
 import type { AccountingFinancePaymentRow } from "@/lib/actions/accountingFinanceActions";
@@ -74,6 +74,7 @@ export function MuhasebePaymentsTable({
   const [newAmount, setNewAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [mobileMenuRowId, setMobileMenuRowId] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -209,24 +210,43 @@ export function MuhasebePaymentsTable({
               </p>
             </div>
             {showOps && rowIsAdjustable(row) ? (
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+              <div className="relative mt-3 flex justify-end border-t border-white/5 pt-3">
                 <button
                   type="button"
-                  onClick={() => openAdjustDialog({ mode: "cancel", row, isLedger: Boolean(row.ledgerRowId) })}
-                  className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-rose-500/35 bg-rose-500/10 px-3 text-[10px] font-black uppercase text-rose-200"
+                  aria-label="Satır işlemleri"
+                  aria-expanded={mobileMenuRowId === row.id}
+                  onClick={() => setMobileMenuRowId((id) => (id === row.id ? null : row.id))}
+                  className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-gray-300"
                 >
-                  <Ban className="size-3.5" aria-hidden />
-                  İptal
+                  <MoreHorizontal size={16} aria-hidden />
                 </button>
-                {row.status === "odendi" ? (
-                  <button
-                    type="button"
-                    onClick={() => openAdjustDialog({ mode: "correct", row, isLedger: Boolean(row.ledgerRowId) })}
-                    className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 text-[10px] font-black uppercase text-amber-100"
-                  >
-                    <Pencil className="size-3.5" aria-hidden />
-                    Düzelt
-                  </button>
+                {mobileMenuRowId === row.id ? (
+                  <div className="absolute bottom-full right-0 z-20 mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-[#101013] py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuRowId(null);
+                        openAdjustDialog({ mode: "cancel", row, isLedger: Boolean(row.ledgerRowId) });
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] font-black uppercase text-rose-200 hover:bg-white/5"
+                    >
+                      <Ban className="size-3.5" aria-hidden />
+                      İptal
+                    </button>
+                    {row.status === "odendi" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuRowId(null);
+                          openAdjustDialog({ mode: "correct", row, isLedger: Boolean(row.ledgerRowId) });
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] font-black uppercase text-amber-100 hover:bg-white/5"
+                      >
+                        <Pencil className="size-3.5" aria-hidden />
+                        Düzelt
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : null}

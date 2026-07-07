@@ -194,10 +194,12 @@ export async function proxy(request: NextRequest) {
         // fail-closed: deny-all izin seti ile devam
       }
       if (isRouteBlockedForAthlete(pathname, permissions)) {
-        if (isTransportRequest) return jsonError(403, "forbidden");
         const athleteFallback = getDefaultRouteForRole(role);
         const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);
-        if (!safeAthleteTarget) return response;
+        if (!safeAthleteTarget) {
+          if (isTransportRequest) return jsonError(403, "forbidden");
+          return response;
+        }
         logRouteRedirectDecision("proxy", {
           pathname,
           role,

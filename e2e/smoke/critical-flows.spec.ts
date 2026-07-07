@@ -30,7 +30,10 @@ test("admin: dashboard + aidat + özel paket + sporcular + koçlar (ve varsa ko�
   await expect(page.getByRole("heading", { name: /AKADEMİ|PANELİ/i })).toBeVisible();
 
   await page.goto("/finans");
-  await expect(page.getByRole("heading", { name: /AİDAT/i })).toBeVisible();
+  await expect(page).toHaveURL(/\/tahsilat-merkezi\?bolum=sporcular/);
+
+  await page.goto("/muhasebe-finans");
+  await expect(page).toHaveURL(/\/tahsilat-merkezi\?bolum=tahsilatlar/);
 
   await page.goto("/ozel-ders-paketleri");
   await expect(page.getByRole("heading", { name: /ÖZEL DERS/i })).toBeVisible();
@@ -65,9 +68,11 @@ test("admin: dashboard + aidat + özel paket + sporcular + koçlar (ve varsa ko�
   await page.goto("/performans");
   await expect(page.getByRole("heading", { name: /PERFORMANS/i })).toBeVisible();
 
-  // Tahsilat Merkezi (Muhasebe & Finans birleşik workspace): route + h1.
+  // Tahsilat Merkezi (birleşik finans workspace): route + h1 + sekmeler.
   await page.goto("/tahsilat-merkezi");
-  await expect(page.getByRole("heading", { name: /MUHASEBE|FİNANS|TAHSİLAT/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /TAHSİLAT/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Özet/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Tahsilatlar/i })).toBeVisible();
 
   // Faz 3.3 — Audit log UI smoke (admin görür). H1 + sayfalama veya empty state.
   await page.goto("/audit-log");

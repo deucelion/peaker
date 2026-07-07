@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Users, Calendar, CreditCard, AlertCircle, BarChart3, Target, Loader2, UserPlus2 } from "lucide-react";
 import Link from "next/link";
+import { PATHS } from "@/lib/navigation/routeRegistry";
 import { useRouter } from "next/navigation";
 import { addCoach } from "@/lib/actions/coachActions";
 import { bootstrapTenantHomeDashboard } from "@/lib/actions/snapshotActions";
@@ -647,7 +648,7 @@ export default function Dashboard() {
             {stats.activeTrainings > 0 ? "Bugünkü dersleri yönet" : "Bugün için ders planla"}
           </Link>
           <Link
-            href="/finans"
+            href={`${PATHS.tahsilatMerkezi}?bolum=sporcular`}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
           >
             Aidat bekleyenleri kontrol et

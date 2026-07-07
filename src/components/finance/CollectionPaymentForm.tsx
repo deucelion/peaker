@@ -335,7 +335,7 @@ export function CollectionPaymentForm({
             <>
               Kayıtlar <span className="text-gray-300">Muhasebe &amp; Finans</span> tahsilat listesi ile aynıdır. Özet ve
               raporlar için{" "}
-              <Link href={PATHS.muhasebeFinans} className="text-emerald-400 underline-offset-2 hover:underline">
+              <Link href={PATHS.tahsilatMerkezi} className="text-emerald-400 underline-offset-2 hover:underline">
                 panele dönün
               </Link>
               .
@@ -515,7 +515,7 @@ export function CollectionPaymentForm({
           aria-busy={paymentSubmitting}
           className="inline-flex min-h-12 items-center justify-center rounded-xl bg-emerald-500 px-8 text-sm font-black uppercase tracking-wide text-black shadow-lg shadow-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {paymentSubmitting ? "Kaydediliyor..." : "Tahsilatı kaydet"}
+          {paymentSubmitting ? "Kaydediliyor..." : variant === "accounting" ? "Tahsilat kaydet (ödendi)" : "Ödeme kaydet"}
         </button>
       </div>
     </div>

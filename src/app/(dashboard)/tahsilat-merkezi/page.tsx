@@ -2,24 +2,38 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import Notification from "@/components/Notification";
-import { CollectionPaymentForm } from "@/components/finance/CollectionPaymentForm";
+import { MuhasebeFinansPanel } from "@/app/(dashboard)/muhasebe-finans/_components/MuhasebeFinansPanel";
+import { FinansYonetimi } from "@/components/finance/FinansYonetimi";
+import { MuhasebeOverviewSection } from "@/components/finance/MuhasebeOverviewSection";
+import { TahsilatRecordSheet } from "@/components/finance/TahsilatRecordSheet";
+import { FinanceScopeChip, FinanceScopeHint } from "@/components/finance/FinanceScopeChip";
+import type { FinanceScopeKind } from "@/components/finance/FinanceScopeChip";
+import {
+  HUB_TAB_LABELS,
+  resolveHubView,
+  type HubWorkspaceView,
+} from "@/lib/finance/hubViews";
 import {
   loadAccountingFinanceDashboard,
   type AccountingFinanceSnapshot,
 } from "@/lib/actions/accountingFinanceActions";
-import MuhasebeFinansPage from "@/app/(dashboard)/muhasebe-finans/page";
-import FinansYonetimi from "@/app/(dashboard)/finans/page";
-
-type WorkspaceView = "panel" | "sporcu" | "tahsilat";
 
 function monthKeyNow() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function MuhasebeFinansContent() {
+const HUB_TABS: HubWorkspaceView[] = ["ozet", "tahsilatlar", "alacaklar", "sporcular", "koclar"];
+
+function scopeForView(view: HubWorkspaceView): FinanceScopeKind {
+  if (view === "sporcular") return "all_time";
+  if (view === "alacaklar") return "overdue";
+  return "period";
+}
+
+function TahsilatMerkeziContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -27,31 +41,28 @@ function MuhasebeFinansContent() {
   const sporcu = (searchParams.get("sporcu") || "").trim();
   const paket = (searchParams.get("paket") || "").trim();
   const tur = (searchParams.get("tur") || "").trim();
-  const bolumParam = (searchParams.get("bolum") || "").toLowerCase();
+  const bolumParam = searchParams.get("bolum");
 
-  const view: WorkspaceView = useMemo(() => {
-    if (bolumParam === "tahsilat" || bolumParam === "panel" || bolumParam === "sporcu") {
-      return bolumParam;
-    }
-    return sporcu || paket || tur ? "tahsilat" : "panel";
-  }, [bolumParam, sporcu, paket, tur]);
+  const view: HubWorkspaceView = useMemo(
+    () => resolveHubView({ bolum: bolumParam }),
+    [bolumParam]
+  );
+
+  const tahsilatDrawerRequested = bolumParam === "tahsilat" || Boolean(sporcu || paket || tur);
 
   const switchView = useCallback(
-    (target: WorkspaceView) => {
+    (target: HubWorkspaceView, preset?: "gecmis") => {
       const next = new URLSearchParams(searchParams.toString());
-      if (target === "panel") {
+      if (target === "ozet") {
         next.delete("bolum");
-        next.delete("sporcu");
-        next.delete("paket");
-        next.delete("tur");
-      } else if (target === "tahsilat") {
-        next.set("bolum", "tahsilat");
       } else {
-        next.set("bolum", "sporcu");
-        next.delete("sporcu");
-        next.delete("paket");
-        next.delete("tur");
+        next.set("bolum", target);
       }
+      if (preset === "gecmis" && target === "tahsilatlar") next.set("durum", "gecmis");
+      else next.delete("durum");
+      next.delete("sporcu");
+      next.delete("paket");
+      next.delete("tur");
       const qs = next.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
@@ -71,9 +82,11 @@ function MuhasebeFinansContent() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tahsilatLoading, setTahsilatLoading] = useState(false);
   const [formResetKey, setFormResetKey] = useState(0);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [tahsilatOpen, setTahsilatOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const runFetch = useCallback(async () => {
+  const runFetchAthletes = useCallback(async () => {
     setTahsilatLoading(true);
     const res = await loadAccountingFinanceDashboard({
       orgId: orgFromUrl,
@@ -93,128 +106,154 @@ function MuhasebeFinansContent() {
     setTahsilatLoading(false);
   }, [orgFromUrl]);
 
+  const openTahsilatDrawer = useCallback(() => {
+    setFormResetKey((k) => k + 1);
+    setTahsilatOpen(true);
+    void runFetchAthletes();
+  }, [runFetchAthletes]);
+
   useEffect(() => {
-    if (view !== "tahsilat") return;
-    // runFetch dış sistem (Supabase action) ile senkronize olur ve sonuca göre
-    // state set eder; effect içinde setState çağrısı kaçınılmaz. Cascading
-    // render uyarısını burada bilerek bastırıyoruz.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void runFetch();
-  }, [view, runFetch]);
+    if (!tahsilatDrawerRequested) return;
+    openTahsilatDrawer();
+    // Yalnızca URL ile drawer istendiğinde aç (deep link / hızlı aksiyon)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tahsilatDrawerRequested]);
+
+  const closeTahsilatDrawer = useCallback(() => {
+    if (sheetBusy) return;
+    setTahsilatOpen(false);
+    if (tahsilatDrawerRequested) {
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("bolum");
+      next.delete("sporcu");
+      next.delete("paket");
+      next.delete("tur");
+      const qs = next.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, [sheetBusy, tahsilatDrawerRequested, searchParams, pathname, router]);
 
   const tabBaseClass =
-    "min-h-10 inline-flex items-center justify-center rounded-xl px-4 text-[10px] font-black uppercase tracking-wide transition-colors";
+    "min-h-10 inline-flex items-center justify-center rounded-xl px-3 text-[10px] font-black uppercase tracking-wide transition-colors sm:px-4";
   const tabActiveClass = "bg-emerald-500 text-black shadow-md shadow-emerald-500/15";
   const tabIdleClass = "border border-white/10 bg-black/30 text-gray-300 hover:bg-white/5";
 
-  const scopeBadge =
-    view === "panel"
-      ? { label: "Bu dönem", tone: "border-emerald-500/35 bg-emerald-500/10 text-emerald-200", hint: "Panel KPI'ları yalnızca seçili ay/aralığı kapsar." }
-      : view === "sporcu"
-        ? { label: "Tüm zaman", tone: "border-amber-500/35 bg-amber-500/10 text-amber-200", hint: "Sporcu kartları toplam borcu / tüm zaman ödemesini gösterir." }
-        : { label: "Yeni kayıt", tone: "border-cyan-500/35 bg-cyan-500/10 text-cyan-200", hint: "Form gönderildiğinde Panel ve Sporcu sekmeleri otomatik tazelenir." };
+  const scope = scopeForView(view);
 
   return (
-    <div className="ui-page-loose space-y-5 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
+    <div className="ui-page-loose space-y-5 pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
       <header className="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#121215] p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="ui-h1">
-            Muhasebe &amp; <span className="text-green-500">Finans</span>
+            Tahsilat <span className="text-green-500">Merkezi</span>
           </h1>
           <p className="mt-1 text-xs font-semibold text-gray-400">
-            Panel raporları ve yeni tahsilat girişini tek workspace üzerinden yönetin.
+            Muhasebe, alacak takibi ve sporcu ödemelerini tek workspace üzerinden yönetin.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-1">
-              <button
-                type="button"
-                onClick={() => switchView("panel")}
-                aria-pressed={view === "panel"}
-                className={`${tabBaseClass} ${view === "panel" ? tabActiveClass : tabIdleClass}`}
-              >
-                Panel
-              </button>
-              <button
-                type="button"
-                onClick={() => switchView("sporcu")}
-                aria-pressed={view === "sporcu"}
-                className={`${tabBaseClass} ${view === "sporcu" ? tabActiveClass : tabIdleClass}`}
-              >
-                Sporcu ödemeleri
-              </button>
-              <button
-                type="button"
-                onClick={() => switchView("tahsilat")}
-                aria-pressed={view === "tahsilat"}
-                className={`${tabBaseClass} ${view === "tahsilat" ? tabActiveClass : tabIdleClass}`}
-              >
-                Yeni tahsilat
-              </button>
+            <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-black/30 p-1">
+              {HUB_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => switchView(tab)}
+                  aria-pressed={view === tab}
+                  className={`${tabBaseClass} ${view === tab ? tabActiveClass : tabIdleClass}`}
+                >
+                  {HUB_TAB_LABELS[tab]}
+                </button>
+              ))}
             </div>
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${scopeBadge.tone}`}
-              title={scopeBadge.hint}
-            >
-              {scopeBadge.label}
-            </span>
+            <FinanceScopeChip scope={scope} />
           </div>
-          <p className="mt-2 text-[11px] font-semibold text-gray-500" role="note">
-            {scopeBadge.hint}
-          </p>
+          <div className="mt-2">
+            <FinanceScopeHint scope={scope} />
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={openTahsilatDrawer}
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 self-start rounded-xl bg-emerald-500 px-4 text-[10px] font-black uppercase tracking-wide text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-400"
+        >
+          <Plus size={14} aria-hidden />
+          Tahsilat kaydet
+        </button>
       </header>
 
-      {view === "panel" ? (
-        <MuhasebeFinansPage embedded />
-      ) : view === "sporcu" ? (
-        <FinansYonetimi embedded />
-      ) : (
-        <>
-          {feedback ? (
-            <Notification
-              message={feedback.message}
-              variant={feedback.type === "success" ? "success" : "error"}
-            />
-          ) : null}
+      {feedback ? (
+        <Notification message={feedback.message} variant={feedback.type === "success" ? "success" : "error"} />
+      ) : null}
 
-          {loadError && !snapshot ? (
-            <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3">
-              <Notification message={loadError} variant="error" />
-              <p className="mt-2 text-[11px] font-semibold text-red-200/90">
-                Super admin iseniz bağlantıda <span className="font-mono text-white">?org=ORG_UUID</span> kullanın.
-              </p>
-            </div>
-          ) : null}
+      {view === "ozet" ? (
+        <MuhasebeOverviewSection
+          orgId={orgFromUrl}
+          onOpenTahsilat={openTahsilatDrawer}
+          onNavigateSection={switchView}
+        />
+      ) : null}
 
-          {tahsilatLoading && !snapshot ? (
-            <div className="flex min-h-[35dvh] items-center justify-center text-green-500">
-              <Loader2 className="size-10 animate-spin" aria-hidden />
-            </div>
-          ) : (
-            <section className="rounded-xl border border-white/10 bg-[#121215] p-5 sm:p-6">
-              <h2 className="text-sm font-black uppercase text-white">Yeni tahsilat</h2>
-              <p className="mt-0.5 text-[10px] font-semibold text-gray-500">
-                Sporcu ödemeleri veya özel ders paketinden geldiyseniz alanlar önceden seçilir.
-              </p>
-              <div className="mt-5">
-                <CollectionPaymentForm
-                  organizationIdFromUrl={orgFromUrl}
-                  athletes={snapshot?.options.athletes ?? []}
-                  resetKey={formResetKey}
-                  initialPrefill={initialPrefill}
-                  layout="page"
-                  onError={(message) => setFeedback({ type: "error", message })}
-                  onSuccess={async () => {
-                    setFeedback({ type: "success", message: "Tahsilat kaydı başarıyla eklendi." });
-                    await runFetch();
-                    setFormResetKey((k) => k + 1);
-                  }}
-                />
-              </div>
-            </section>
-          )}
-        </>
-      )}
+      {view === "tahsilatlar" ? (
+        <MuhasebeFinansPanel
+          key={`tahsilatlar-${searchParams.get("durum") || "all"}`}
+          embedded
+          forcedView="genel"
+          hideViewTabs
+          hidePaymentCta
+          initialPaymentStatus={searchParams.get("durum") === "gecmis" ? "bekliyor" : undefined}
+        />
+      ) : null}
+
+      {view === "alacaklar" ? (
+        <MuhasebeFinansPanel embedded forcedView="alacak" hideViewTabs hidePaymentCta />
+      ) : null}
+
+      {view === "sporcular" ? <FinansYonetimi embedded /> : null}
+
+      {view === "koclar" ? (
+        <MuhasebeFinansPanel embedded forcedView="koclar" hideViewTabs hidePaymentCta />
+      ) : null}
+
+      {loadError && tahsilatOpen && !snapshot ? (
+        <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3">
+          <Notification message={loadError} variant="error" />
+        </div>
+      ) : null}
+
+      {tahsilatLoading && tahsilatOpen && !snapshot ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <Loader2 className="size-10 animate-spin text-emerald-400" aria-hidden />
+        </div>
+      ) : null}
+
+      <TahsilatRecordSheet
+        open={tahsilatOpen}
+        organizationIdFromUrl={orgFromUrl}
+        athletes={snapshot?.options.athletes ?? []}
+        resetKey={formResetKey}
+        initialPrefill={initialPrefill}
+        busy={sheetBusy}
+        onBusyChange={setSheetBusy}
+        onClose={closeTahsilatDrawer}
+        onError={(message) => setFeedback({ type: "error", message })}
+        onSuccess={async () => {
+          setFeedback({ type: "success", message: "Tahsilat kaydı başarıyla eklendi." });
+          await runFetchAthletes();
+          setFormResetKey((k) => k + 1);
+          closeTahsilatDrawer();
+        }}
+      />
+
+      {!tahsilatOpen ? (
+        <button
+          type="button"
+          onClick={openTahsilatDrawer}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-4 z-30 inline-flex min-h-12 items-center gap-2 rounded-full bg-emerald-500 px-5 text-[10px] font-black uppercase tracking-wide text-black shadow-xl shadow-emerald-500/25 hover:bg-emerald-400 lg:hidden"
+          aria-label="Tahsilat kaydet"
+        >
+          <Plus size={16} aria-hidden />
+          Tahsilat
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -228,7 +267,7 @@ export default function TahsilatMerkeziPage() {
         </div>
       }
     >
-      <MuhasebeFinansContent />
+      <TahsilatMerkeziContent />
     </Suspense>
   );
 }

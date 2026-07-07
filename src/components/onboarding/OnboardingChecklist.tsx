@@ -127,7 +127,7 @@ const STEPS: ReadonlyArray<StepDef> = [
     title: "İlk tahsilatı kaydet",
     description: "Aylık aidat veya özel ders ödemesi ekleyerek finansı çalıştır.",
     ctaLabel: "Tahsilat ekle",
-    ctaHref: "/muhasebe-finans",
+    ctaHref: "/tahsilat-merkezi",
     isComplete: (p) => p.totalPayments > 0,
   },
 ];

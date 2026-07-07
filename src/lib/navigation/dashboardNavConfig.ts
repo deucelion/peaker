@@ -104,7 +104,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
   {
     href: PATHS.tahsilatMerkezi,
     icon: "CreditCard",
-    label: "Muhasebe & Finans",
+    label: "Tahsilat Merkezi",
     section: "management",
     roles: ["admin"],
     activeMatch: "prefix",

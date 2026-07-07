@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MutableRefObject } from "react";
 import Link from "next/link";
-import { Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
+import { FinanceExportMenu } from "@/components/finance/FinanceExportMenu";
+import { ReceivableAgingBuckets } from "@/components/finance/ReceivableAgingBuckets";
 import type { ReceivableDashboardFilters } from "@/lib/actions/receivableDashboardActions";
 import { createFinanceContactNote } from "@/lib/actions/financeNoteActions";
 import { formatCurrencyTRY } from "@/lib/privateLessons/packageMath";
@@ -410,35 +412,18 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
           >
             Sıfırla
           </button>
-          <button
-            type="button"
-            onClick={() => runExport("overdue")}
-            disabled={csv.exporting}
-            className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase text-gray-300"
-          >
-            <Download size={12} />
-            CSV · Gecikmiş
-          </button>
-          <button
-            type="button"
-            onClick={() => runExport("athletes")}
-            disabled={csv.exporting}
-            className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase text-gray-300"
-          >
-            <Download size={12} />
-            CSV · Sporcu borcu
-          </button>
-          <button
-            type="button"
-            onClick={() => runExport("packages")}
-            disabled={csv.exporting}
-            className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase text-gray-300"
-          >
-            <Download size={12} />
-            CSV · Paket borcu
-          </button>
+          <FinanceExportMenu
+            exporting={csv.exporting}
+            items={[
+              { id: "overdue", label: "Gecikmiş alacaklar", description: "Vadesi geçen paketler", onSelect: () => runExport("overdue") },
+              { id: "athletes", label: "Sporcu borcu", description: "Borçlu sporcu özeti", onSelect: () => runExport("athletes") },
+              { id: "packages", label: "Paket borcu", description: "Tüm paket satırları", onSelect: () => runExport("packages") },
+            ]}
+          />
         </div>
       </section>
+
+      <ReceivableAgingBuckets packageRows={dash.snapshot?.packageRows ?? []} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border border-white/10 bg-[#121215] p-4">

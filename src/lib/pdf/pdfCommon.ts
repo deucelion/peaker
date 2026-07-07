@@ -1,5 +1,4 @@
 import type { jsPDF } from "jspdf";
-import { ensurePdfExtension } from "@/lib/pdf/pdfFilename";
 
 /** jsPDF Helvetica icin ASCII fallback. */
 export function pdfSafeTr(text: string): string {
@@ -140,17 +139,11 @@ export function pdfToBytes(doc: jsPDF): Uint8Array {
   return new Uint8Array(buf);
 }
 
-export function downloadPdfBytes(bytes: Uint8Array, filename: string): void {
-  const blob = new Blob([Uint8Array.from(bytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = ensurePdfExtension(filename);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+export {
+  downloadPdfBytes,
+  pdfDownloadUserMessage,
+  type PdfDownloadOutcome,
+} from "@/lib/pdf/pdfDownload";
 
 export type ChartPoint = { x: number; y: number };
 

@@ -8,7 +8,7 @@ import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
 import { prepareAthletePerformancePdf, hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
 import { PerformancePdfNoDataError } from "@/lib/pdf/performancePdf";
-import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
 
 type Props = {
   athleteName: string;
@@ -61,8 +61,8 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
       const { bytes, filename } = await runPdfTask(() =>
         prepareAthletePerformancePdf(athleteName, loads, dateFrom, dateTo)
       );
-      downloadPdfBytes(bytes, filename);
-      setMessage("Analiz PDF indirildi.");
+      const outcome = await downloadPdfBytes(bytes, filename);
+      setMessage(pdfDownloadUserMessage(outcome, "Analiz PDF indirildi."));
     } catch (err) {
       if (err instanceof PerformancePdfNoDataError) {
         setMessage(err.message);

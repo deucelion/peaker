@@ -20,7 +20,7 @@ export function MuhasebeKpiGridGeneral({ kpis }: { kpis: Kpis }) {
           Bu dönem
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <article
           className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
           title="Yalnızca seçili dönemde tahsil edilen tutar"
@@ -70,7 +70,7 @@ export function MuhasebeKpiGridCoaches({ kpis }: { kpis: Kpis }) {
   return (
     <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
       <p className="mb-3 text-[10px] font-black uppercase tracking-wide text-gray-500">Özet</p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <article className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
           <p className="text-[9px] font-black uppercase text-gray-400">Toplam ders</p>
           <p className="mt-0.5 text-lg font-black tabular-nums text-gray-100">

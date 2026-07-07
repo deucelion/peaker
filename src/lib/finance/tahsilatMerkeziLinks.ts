@@ -1,5 +1,6 @@
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import { isUuid } from "@/lib/validation/uuid";
+import { hubSectionHref, type HubWorkspaceView } from "@/lib/finance/hubViews";
 
 export type TahsilatMerkeziPrefill = {
   profileId: string;
@@ -11,10 +12,23 @@ export type TahsilatMerkeziPrefill = {
 /** Sporcu / paket bağlamından Tahsilat Merkezi'ne derin bağlantı (super_admin için `org` önerilir). */
 export function hrefTahsilatMerkezi(p: TahsilatMerkeziPrefill): string {
   const q = new URLSearchParams();
+  q.set("bolum", "tahsilat");
   q.set("sporcu", p.profileId);
   if (p.packageId) q.set("paket", p.packageId);
   if (p.paymentKind) q.set("tur", p.paymentKind);
   if (p.organizationId && isUuid(p.organizationId)) q.set("org", p.organizationId);
-  const s = q.toString();
-  return s ? `${PATHS.tahsilatMerkezi}?${s}` : PATHS.tahsilatMerkezi;
+  return `${PATHS.tahsilatMerkezi}?${q.toString()}`;
+}
+
+/** Tahsilat Merkezi hub sekmesi */
+export function hrefTahsilatHubSection(section: HubWorkspaceView, orgId?: string | null): string {
+  return hubSectionHref(section, orgId);
+}
+
+/** Hızlı tahsilat kaydı (drawer açılır) */
+export function hrefTahsilatKaydet(orgId?: string | null): string {
+  const q = new URLSearchParams();
+  q.set("bolum", "tahsilat");
+  if (orgId?.trim()) q.set("org", orgId.trim());
+  return `${PATHS.tahsilatMerkezi}?${q.toString()}`;
 }

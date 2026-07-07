@@ -24,6 +24,7 @@ import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
+import { hrefTahsilatKaydet } from "@/lib/finance/tahsilatMerkeziLinks";
 import type { CoachPermissions, AthletePermissions } from "@/lib/types";
 import { PeakerDebugInstaller } from "@/components/dev/PeakerDebugInstaller";
 import { DashboardOfflineShell } from "@/components/offline";
@@ -227,7 +228,7 @@ export default function DashboardLayout({
                 { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" },
                 { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
                 { label: "Sporcu Ekle", href: "/sporcular/yeni" },
-                { label: "Tahsilat Kaydet", href: "/finans" },
+                { label: "Tahsilat Kaydet", href: hrefTahsilatKaydet() },
                 { label: "Saha Testi Girişi", href: "/saha-testleri" },
               ]
             : []),
@@ -245,7 +246,7 @@ export default function DashboardLayout({
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_view_reports
             ? [
-                { label: "Tahsilat Kaydet", href: "/finans" },
+                { label: "Tahsilat Kaydet", href: PATHS.finans },
                 { label: "Saha Testi Girişi", href: "/saha-testleri" },
               ]
             : []),
@@ -262,6 +263,10 @@ export default function DashboardLayout({
   }
 
   const closeMobileSidebar = () => setIsSidebarOpen(false);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[#09090b]">
@@ -280,8 +285,8 @@ export default function DashboardLayout({
         className={`
         fixed left-0 z-40 w-64 shrink-0 border-r border-white/5 bg-[#0b0b0d] flex flex-col transition-transform duration-500
         top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)]
-        lg:relative lg:top-auto lg:bottom-auto lg:translate-x-0 lg:self-stretch
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        lg:relative lg:top-auto lg:bottom-auto lg:translate-x-0 lg:self-stretch lg:pointer-events-auto
+        ${isSidebarOpen ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none lg:pointer-events-auto"}
       `}
       >
         <div className="flex items-center gap-2.5 p-6 mb-4">
@@ -363,8 +368,8 @@ export default function DashboardLayout({
       </aside>
 
       {/* CONTENT AREA - Ölçüler Eski Kompakt Haline Getirildi */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
-        <header className="min-h-16 border-b border-white/5 bg-[#09090b]/95 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 shrink-0 z-20">
+      <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
+        <header className="relative z-50 flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 backdrop-blur-md sm:px-6">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}

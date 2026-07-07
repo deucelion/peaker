@@ -20,7 +20,7 @@ import {
   filterChangedComparisonRows,
   type FieldTestComparisonRow,
 } from "@/lib/pdf/fieldTestComparisonPdf";
-import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
 import type { TestDefinitionRow } from "@/types/domain";
 
 type Props = {
@@ -124,8 +124,8 @@ export function AthleteFieldTestPdfExport({
           generalNote: note,
         })
       );
-      downloadPdfBytes(bytes, fieldTestSingleDatePdfFilename(athleteName, singleDate));
-      setMessage("Tek gün PDF indirildi.");
+      const outcome = await downloadPdfBytes(bytes, fieldTestSingleDatePdfFilename(athleteName, singleDate));
+      setMessage(pdfDownloadUserMessage(outcome, "Tek gün PDF indirildi."));
     } catch {
       setMessage("PDF oluşturulamadı.");
     } finally {
@@ -212,8 +212,11 @@ export function AthleteFieldTestPdfExport({
           rows,
         })
       );
-      downloadPdfBytes(bytes, fieldTestComparisonPdfFilename(athleteName, compareFrom, compareTo));
-      setMessage("Kıyas PDF indirildi.");
+      const outcome = await downloadPdfBytes(
+        bytes,
+        fieldTestComparisonPdfFilename(athleteName, compareFrom, compareTo)
+      );
+      setMessage(pdfDownloadUserMessage(outcome, "Kıyas PDF indirildi."));
     } catch {
       setMessage("Kıyas PDF oluşturulamadı.");
     } finally {

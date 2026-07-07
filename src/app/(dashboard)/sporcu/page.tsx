@@ -200,24 +200,42 @@ export default function SporcuPanel() {
       <AthleteCard padding="sm">
         <h3 className="text-sm font-black italic uppercase tracking-tight text-white">Bugün Öncelik</h3>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <Link
-            href={permissions.can_view_morning_report ? "/sporcu/sabah-raporu" : "/sporcu"}
-            className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
-          >
-            {permissions.can_view_morning_report ? "Önce sabah raporunu gir" : "Bugün profilini kontrol et"}
-          </Link>
-          <Link
-            href="/sporcu/finans"
-            className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${financePresentation.badgeClass}`}
-          >
-            {financePresentation.label}
-          </Link>
-          <Link
-            href={permissions.can_view_programs ? "/programlarim" : "/sporcu"}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
-          >
-            {permissions.can_view_programs ? "Günün programını aç" : "Bugün için odak notu yok"}
-          </Link>
+          {permissions.can_view_morning_report ? (
+            <Link
+              href="/sporcu/sabah-raporu"
+              className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+            >
+              Önce sabah raporunu gir
+            </Link>
+          ) : (
+            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+              Sabah raporu kapalı
+            </span>
+          )}
+          {permissions.can_view_financial_status ? (
+            <Link
+              href="/sporcu/finans"
+              className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${financePresentation.badgeClass}`}
+            >
+              {financePresentation.label}
+            </Link>
+          ) : (
+            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+              Finans görünümü kapalı
+            </span>
+          )}
+          {permissions.can_view_programs ? (
+            <Link
+              href="/programlarim"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+            >
+              Günün programını aç
+            </Link>
+          ) : (
+            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+              Program erişimi kapalı
+            </span>
+          )}
         </div>
       </AthleteCard>
 
@@ -290,7 +308,9 @@ export default function SporcuPanel() {
               action={
                 permissions.can_view_programs
                   ? { label: "Programlarım", href: "/programlarim" }
-                  : { label: "Takvim", href: "/takvim" }
+                  : permissions.can_view_calendar
+                    ? { label: "Takvim", href: "/takvim" }
+                    : undefined
               }
             />
           ) : (

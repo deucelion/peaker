@@ -67,7 +67,7 @@ import {
 } from "@/lib/pdf/performancePdf";
 import { hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
 import { isValidPdfChartImage } from "@/lib/pdf/pdfFormat";
-import { downloadPdfBytes, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
 import { captureSvgChartPng } from "@/lib/pdf/chartSnapshot";
 import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
 import {
@@ -600,8 +600,11 @@ export default function PerformanceAnalytics() {
                     },
                   })
                 );
-                downloadPdfBytes(bytes, performanceAnalysisPdfFilename(athleteName));
-                setExportFeedback({ tone: "ok", text: "Analiz PDF indirildi." });
+                const outcome = await downloadPdfBytes(bytes, performanceAnalysisPdfFilename(athleteName));
+                setExportFeedback({
+                  tone: outcome === "cancelled" ? "warn" : "ok",
+                  text: pdfDownloadUserMessage(outcome, "Analiz PDF indirildi."),
+                });
               } catch (err) {
                 if (err instanceof PerformancePdfNoDataError) {
                   setExportFeedback({ tone: "err", text: err.message });
