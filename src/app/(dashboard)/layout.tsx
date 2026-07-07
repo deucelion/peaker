@@ -402,9 +402,7 @@ export default function DashboardLayout({
                       <button
                         key={action.href}
                         type="button"
-                        onClick={() => {
-                          window.location.assign(action.href);
-                        }}
+                        onClick={() => router.push(action.href)}
                         className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[11px] font-bold text-gray-300 hover:bg-white/5 hover:text-white"
                       >
                         {action.label}
@@ -425,9 +423,7 @@ export default function DashboardLayout({
             </div>
             <button
               type="button"
-              onClick={() => {
-                window.location.assign("/bildirimler");
-              }}
+              onClick={() => router.push("/bildirimler")}
               className="min-h-11 min-w-11 inline-flex items-center justify-center bg-white/5 rounded-lg border border-white/5 text-gray-500 relative touch-manipulation shrink-0"
               aria-label="Bildirimler"
             >

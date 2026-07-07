@@ -8,15 +8,15 @@ import {
   safeRedirectPath,
 } from "@/lib/auth/routeRedirect";
 import {
-  denyAllCoachPermissions,
   isRouteBlockedForCoach,
-  normalizeCoachPermissions,
 } from "@/lib/auth/coachPermissions";
 import {
-  denyAllAthletePermissions,
   isRouteBlockedForAthlete,
-  normalizeAthletePermissions,
 } from "@/lib/auth/athletePermissions";
+import {
+  loadAthletePermissionsForProxy,
+  loadCoachPermissionsForProxy,
+} from "@/lib/auth/proxyPermissionReads";
 
 /**
  * Yalnızca oturum (cookie + Supabase session) kontrolü.
@@ -145,22 +145,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (role === "coach") {
-      // FAZ 29: izin okuması başarısız olursa fail-closed — izin gerektiren
-      // rotalar reddedilir, serbest rotalar etkilenmez.
-      let permissions = denyAllCoachPermissions();
-      try {
-        const permsRes = await supabase
-          .from("coach_permissions")
-          .select("can_create_lessons, can_edit_lessons, can_view_all_organization_lessons, can_view_all_athletes, can_add_athletes_to_lessons, can_take_attendance, can_view_reports, can_manage_training_notes, can_manage_athlete_profiles, can_manage_teams")
-          .eq("coach_id", user.id)
-          .eq("organization_id", organizationId)
-          .maybeSingle();
-        if (!permsRes.error) {
-          permissions = normalizeCoachPermissions((permsRes.data as Record<string, boolean> | null) || undefined);
-        }
-      } catch {
-        // fail-closed: deny-all izin seti ile devam
-      }
+      const permissions = await loadCoachPermissionsForProxy(user.id, organizationId);
       if (isRouteBlockedForCoach(pathname, permissions)) {
         if (isTransportRequest) return jsonError(403, "forbidden");
         const coachFallback = getDefaultRouteForRole(role);
@@ -178,21 +163,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (role === "sporcu") {
-      // FAZ 29: izin okuması başarısız olursa fail-closed.
-      let permissions = denyAllAthletePermissions();
-      try {
-        const permsRes = await supabase
-          .from("athlete_permissions")
-          .select("can_view_morning_report, can_view_programs, can_view_calendar, can_view_notifications, can_view_rpe_entry, can_view_development_profile, can_view_financial_status, can_view_performance_metrics, can_view_wellness_metrics, can_view_skill_radar")
-          .eq("athlete_id", user.id)
-          .eq("organization_id", organizationId)
-          .maybeSingle();
-        if (!permsRes.error) {
-          permissions = normalizeAthletePermissions((permsRes.data as Record<string, boolean> | null) || undefined);
-        }
-      } catch {
-        // fail-closed: deny-all izin seti ile devam
-      }
+      const permissions = await loadAthletePermissionsForProxy(user.id, organizationId);
       if (isRouteBlockedForAthlete(pathname, permissions)) {
         const athleteFallback = getDefaultRouteForRole(role);
         const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);

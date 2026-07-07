@@ -1,26 +1,18 @@
 "use client";
 
-import type { AnchorHTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
+import type { ComponentProps, ReactNode } from "react";
 
-type HardNavLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
+type HardNavLinkProps = Omit<ComponentProps<typeof Link>, "href" | "children"> & {
   href: string;
   children: ReactNode;
 };
 
-/**
- * Native anchor navigation for shell links. Avoids App Router soft-nav edge cases
- * on mobile/PWA where client transitions can fail silently.
- */
-export function HardNavLink({ href, children, onClick, ...rest }: HardNavLinkProps) {
+/** Dashboard shell links — client navigation without full document reload. */
+export function HardNavLink({ href, children, prefetch = false, ...rest }: HardNavLinkProps) {
   return (
-    <a
-      href={href}
-      {...rest}
-      onClick={(event) => {
-        onClick?.(event);
-      }}
-    >
+    <Link href={href} prefetch={prefetch} {...rest}>
       {children}
-    </a>
+    </Link>
   );
 }
