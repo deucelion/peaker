@@ -28,7 +28,7 @@ import {
 } from "@/components/athlete";
 import { CompactActionCard, CompactFinanceCard, CompactTimelineItem } from "@/components/compact";
 import { AthleteMobileQuickStrip } from "@/components/mobile/AthleteMobileQuickStrip";
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 import type { ProfileBasic, PaymentRow } from "@/types/domain";
 
 type AthleteSelfProfile = ProfileBasic & { email?: string | null };
@@ -202,36 +202,36 @@ export default function SporcuPanel() {
         <h3 className="text-sm font-black italic uppercase tracking-tight text-white">Bugün Öncelik</h3>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           {permissions.can_view_morning_report ? (
-            <Link
+            <HardNavLink
               href="/sporcu/sabah-raporu"
               className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
             >
               Önce sabah raporunu gir
-            </Link>
+            </HardNavLink>
           ) : (
             <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Sabah raporu kapalı
             </span>
           )}
           {permissions.can_view_financial_status ? (
-            <Link
+            <HardNavLink
               href="/sporcu/finans"
               className={`rounded-xl border px-4 py-3 text-[10px] font-black uppercase touch-manipulation ${financePresentation.badgeClass}`}
             >
               {financePresentation.label}
-            </Link>
+            </HardNavLink>
           ) : (
             <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Finans görünümü kapalı
             </span>
           )}
           {permissions.can_view_programs ? (
-            <Link
+            <HardNavLink
               href="/programlarim"
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
             >
               Günün programını aç
-            </Link>
+            </HardNavLink>
           ) : (
             <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Program erişimi kapalı

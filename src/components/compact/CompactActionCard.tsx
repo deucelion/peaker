@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 import type { LucideIcon } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 
@@ -29,7 +29,7 @@ export function CompactActionCard({
   tone?: Tone;
 }) {
   return (
-    <Link
+    <HardNavLink
       href={href}
       className={`group flex min-h-11 touch-manipulation items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${TONE[tone]}`}
     >
@@ -42,6 +42,6 @@ export function CompactActionCard({
         </div>
       </div>
       <ChevronRight size={14} className="shrink-0 opacity-50 group-active:opacity-100" aria-hidden />
-    </Link>
+    </HardNavLink>
   );
 }

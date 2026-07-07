@@ -61,7 +61,7 @@ export function AthleteBodyMeasurementSection({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [view, setView] = useState<"grafik" | "tablo">("grafik");
+  const [view, setView] = useState<"grafik" | "tablo">("tablo");
 
   const chartData = useMemo(
     () =>

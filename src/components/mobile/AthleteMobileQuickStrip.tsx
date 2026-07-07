@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 import { ChevronDown, Moon, Zap, Calendar, Package, Bell, FileText, MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { AthletePermissions } from "@/lib/types";
@@ -60,7 +60,7 @@ export function AthleteMobileQuickStrip({ permissions, completion }: AthleteMobi
         className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-[#121215] p-2"
       >
         {primary.map(({ href, label, icon: Icon, done }) => (
-          <Link
+          <HardNavLink
             key={href}
             href={href}
             className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 touch-manipulation active:bg-[#7c3aed]/10 ${
@@ -69,7 +69,7 @@ export function AthleteMobileQuickStrip({ permissions, completion }: AthleteMobi
           >
             <Icon size={18} className={done ? "text-emerald-400" : "text-[#7c3aed]"} aria-hidden />
             <span className={`text-[8px] font-black uppercase ${done ? "text-emerald-300" : "text-gray-400"}`}>{label}</span>
-          </Link>
+          </HardNavLink>
         ))}
       </nav>
 
@@ -87,14 +87,14 @@ export function AthleteMobileQuickStrip({ permissions, completion }: AthleteMobi
           {sheetOpen ? (
             <nav className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-[#121215] p-2" aria-label="Ek hızlı erişim">
               {overflow.map(({ href, label, icon: Icon }) => (
-                <Link
+                <HardNavLink
                   key={href}
                   href={href}
                   className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-2 active:bg-[#7c3aed]/10"
                 >
                   <Icon size={16} className="text-[#7c3aed]" aria-hidden />
                   <span className="text-[8px] font-black uppercase text-gray-400">{label}</span>
-                </Link>
+                </HardNavLink>
               ))}
             </nav>
           ) : null}

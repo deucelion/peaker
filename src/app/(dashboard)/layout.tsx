@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link"; 
 import { usePathname, useRouter } from "next/navigation";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 import { getSafeRole, type UserRole } from "@/lib/auth/roleMatrix";
 import {
   DASHBOARD_NAV_ITEMS,
@@ -363,7 +363,7 @@ export default function DashboardLayout({
           />
           <aside
             id="dashboard-sidebar"
-            className="fixed left-0 top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)] z-[110] flex w-64 flex-col border-r border-white/5 bg-[#0b0b0d] lg:hidden"
+            className="fixed left-0 top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)] z-[110] flex w-64 flex-col border-r border-white/5 bg-[#0b0b0d] lg:hidden dashboard-shell-chrome"
           >
             {sidebarBody(closeMobileSidebar)}
           </aside>
@@ -371,12 +371,12 @@ export default function DashboardLayout({
       ) : null}
 
       <div className="flex min-h-[100dvh] bg-[#09090b]">
-        <aside className="relative z-30 hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
+        <aside className="dashboard-shell-chrome hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
           {sidebarBody()}
         </aside>
 
         <main className="relative z-0 flex min-w-0 flex-1 flex-col bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
-        <header className="relative z-30 flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
+        <header className="dashboard-shell-chrome flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -402,7 +402,9 @@ export default function DashboardLayout({
                       <button
                         key={action.href}
                         type="button"
-                        onClick={() => router.push(action.href)}
+                        onClick={() => {
+                          window.location.assign(action.href);
+                        }}
                         className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[11px] font-bold text-gray-300 hover:bg-white/5 hover:text-white"
                       >
                         {action.label}
@@ -423,7 +425,9 @@ export default function DashboardLayout({
             </div>
             <button
               type="button"
-              onClick={() => router.push("/bildirimler")}
+              onClick={() => {
+                window.location.assign("/bildirimler");
+              }}
               className="min-h-11 min-w-11 inline-flex items-center justify-center bg-white/5 rounded-lg border border-white/5 text-gray-500 relative touch-manipulation shrink-0"
               aria-label="Bildirimler"
             >
@@ -440,7 +444,7 @@ export default function DashboardLayout({
         </header>
 
         {/* ANA İÇERİK - children'ın kendi padding yapısına saygı duyan kapsayıcı */}
-        <div className="relative z-0 isolate flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        <div className="relative z-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto">
             <DashboardOfflineShell organizationId={organizationId} userId={userId} />
             {isCoachOrAdmin && !permissionsLoading ? (
@@ -481,13 +485,11 @@ function NavItem({
   };
 
   return (
-    <Link href={href} className="block" onClick={onNavigate}>
-      <div className={`${baseStyles} ${variants[variant]}`}>
-        <span className={`${active ? 'text-[#7c3aed]' : 'text-gray-500 sm:group-hover:text-[#7c3aed]'} transition-all`}>
-          {icon}
-        </span>
-        {label}
-      </div>
-    </Link>
+    <HardNavLink href={href} className={`block ${baseStyles} ${variants[variant]}`} onClick={onNavigate}>
+      <span className={`${active ? 'text-[#7c3aed]' : 'text-gray-500 sm:group-hover:text-[#7c3aed]'} transition-all`}>
+        {icon}
+      </span>
+      {label}
+    </HardNavLink>
   );
 }

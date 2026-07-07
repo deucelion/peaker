@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 import type { LucideIcon } from "lucide-react";
 
 type Tone = "green" | "yellow" | "orange" | "rose" | "neutral";
@@ -67,9 +67,9 @@ export function CompactFinanceCard({
 
   if (href) {
     return (
-      <Link href={href} className="block touch-manipulation">
+      <HardNavLink href={href} className="block touch-manipulation">
         {body}
-      </Link>
+      </HardNavLink>
     );
   }
   return body;

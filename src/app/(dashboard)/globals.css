@@ -114,11 +114,11 @@
   .ui-chart-shell .recharts-responsive-container {
     overflow: hidden !important;
   }
-  .ui-chart-shell--passive,
-  .ui-chart-shell--passive .recharts-responsive-container,
-  .ui-chart-shell--passive .recharts-wrapper,
-  .ui-chart-shell--passive svg {
+  .ui-chart-shell--passive * {
     pointer-events: none !important;
+  }
+  .dashboard-shell-chrome {
+    @apply pointer-events-auto relative z-50;
   }
 }
 @media print {

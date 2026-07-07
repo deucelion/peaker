@@ -17,7 +17,7 @@ function supabaseStorageRemotePatterns(): NonNullable<NonNullable<NextConfig["im
 }
 
 const nextConfig: NextConfig = {
-  reactCompiler: true,
+  reactCompiler: false,
   experimental: {
     serverActions: {
       bodySizeLimit: "4mb",

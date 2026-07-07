@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 
 type AthleteEmptyStateProps = {
   icon?: LucideIcon;
@@ -35,12 +35,12 @@ export function AthleteEmptyState({
       <p className="mx-auto mt-2 max-w-md text-[11px] font-bold text-gray-500">{description}</p>
       {hint ? <p className="mx-auto mt-2 max-w-md text-[10px] font-medium text-gray-600">{hint}</p> : null}
       {action ? (
-        <Link
+        <HardNavLink
           href={action.href}
           className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
         >
           {action.label}
-        </Link>
+        </HardNavLink>
       ) : null}
     </div>
   );

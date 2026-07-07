@@ -12,11 +12,12 @@ import {
   listWellnessReportsForAthleteRadar,
   type WellnessRadarRow,
 } from "@/lib/actions/wellnessFormActions";
-import Link from "next/link";
+import { HardNavLink } from "@/components/navigation/HardNavLink";
 
 export default function PerformanceRadar() {
   const [reports, setReports] = useState<WellnessRadarRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showChart, setShowChart] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -93,19 +94,19 @@ export default function PerformanceRadar() {
         <p className="mt-2 max-w-xs text-[11px] font-bold text-gray-500">
           İyi oluş raporu girdikçe beceri radarı ve performans analizi oluşur.
         </p>
-        <Link
+        <HardNavLink
           href="/sporcu/sabah-raporu"
           className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
         >
           Sabah raporu gir
-        </Link>
+        </HardNavLink>
       </div>
     );
   }
 
   return (
-    <div className="relative h-[180px] w-full min-w-0 overflow-hidden rounded-xl border border-white/5 bg-[#121215] p-3 sm:h-[200px] sm:p-4">
-      <div className="relative z-10 mb-3 flex items-center justify-between gap-2">
+    <div className="w-full min-w-0 rounded-xl border border-white/5 bg-[#121215] p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-sm font-black uppercase italic tracking-tight text-white">
             Performans Analizi
@@ -119,32 +120,51 @@ export default function PerformanceRadar() {
         </div>
       </div>
 
-      <div className="ui-chart-shell ui-chart-shell--passive h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
-            <PolarGrid stroke="#ffffff10" strokeDasharray="3 3" />
-            <PolarAngleAxis
-              dataKey="subject"
-              tick={{
-                fill: "#6b7280",
-                fontSize: 9,
-                fontWeight: "900",
-                letterSpacing: "0.08em",
-              }}
-            />
-            <Radar
-              name="Sporcu"
-              dataKey="A"
-              stroke="#7c3aed"
-              strokeWidth={2}
-              fill="#7c3aed"
-              fillOpacity={0.28}
-              animationBegin={120}
-              animationDuration={900}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
-      </div>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {data.map((item) => (
+          <div key={item.subject} className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-center">
+            <dt className="text-[8px] font-black uppercase tracking-wide text-gray-500">{item.subject}</dt>
+            <dd className="text-lg font-black tabular-nums text-white">{item.A}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {showChart ? (
+        <div className="ui-chart-shell ui-chart-shell--passive mt-3 h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
+              <PolarGrid stroke="#ffffff10" strokeDasharray="3 3" />
+              <PolarAngleAxis
+                dataKey="subject"
+                tick={{
+                  fill: "#6b7280",
+                  fontSize: 9,
+                  fontWeight: "900",
+                  letterSpacing: "0.08em",
+                }}
+              />
+              <Radar
+                name="Sporcu"
+                dataKey="A"
+                stroke="#7c3aed"
+                strokeWidth={2}
+                fill="#7c3aed"
+                fillOpacity={0.28}
+                animationBegin={120}
+                animationDuration={900}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowChart(true)}
+          className="mt-3 min-h-10 w-full touch-manipulation rounded-xl border border-white/10 bg-white/[0.03] px-4 text-[10px] font-black uppercase text-gray-400"
+        >
+          Radar grafiğini göster
+        </button>
+      )}
     </div>
   );
 }
