@@ -262,7 +262,7 @@ export function AthleteBodyMeasurementSection({
           </table>
         </div>
       ) : (
-        <div className="h-[min(50vw,16rem)] min-h-[200px] w-full min-w-0 sm:h-[260px]">
+        <div className="ui-chart-shell ui-chart-shell--passive h-[min(50vw,16rem)] min-h-[200px] w-full min-w-0 sm:h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ left: -12, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />

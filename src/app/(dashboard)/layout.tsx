@@ -371,12 +371,12 @@ export default function DashboardLayout({
       ) : null}
 
       <div className="flex min-h-[100dvh] bg-[#09090b]">
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
+        <aside className="relative z-30 hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
           {sidebarBody()}
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
-        <header className="flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
+        <main className="relative z-0 flex min-w-0 flex-1 flex-col bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
+        <header className="relative z-30 flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -440,7 +440,7 @@ export default function DashboardLayout({
         </header>
 
         {/* ANA İÇERİK - children'ın kendi padding yapısına saygı duyan kapsayıcı */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        <div className="relative z-0 isolate flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto">
             <DashboardOfflineShell organizationId={organizationId} userId={userId} />
             {isCoachOrAdmin && !permissionsLoading ? (

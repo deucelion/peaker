@@ -106,6 +106,20 @@
   .ui-compact-card {
     @apply rounded-xl border border-white/10 bg-[#121215] p-4 sm:rounded-2xl sm:p-5;
   }
+  /* Recharts ResponsiveContainer uses a zero-size overflow:visible shell that can
+     capture clicks far outside the chart bounds — clip and ignore pointer hits. */
+  .ui-chart-shell {
+    @apply relative isolate overflow-hidden;
+  }
+  .ui-chart-shell .recharts-responsive-container {
+    overflow: hidden !important;
+  }
+  .ui-chart-shell--passive,
+  .ui-chart-shell--passive .recharts-responsive-container,
+  .ui-chart-shell--passive .recharts-wrapper,
+  .ui-chart-shell--passive svg {
+    pointer-events: none !important;
+  }
 }
 @media print {
   /* Sidebar, Header ve Navigasyon gibi gereksiz elemanları gizle */

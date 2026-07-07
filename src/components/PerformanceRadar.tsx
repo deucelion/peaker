@@ -119,7 +119,7 @@ export default function PerformanceRadar() {
         </div>
       </div>
 
-      <div className="h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
+      <div className="ui-chart-shell ui-chart-shell--passive h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
             <PolarGrid stroke="#ffffff10" strokeDasharray="3 3" />

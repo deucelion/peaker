@@ -164,7 +164,8 @@ export default function SporcuPanel() {
   }
 
   return (
-    <div className="min-w-0 space-y-5 overflow-x-hidden pb-6 animate-in fade-in duration-700 sm:space-y-6 sm:pb-10">
+    <div className="min-w-0 space-y-5 overflow-x-hidden pb-6 sm:space-y-6 sm:pb-10">
+      <div className="relative z-20 space-y-5 sm:space-y-6">
       <AthletePageHeader
         eyebrow="Sporcu paneli"
         title={
@@ -395,8 +396,9 @@ export default function SporcuPanel() {
           />
         ) : null}
       </div>
+      </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+      <div className="relative isolate z-0 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <aside className="lg:col-span-4">
           <AthleteCard className="relative flex flex-col items-center overflow-hidden shadow-lg" padding="sm">
             <div className="group relative mb-4">
@@ -486,7 +488,7 @@ export default function SporcuPanel() {
           </AthleteCard>
         </aside>
 
-        <main className="space-y-5 lg:col-span-8">
+        <div className="space-y-5 lg:col-span-8">
           {permissions.can_view_skill_radar && (
           <AthleteCard className="group shadow-lg" padding="sm">
              <div className="mb-3 flex min-w-0 items-center justify-between">
@@ -511,7 +513,7 @@ export default function SporcuPanel() {
             />
           )}
 
-        </main>
+        </div>
       </div>
     </div>
   );
