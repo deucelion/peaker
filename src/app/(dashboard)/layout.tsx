@@ -281,14 +281,18 @@ export default function DashboardLayout({
         />
       ) : null}
 
-      {/* SIDEBAR - Orijinal w-64 Genişlik ve Kompakt Padding */}
+      {/* SIDEBAR - mobilde kapalıyken DOM'dan gizlenir; tıklama engelini önler */}
       <aside
         id="dashboard-sidebar"
         className={`
-        fixed left-0 z-40 w-64 shrink-0 border-r border-white/5 bg-[#0b0b0d] flex flex-col transition-transform duration-500
+        w-64 shrink-0 border-r border-white/5 bg-[#0b0b0d] flex flex-col
+        lg:relative lg:flex lg:self-stretch
         top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)]
-        lg:relative lg:top-auto lg:bottom-auto lg:translate-x-0 lg:self-stretch lg:pointer-events-auto
-        ${isSidebarOpen ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none lg:pointer-events-auto"}
+        ${
+          isSidebarOpen
+            ? "max-lg:fixed max-lg:left-0 max-lg:z-40 max-lg:translate-x-0 max-lg:transition-transform max-lg:duration-500"
+            : "max-lg:hidden"
+        }
       `}
       >
         <div className="flex items-center gap-2.5 p-6 mb-4">
@@ -370,7 +374,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* CONTENT AREA - Ölçüler Eski Kompakt Haline Getirildi */}
-      <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
+      <main className="relative z-20 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:z-10 lg:pt-0">
         <header className="relative z-50 flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 backdrop-blur-md sm:px-6">
           <button
             type="button"
