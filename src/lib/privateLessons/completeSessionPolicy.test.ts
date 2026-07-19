@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  coachMayManagePrivateLessonSession,
   mapRpcCompleteErrorToUserMessage,
   resolveWeeklyPrivateCompleteUi,
 } from "@/lib/privateLessons/completeSessionPolicy";
@@ -79,5 +80,27 @@ describe("resolveWeeklyPrivateCompleteUi", () => {
 describe("mapRpcCompleteErrorToUserMessage", () => {
   it("maps duplicate completion", () => {
     expect(mapRpcCompleteErrorToUserMessage("Bu oturum zaten işlenmiş.")).toContain("zaten");
+  });
+});
+
+describe("coachMayManagePrivateLessonSession", () => {
+  const perms = { can_manage_training_notes: true } as never;
+
+  it("allows admin for any session coach", () => {
+    expect(coachMayManagePrivateLessonSession("admin", null, "coach-other", "coach-me")).toBe(true);
+  });
+
+  it("allows coach for own session", () => {
+    expect(coachMayManagePrivateLessonSession("coach", perms, "coach-me", "coach-me")).toBe(true);
+  });
+
+  it("allows coach with training notes permission for other coach session", () => {
+    expect(coachMayManagePrivateLessonSession("coach", perms, "coach-other", "coach-me")).toBe(true);
+  });
+
+  it("denies coach without training notes permission for other coach session", () => {
+    expect(
+      coachMayManagePrivateLessonSession("coach", { can_manage_training_notes: false } as never, "coach-other", "coach-me")
+    ).toBe(false);
   });
 });

@@ -13,7 +13,10 @@ import {
   resolvePackageLifecycleStatus,
 } from "@/lib/privateLessons/packageStatus";
 import { appendPrivateLessonPackageEvent } from "@/lib/privateLessons/appendPrivateLessonPackageEvent";
-import { mapRpcCompleteErrorToUserMessage } from "@/lib/privateLessons/completeSessionPolicy";
+import {
+  coachMayManagePrivateLessonSession,
+  mapRpcCompleteErrorToUserMessage,
+} from "@/lib/privateLessons/completeSessionPolicy";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { appendOperationalTimeline } from "@/lib/operational/timeline";
 import {
@@ -134,20 +137,6 @@ export async function listPrivateLessonSessionsForPackage(
   if (role === "coach") {
     const mg = await assertManagement(actor);
     if (!mg.ok) return { error: mg.error };
-    const permissions = await getCoachPermissions(actor.id, actor.organization_id);
-    if (!permissions.can_view_all_organization_lessons) {
-      const { data: ownSession } = await adminClient
-        .from("private_lesson_sessions")
-        .select("id")
-        .eq("organization_id", actor.organization_id)
-        .eq("package_id", pid)
-        .eq("coach_id", actor.id)
-        .limit(1)
-        .maybeSingle();
-      if (!ownSession) {
-        return { error: "Bu paketin planlarını görüntüleme yetkiniz yok." };
-      }
-    }
   }
 
   const { data, error } = await adminClient
@@ -459,8 +448,11 @@ export async function completePrivateLessonSession(sessionId: string) {
     if (sErr || !sess) return { error: "Oturum bulunamadı." };
 
     const role = getSafeRole(actor.role);
-    if (role === "coach" && sess.coach_id !== actor.id) {
-      return { error: "Bu oturumu tamamlama yetkiniz yok." };
+    if (role === "coach") {
+      const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
+      if (!coachMayManagePrivateLessonSession(role, permissions, sess.coach_id as string | null, actor.id)) {
+        return { error: "Bu oturumu tamamlama yetkiniz yok." };
+      }
     }
 
     if (sess.status === "cancelled") {
@@ -681,8 +673,11 @@ export async function cancelPrivateLessonSession(sessionId: string) {
     if (sess.status !== "planned") return { error: "Yalnızca planlanmış oturum iptal edilebilir." };
 
     const role = getSafeRole(actor.role);
-    if (role === "coach" && sess.coach_id !== actor.id) {
-      return { error: "Bu oturumu iptal etme yetkiniz yok." };
+    if (role === "coach") {
+      const permissions = await getCoachPermissions(actor.id, actor.organization_id!);
+      if (!coachMayManagePrivateLessonSession(role, permissions, sess.coach_id as string | null, actor.id)) {
+        return { error: "Bu oturumu iptal etme yetkiniz yok." };
+      }
     }
 
     const { error: uErr } = await adminClient

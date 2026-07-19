@@ -1,9 +1,22 @@
+import type { CoachPermissions } from "@/lib/types";
 import type { WeeklyLessonScheduleItem } from "@/lib/types";
 import {
   packageAllowsUsage,
   resolvePackageLifecycleStatus,
   type PackageLifecycleStatus,
 } from "@/lib/privateLessons/packageStatus";
+
+/** Admin veya not/program yönetimi yetkili koç org genelinde oturum yönetebilir. */
+export function coachMayManagePrivateLessonSession(
+  role: string,
+  permissions: CoachPermissions | null | undefined,
+  sessionCoachId: string | null | undefined,
+  actorId: string
+): boolean {
+  if (role === "admin") return true;
+  if (!sessionCoachId || sessionCoachId === actorId) return true;
+  return Boolean(permissions?.can_manage_training_notes);
+}
 
 export type PrivateLessonCompleteBlockReason =
   | "not_private"

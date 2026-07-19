@@ -809,8 +809,7 @@ export default function PrivateLessonPackageDetailPage() {
               <ul className="space-y-3">
                 {upcomingPlannedSessions.map((s) => {
                     const canRow =
-                      snapshot.viewerRole === "admin" ||
-                      (snapshot.viewerRole === "coach" && s.coachId === snapshot.viewerId);
+                      snapshot.viewerRole === "admin" || snapshot.viewerRole === "coach";
                     return (
                       <li
                         key={s.id}
@@ -863,8 +862,7 @@ export default function PrivateLessonPackageDetailPage() {
               <ul className="space-y-3">
                 {awaitingCompletionSessions.map((s) => {
                     const canRow =
-                      snapshot.viewerRole === "admin" ||
-                      (snapshot.viewerRole === "coach" && s.coachId === snapshot.viewerId);
+                      snapshot.viewerRole === "admin" || snapshot.viewerRole === "coach";
                     return (
                     <li
                       key={s.id}
