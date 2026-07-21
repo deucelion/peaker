@@ -10,7 +10,12 @@ import {
   cancelPrivateLessonSession,
   markPrivateLessonSessionCompletedFromSchedule,
 } from "@/lib/actions/privateLessonSessionActions";
-import { confirmPrivateLessonSlotOverlapIfNeeded } from "@/lib/privateLessons/confirmPrivateLessonSlotOverlap";
+import {
+  runPrivateLessonCreateWithSlotConfirm,
+  type PrivateLessonSlotOverlapConfirmState,
+} from "@/lib/privateLessons/privateLessonSlotOverlapConfirmFlow";
+import PrivateLessonSlotOverlapConfirmModal from "@/components/privateLessons/PrivateLessonSlotOverlapConfirmModal";
+import PrivateLessonParallelMetricsStrip from "@/components/privateLessons/PrivateLessonParallelMetricsStrip";
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import { listLessonsSnapshot, listWeeklyLessonScheduleSnapshot } from "@/lib/actions/snapshotActions";
@@ -84,6 +89,7 @@ export default function WeeklyLessonSchedulePage() {
   const [overlapListOpen, setOverlapListOpen] = useState(false);
   const [overlapListTitle, setOverlapListTitle] = useState("");
   const [overlapListItems, setOverlapListItems] = useState<WeeklyLessonScheduleItem[]>([]);
+  const [slotOverlapConfirm, setSlotOverlapConfirm] = useState<PrivateLessonSlotOverlapConfirmState | null>(null);
   const [recentCreatedRange, setRecentCreatedRange] = useState<{
     dayKey: string;
     startMinutes: number;
@@ -516,7 +522,7 @@ export default function WeeklyLessonSchedulePage() {
     setQuickError(null);
     setQuickInfo("Özel ders planı kaydediliyor…");
     try {
-      const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+      const overlapConfirm = await runPrivateLessonCreateWithSlotConfirm(fd, setSlotOverlapConfirm);
       if (!overlapConfirm.proceed) {
         setQuickBusy(false);
         setQuickInfo(null);
@@ -642,7 +648,7 @@ export default function WeeklyLessonSchedulePage() {
     setQuickError(null);
     setQuickInfo("Hızlı özel ders planlanıyor…");
     try {
-      const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+      const overlapConfirm = await runPrivateLessonCreateWithSlotConfirm(fd, setSlotOverlapConfirm);
       if (!overlapConfirm.proceed) {
         setQuickBusy(false);
         setQuickInfo(null);
@@ -803,6 +809,8 @@ export default function WeeklyLessonSchedulePage() {
         onLocationChange={setLocation}
       />
 
+      <PrivateLessonParallelMetricsStrip />
+
       {error ? <Notification message={error} variant="error" /> : null}
       {actionMessage ? (
         <Notification
@@ -881,6 +889,16 @@ export default function WeeklyLessonSchedulePage() {
           setOverlapListOpen(false);
         }}
       />
+
+      {slotOverlapConfirm ? (
+        <PrivateLessonSlotOverlapConfirmModal
+          preview={slotOverlapConfirm.preview}
+          appTz={appTz}
+          busy={quickBusy}
+          onCancel={() => slotOverlapConfirm.resolve(false)}
+          onConfirm={() => slotOverlapConfirm.resolve(true)}
+        />
+      ) : null}
 
       {quickCreateAt ? (
         <QuickCreateLessonModal

@@ -28,7 +28,11 @@ import {
   createPrivateLessonSession,
   listPrivateLessonSessionsForPackage,
 } from "@/lib/actions/privateLessonSessionActions";
-import { confirmPrivateLessonSlotOverlapIfNeeded } from "@/lib/privateLessons/confirmPrivateLessonSlotOverlap";
+import {
+  runPrivateLessonCreateWithSlotConfirm,
+  type PrivateLessonSlotOverlapConfirmState,
+} from "@/lib/privateLessons/privateLessonSlotOverlapConfirmFlow";
+import PrivateLessonSlotOverlapConfirmModal from "@/components/privateLessons/PrivateLessonSlotOverlapConfirmModal";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -106,6 +110,7 @@ export default function PrivateLessonPackageDetailPage() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
+  const [slotOverlapConfirm, setSlotOverlapConfirm] = useState<PrivateLessonSlotOverlapConfirmState | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [coachOptions, setCoachOptions] = useState<Array<{ id: string; full_name: string }>>([]);
   const [planForm, setPlanForm] = useState({
@@ -401,7 +406,7 @@ export default function PrivateLessonPackageDetailPage() {
     if (loc) fd.append("location", loc);
     const n = planForm.note.trim();
     if (n) fd.append("note", n);
-    const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+    const overlapConfirm = await runPrivateLessonCreateWithSlotConfirm(fd, setSlotOverlapConfirm);
     if (!overlapConfirm.proceed) {
       setPlanSaving(false);
       if (overlapConfirm.previewError) setMessage(overlapConfirm.previewError);
@@ -1195,6 +1200,15 @@ export default function PrivateLessonPackageDetailPage() {
           pkg={snapshot.package}
           coaches={coachOptions}
           viewerRole={snapshot.viewerRole === "admin" ? "admin" : "coach"}
+        />
+      ) : null}
+
+      {slotOverlapConfirm ? (
+        <PrivateLessonSlotOverlapConfirmModal
+          preview={slotOverlapConfirm.preview}
+          busy={planSaving}
+          onCancel={() => slotOverlapConfirm.resolve(false)}
+          onConfirm={() => slotOverlapConfirm.resolve(true)}
         />
       ) : null}
     </div>

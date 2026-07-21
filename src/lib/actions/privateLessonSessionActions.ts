@@ -17,6 +17,12 @@ import {
   coachMayManagePrivateLessonSession,
   mapRpcCompleteErrorToUserMessage,
 } from "@/lib/privateLessons/completeSessionPolicy";
+import {
+  buildPrivateLessonParallelPlanningMetrics,
+  resolveCoachSlotCapacityLevel,
+  type PrivateLessonSlotOverlapPreviewResult,
+} from "@/lib/privateLessons/privateLessonSlotOverlap";
+import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { appendOperationalTimeline } from "@/lib/operational/timeline";
 import {
@@ -287,6 +293,21 @@ export async function previewPrivateLessonCoachSlotOverlaps(formData: FormData) 
     const slot = await resolvePrivateLessonSlotFromForm(formData, actor, adminClient);
     if ("error" in slot) return { error: slot.error };
 
+    const packageId = formData.get("packageId")?.toString().trim() || "";
+    let newAthleteName = "Sporcu";
+    if (packageId) {
+      const { data: pkgRow } = await adminClient
+        .from("private_lesson_packages")
+        .select("athlete_id, athlete_profile:profiles!private_lesson_packages_athlete_id_fkey(full_name, email)")
+        .eq("id", packageId)
+        .eq("organization_id", actor.organization_id!)
+        .maybeSingle();
+      if (pkgRow) {
+        const athlete = Array.isArray(pkgRow.athlete_profile) ? pkgRow.athlete_profile[0] : pkgRow.athlete_profile;
+        newAthleteName = athlete ? toDisplayName(athlete.full_name, athlete.email, "Sporcu") : newAthleteName;
+      }
+    }
+
     const { data, error } = await adminClient
       .from("private_lesson_sessions")
       .select(OVERLAP_PEER_SELECT)
@@ -318,7 +339,67 @@ export async function previewPrivateLessonCoachSlotOverlaps(formData: FormData) 
       };
     });
 
-    return { overlappingCount: peers.length, peers };
+    const overlappingCount = peers.length;
+    const totalAfterCreate = overlappingCount + 1;
+    const preview: PrivateLessonSlotOverlapPreviewResult = {
+      overlappingCount,
+      peers,
+      slotStartsAt: slot.start.toISOString(),
+      slotEndsAt: slot.end.toISOString(),
+      newAthleteName,
+      totalAfterCreate,
+      capacityLevel: resolveCoachSlotCapacityLevel(totalAfterCreate),
+    };
+
+    return preview;
+  });
+}
+
+export async function getPrivateLessonParallelPlanningMetrics(referenceDateIso?: string) {
+  return withServerActionGuard("privateLesson.getPrivateLessonParallelPlanningMetrics", async () => {
+    const schemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready"]);
+    if (schemaError) return { error: schemaError };
+
+    const resolved = await resolveActor();
+    if ("error" in resolved) return { error: resolved.error };
+    const { actor } = resolved;
+    const mg = await assertManagement(actor);
+    if (!mg.ok) return { error: mg.error };
+
+    const ref = referenceDateIso ? new Date(referenceDateIso) : new Date();
+    const y = ref.getFullYear();
+    const m = ref.getMonth();
+    const monthStart = new Date(Date.UTC(y, m, 1)).toISOString();
+    const monthEnd = new Date(Date.UTC(y, m + 1, 1)).toISOString();
+    const monthLabel = ref.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+
+    const adminClient = createSupabaseAdminClient();
+    const tz = await resolveOrganizationTimeZone(actor.organization_id!);
+    const { data, error } = await adminClient
+      .from("private_lesson_sessions")
+      .select("id, coach_id, starts_at, ends_at, status")
+      .eq("organization_id", actor.organization_id!)
+      .gte("starts_at", monthStart)
+      .lt("starts_at", monthEnd)
+      .limit(5000);
+    if (error) {
+      return {
+        error: operationalError("Özel ders metrikleri alınamadı", {
+          rawMessage: error.message,
+          code: diagnosticsCode("PLN", "parallel_metrics"),
+        }),
+      };
+    }
+
+    const sessions = (data || []).map((row) => ({
+      id: row.id as string,
+      coachId: row.coach_id as string,
+      startsAt: row.starts_at as string,
+      endsAt: row.ends_at as string,
+      status: (row.status as string) || "planned",
+    }));
+
+    return { metrics: buildPrivateLessonParallelPlanningMetrics(sessions, monthLabel, tz) };
   });
 }
 
@@ -430,6 +511,31 @@ export async function createPrivateLessonSession(formData: FormData) {
           code: diagnosticsCode("PLN", "create"),
         }),
       };
+    }
+
+    const { count: slotPeerCount } = await adminClient
+      .from("private_lesson_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", actor.organization_id!)
+      .eq("status", "planned")
+      .eq("coach_id", coachId)
+      .lt("starts_at", end.toISOString())
+      .gt("ends_at", start.toISOString());
+    const activeInSlot = slotPeerCount ?? 0;
+    if (activeInSlot >= 2) {
+      await appendOperationalTimeline(adminClient, {
+        organizationId: actor.organization_id,
+        eventType: "private_lesson.parallel_slot",
+        severity: activeInSlot >= 4 ? "warning" : "info",
+        summary: `Paralel özel ders slotu · ${activeInSlot} planlı oturum`,
+        payload: {
+          coachId,
+          startsAt: start.toISOString(),
+          endsAt: end.toISOString(),
+          plannedSessionCount: activeInSlot,
+        },
+        actorUserId: actor.id,
+      });
     }
 
     const label = (pkg as { package_name?: string }).package_name || "Özel ders";
