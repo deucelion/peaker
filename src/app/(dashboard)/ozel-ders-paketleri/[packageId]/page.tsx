@@ -28,6 +28,7 @@ import {
   createPrivateLessonSession,
   listPrivateLessonSessionsForPackage,
 } from "@/lib/actions/privateLessonSessionActions";
+import { confirmPrivateLessonSlotOverlapIfNeeded } from "@/lib/privateLessons/confirmPrivateLessonSlotOverlap";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -400,6 +401,12 @@ export default function PrivateLessonPackageDetailPage() {
     if (loc) fd.append("location", loc);
     const n = planForm.note.trim();
     if (n) fd.append("note", n);
+    const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+    if (!overlapConfirm.proceed) {
+      setPlanSaving(false);
+      if (overlapConfirm.previewError) setMessage(overlapConfirm.previewError);
+      return;
+    }
     const res = await createPrivateLessonSession(fd);
     if ("success" in res && res.success) {
       setMessage("Özel ders planı oluşturuldu.");

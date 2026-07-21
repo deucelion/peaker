@@ -228,6 +228,100 @@ export async function listUpcomingPrivateLessonSessionsForCoach(
   return { sessions: (data || []).map((row) => mapSessionRow(row as never)) };
 }
 
+async function resolvePrivateLessonSlotFromForm(
+  formData: FormData,
+  actor: Actor,
+  adminClient: ReturnType<typeof createSupabaseAdminClient>
+): Promise<{ coachId: string; start: Date; end: Date } | { error: string }> {
+  const lessonDate = formData.get("lessonDate")?.toString().trim() || "";
+  const startClock = formData.get("startClock")?.toString().trim() || "";
+  const durationMinutes = Math.floor(Number(formData.get("durationMinutes")?.toString() || "60"));
+  const coachIdInput = formData.get("coachId")?.toString().trim() || "";
+
+  if (!lessonDate || !startClock) return { error: "Tarih ve başlangıç saati zorunludur." };
+  if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 480) {
+    return { error: "Süre 15–480 dakika arasında olmalıdır." };
+  }
+
+  const role = getSafeRole(actor.role);
+  let coachId: string | null = null;
+  if (role === "admin") {
+    if (!coachIdInput) return { error: "Koç seçimi zorunludur." };
+    const { data: coachProfile } = await adminClient
+      .from("profiles")
+      .select("id, role, organization_id")
+      .eq("id", coachIdInput)
+      .eq("organization_id", actor.organization_id!)
+      .maybeSingle();
+    if (!coachProfile || getSafeRole(coachProfile.role) !== "coach") return { error: "Seçilen koç bulunamadı." };
+    coachId = coachProfile.id;
+  } else {
+    coachId = actor.id;
+  }
+  if (!coachId) return { error: "Koç bilgisi çözümlenemedi." };
+
+  const startUtcIso = wallClockInZoneToUtcIso(lessonDate, startClock);
+  if (!startUtcIso) return { error: "Geçersiz tarih veya saat." };
+  const start = new Date(startUtcIso);
+  if (Number.isNaN(start.getTime())) return { error: "Geçersiz tarih veya saat." };
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  return { coachId, start, end };
+}
+
+const OVERLAP_PEER_SELECT =
+  "id, starts_at, ends_at, athlete_profile:profiles!private_lesson_sessions_athlete_id_fkey(full_name, email), pkg:private_lesson_packages!private_lesson_sessions_package_id_fkey(package_name)";
+
+/** Aynı koç / çakışan zaman dilimindeki planlı özel dersler (bilgilendirme; engellemez). */
+export async function previewPrivateLessonCoachSlotOverlaps(formData: FormData) {
+  return withServerActionGuard("privateLesson.previewPrivateLessonCoachSlotOverlaps", async () => {
+    const schemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready"]);
+    if (schemaError) return { error: schemaError };
+
+    const resolved = await resolveActor();
+    if ("error" in resolved) return { error: resolved.error };
+    const { actor } = resolved;
+    const mg = await assertManagement(actor);
+    if (!mg.ok) return { error: mg.error };
+
+    const adminClient = createSupabaseAdminClient();
+    const slot = await resolvePrivateLessonSlotFromForm(formData, actor, adminClient);
+    if ("error" in slot) return { error: slot.error };
+
+    const { data, error } = await adminClient
+      .from("private_lesson_sessions")
+      .select(OVERLAP_PEER_SELECT)
+      .eq("organization_id", actor.organization_id!)
+      .eq("status", "planned")
+      .eq("coach_id", slot.coachId)
+      .lt("starts_at", slot.end.toISOString())
+      .gt("ends_at", slot.start.toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(24);
+    if (error) {
+      return {
+        error: operationalError("Plan kontrolü başarısız", {
+          rawMessage: error.message,
+          code: diagnosticsCode("PLN", "overlap_preview"),
+        }),
+      };
+    }
+
+    const peers = (data || []).map((row) => {
+      const athlete = Array.isArray(row.athlete_profile) ? row.athlete_profile[0] : row.athlete_profile;
+      const pkg = Array.isArray(row.pkg) ? row.pkg[0] : row.pkg;
+      return {
+        id: row.id as string,
+        athleteName: athlete ? toDisplayName(athlete.full_name, athlete.email, "Sporcu") : null,
+        packageName: (pkg?.package_name as string | null) ?? null,
+        startsAt: row.starts_at as string,
+        endsAt: row.ends_at as string,
+      };
+    });
+
+    return { overlappingCount: peers.length, peers };
+  });
+}
+
 export async function createPrivateLessonSession(formData: FormData) {
   return withServerActionGuard("privateLesson.createPrivateLessonSession", async () => {
     const schemaError = await assertCriticalSchemaReady(["private_lesson_sessions_ready", "private_lesson_packages_ready"]);
@@ -243,7 +337,6 @@ export async function createPrivateLessonSession(formData: FormData) {
     const lessonDate = formData.get("lessonDate")?.toString().trim() || "";
     const startClock = formData.get("startClock")?.toString().trim() || "";
     const durationMinutes = Math.floor(Number(formData.get("durationMinutes")?.toString() || "60"));
-    const coachIdInput = formData.get("coachId")?.toString().trim() || "";
     const location = formData.get("location")?.toString().trim() || null;
     const note = formData.get("note")?.toString().trim() || null;
 
@@ -308,48 +401,9 @@ export async function createPrivateLessonSession(formData: FormData) {
       return { error: "Açık plan sayısı kalan ders hakkı kadar; önce bir planı tamamlayın veya iptal edin." };
     }
 
-    const role = getSafeRole(actor.role);
-    let coachId: string | null = null;
-    if (role === "admin") {
-      if (!coachIdInput) return { error: "Koç seçimi zorunludur." };
-      const { data: coachProfile } = await adminClient
-        .from("profiles")
-        .select("id, role, organization_id")
-        .eq("id", coachIdInput)
-        .eq("organization_id", actor.organization_id!)
-        .maybeSingle();
-      if (!coachProfile || getSafeRole(coachProfile.role) !== "coach") return { error: "Seçilen koç bulunamadı." };
-      coachId = coachProfile.id;
-    } else {
-      coachId = actor.id;
-    }
-
-    const startUtcIso = wallClockInZoneToUtcIso(lessonDate, startClock);
-    if (!startUtcIso) return { error: "Geçersiz tarih veya saat." };
-    const start = new Date(startUtcIso);
-    if (Number.isNaN(start.getTime())) return { error: "Geçersiz tarih veya saat." };
-    const end = new Date(start.getTime() + durationMinutes * 60_000);
-
-    const { data: conflictRows, error: conflictErr } = await adminClient
-      .from("private_lesson_sessions")
-      .select("id")
-      .eq("organization_id", actor.organization_id!)
-      .eq("status", "planned")
-      .eq("coach_id", coachId)
-      .lt("starts_at", end.toISOString())
-      .gt("ends_at", start.toISOString())
-      .limit(1);
-    if (conflictErr) {
-      return {
-        error: operationalError("Plan kontrolü başarısız", {
-          rawMessage: conflictErr.message,
-          code: diagnosticsCode("PLN", "conflict"),
-        }),
-      };
-    }
-    if ((conflictRows || []).length > 0) {
-      return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
-    }
+    const slot = await resolvePrivateLessonSlotFromForm(formData, actor, adminClient);
+    if ("error" in slot) return { error: slot.error };
+    const { coachId, start, end } = slot;
 
     const { error: insertErr } = await adminClient.from("private_lesson_sessions").insert({
       organization_id: actor.organization_id,
@@ -365,7 +419,10 @@ export async function createPrivateLessonSession(formData: FormData) {
     });
     if (insertErr) {
       if (insertErr.message.includes("private_lesson_sessions_no_overlap_planned")) {
-        return { error: "Bu zaman aralığında seçili koçun başka bir özel dersi var." };
+        return {
+          error:
+            "Veritabanı hâlâ eski çakışma kuralını uyguluyor. Yöneticinize 20260721_private_lesson_parallel_coach_slots migration uygulamasını iletin.",
+        };
       }
       return {
         error: operationalError("Plan oluşturulamadı", {

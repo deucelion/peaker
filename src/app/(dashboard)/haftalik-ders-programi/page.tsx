@@ -10,6 +10,7 @@ import {
   cancelPrivateLessonSession,
   markPrivateLessonSessionCompletedFromSchedule,
 } from "@/lib/actions/privateLessonSessionActions";
+import { confirmPrivateLessonSlotOverlapIfNeeded } from "@/lib/privateLessons/confirmPrivateLessonSlotOverlap";
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import { createLocationAction, listLocationsForActor } from "@/lib/actions/locationActions";
 import { listLessonsSnapshot, listWeeklyLessonScheduleSnapshot } from "@/lib/actions/snapshotActions";
@@ -515,6 +516,13 @@ export default function WeeklyLessonSchedulePage() {
     setQuickError(null);
     setQuickInfo("Özel ders planı kaydediliyor…");
     try {
+      const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+      if (!overlapConfirm.proceed) {
+        setQuickBusy(false);
+        setQuickInfo(null);
+        if (overlapConfirm.previewError) setQuickError(overlapConfirm.previewError);
+        return;
+      }
       const res = await createPrivateLessonSession(fd);
       if ("error" in res) {
         setQuickError(res.error || "Özel ders planlanamadı.");
@@ -634,6 +642,13 @@ export default function WeeklyLessonSchedulePage() {
     setQuickError(null);
     setQuickInfo("Hızlı özel ders planlanıyor…");
     try {
+      const overlapConfirm = await confirmPrivateLessonSlotOverlapIfNeeded(fd);
+      if (!overlapConfirm.proceed) {
+        setQuickBusy(false);
+        setQuickInfo(null);
+        if (overlapConfirm.previewError) setQuickError(overlapConfirm.previewError);
+        return;
+      }
       const res = await createPrivateLessonSession(fd);
       if ("error" in res) {
         setQuickError(res.error || "Hızlı özel ders planlanamadı.");
