@@ -9,6 +9,7 @@ import {
   processEWMAData,
 } from "@/lib/performance/loadSeries";
 import { SCHEDULE_APP_TIME_ZONE } from "@/lib/schedule/scheduleWallTime";
+import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 import {
   buildPerformanceAnalysisPdf,
   performanceAnalysisPdfFilename,
@@ -45,6 +46,7 @@ export async function prepareAthletePerformancePdf(
   loads: TrainingLoadRow[],
   dateFrom: string,
   dateTo: string,
+  pdfBranding?: PdfBrandingPresentation,
   tz: string = SCHEDULE_APP_TIME_ZONE
 ): Promise<{ bytes: Uint8Array; filename: string }> {
   const sorted = [...loads].sort((a, b) => getLoadDate(a).getTime() - getLoadDate(b).getTime());
@@ -66,6 +68,7 @@ export async function prepareAthletePerformancePdf(
     ewmaSeries: ewma30,
     loads30,
     acwr30,
+    pdfBranding,
   });
 
   return { bytes, filename: performanceAnalysisPdfFilename(athleteName) };

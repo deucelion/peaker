@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { bumpClientRealtimeStat } from "@/lib/realtime/clientRealtimeStats";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { REALTIME_SUBSCRIPTION_IDS } from "@/lib/organization/features/surfaces/realtimeEntitlementMap";
+import { shouldSubscribeRealtime } from "@/lib/navigation/realtimeFeatureVisibility";
 
 export type OrgPresenceRole = "admin" | "coach";
 
@@ -15,11 +18,22 @@ export type OrgPresenceCounts = {
  * Coarse org presence (counts only). Requires authenticated dashboard user.
  * Stops when organizationId or role missing.
  */
-export function useOrgPresenceCounts(organizationId: string | null, presenceRole: OrgPresenceRole | null) {
+export function useOrgPresenceCounts(
+  organizationId: string | null,
+  presenceRole: OrgPresenceRole | null,
+  organizationFeatures: OrganizationFeatures | null = null
+) {
   const [liveCounts, setLiveCounts] = useState<OrgPresenceCounts>({ adminOnline: 0, coachOnline: 0 });
 
   useEffect(() => {
-    if (!organizationId || !presenceRole) return;
+    const subscribeAllowed =
+      Boolean(organizationId && presenceRole) &&
+      shouldSubscribeRealtime(REALTIME_SUBSCRIPTION_IDS.orgPresenceCounts, {
+        roleAllowed: true,
+        permissionAllowed: true,
+        organizationFeatures,
+      });
+    if (!subscribeAllowed) return;
 
     let cancelled = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -64,7 +78,7 @@ export function useOrgPresenceCounts(organizationId: string | null, presenceRole
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [organizationId, presenceRole]);
+  }, [organizationId, presenceRole, organizationFeatures]);
 
   return useMemo(() => {
     if (!organizationId || !presenceRole) return { adminOnline: 0, coachOnline: 0 };

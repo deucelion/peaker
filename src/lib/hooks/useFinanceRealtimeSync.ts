@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { bumpClientRealtimeStat } from "@/lib/realtime/clientRealtimeStats";
 import { subscribeFinanceTouches } from "@/lib/realtime/financeCrossTab";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { REALTIME_SUBSCRIPTION_IDS } from "@/lib/organization/features/surfaces/realtimeEntitlementMap";
+import { shouldSubscribeRealtime } from "@/lib/navigation/realtimeFeatureVisibility";
 
 const DEBOUNCE_VISIBLE_MS = 900;
 const DEBOUNCE_HIDDEN_MS = 4_000;
@@ -12,6 +15,7 @@ export type FinanceRealtimeSyncOptions = {
   /** Scoped org for this dashboard (URL override already applied server-side on load). */
   organizationId: string | null | undefined;
   enabled: boolean;
+  organizationFeatures?: OrganizationFeatures | null;
   onInvalidate: () => void;
 };
 
@@ -19,7 +23,12 @@ export type FinanceRealtimeSyncOptions = {
  * Debounced invalidation: payments + PLP ledger + package events + cross-tab BroadcastChannel.
  * Single channel per mount; duplicate prevention per hook instance.
  */
-export function useFinanceRealtimeSync({ organizationId, enabled, onInvalidate }: FinanceRealtimeSyncOptions) {
+export function useFinanceRealtimeSync({
+  organizationId,
+  enabled,
+  organizationFeatures = null,
+  onInvalidate,
+}: FinanceRealtimeSyncOptions) {
   const debounceTimer = useRef<number | null>(null);
   const onInvalidateRef = useRef(onInvalidate);
 
@@ -44,7 +53,15 @@ export function useFinanceRealtimeSync({ organizationId, enabled, onInvalidate }
   );
 
   useEffect(() => {
-    if (!enabled || !organizationId) return;
+    const subscribeAllowed =
+      enabled &&
+      Boolean(organizationId) &&
+      shouldSubscribeRealtime(REALTIME_SUBSCRIPTION_IDS.financeSync, {
+        roleAllowed: true,
+        permissionAllowed: true,
+        organizationFeatures,
+      });
+    if (!subscribeAllowed || !organizationId) return;
 
     const unsubs: Array<() => void> = [];
 
@@ -93,5 +110,5 @@ export function useFinanceRealtimeSync({ organizationId, enabled, onInvalidate }
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       for (const u of unsubs) u();
     };
-  }, [enabled, organizationId, schedule]);
+  }, [enabled, organizationId, organizationFeatures, schedule]);
 }

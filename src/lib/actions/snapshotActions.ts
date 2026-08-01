@@ -17,6 +17,12 @@ import { getWeekEndExclusiveIso, getWeekStartMondayIso } from "@/lib/schedule/we
 import type { WeeklyLessonScheduleItem, WeeklyLessonScheduleSnapshot, WeeklyLessonTypeFilter } from "@/lib/types";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
 import { normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
+import {
+  assertSnapshotBranchFeatureForOrg,
+  isSnapshotBranchFeatureVisible,
+  loadSnapshotOrganizationFeatures,
+} from "@/lib/auth/snapshotFeatureAccess";
+import { SNAPSHOT_BRANCH_IDS } from "@/lib/organization/features/surfaces/snapshotEntitlementMap";
 
 type TrainingParticipantLite = { attendance_status?: string | null };
 type ScheduleSnippet = { title?: string | null; start_time?: string | null };
@@ -163,6 +169,12 @@ export async function listWeeklyLessonScheduleSnapshot(
     const block = messageIfCoachCannotOperate(actor.role, actor.isActive);
     if (block) return { error: block };
   }
+
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listWeeklyLessonSchedule,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
 
   const adminClient = createSupabaseAdminClient();
   const permissions: CoachPermissions =
@@ -338,6 +350,12 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
     if (block) return { error: block };
   }
 
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listLessons,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
+
   const adminClient = createSupabaseAdminClient();
   const permissions: CoachPermissions =
     actor.role === "coach" ? await getCoachPermissions(actor.id, actor.organizationId) : DEFAULT_COACH_PERMISSIONS;
@@ -453,6 +471,13 @@ export async function listCoachDayLessonsSnapshot(coachId: string, lessonDate: s
       return { error: "Sadece kendi derslerinizi gorebilirsiniz." };
     }
   }
+
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listCoachDayLessons,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
+
   const day = lessonDate?.trim();
   if (!day) return { lessons: [] };
 
@@ -484,6 +509,13 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
   }
   const permissions: CoachPermissions =
     actor.role === "coach" ? await getCoachPermissions(actor.id, actor.organizationId) : DEFAULT_COACH_PERMISSIONS;
+
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listAttendance,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
+
   const pager = normalizePagination(page, pageSize, 300);
   const adminClient = createSupabaseAdminClient();
 
@@ -569,6 +601,12 @@ export async function listTrainingParticipantsSnapshot(trainingId: string, page 
     }
   }
 
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listTrainingParticipants,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
+
   const pager = normalizePagination(page, pageSize, 500);
   const res = await adminClient
     .from("training_participants")
@@ -650,6 +688,12 @@ export async function listMyNotificationsSnapshot(page = 1, pageSize = 50) {
     }
   }
 
+  const featureDenial = await assertSnapshotBranchFeatureForOrg(
+    SNAPSHOT_BRANCH_IDS.listMyNotifications,
+    actor.organizationId
+  );
+  if (featureDenial) return featureDenial;
+
   const { data, error, count } = await adminClient
     .from("notifications")
     .select("id, user_id, message, read, created_at", { count: "exact" })
@@ -687,14 +731,22 @@ export async function getAthletePanelSnapshot() {
   if (permErr) return { error: "Izin bilgisi alinamadi." };
   const permissions = normalizeAthletePermissions(permissionRow);
 
+  const features = await loadSnapshotOrganizationFeatures(actor.organizationId);
+  const includeFinance = permissions.can_view_financial_status &&
+    isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelFinance, features);
+  const includePerformance = permissions.can_view_performance_metrics &&
+    isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelPerformanceMetrics, features);
+  const includeDevelopment = permissions.can_view_development_profile &&
+    isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelDevelopmentHub, features);
+
   const [paymentRes, metricRes, attendanceRes] = await Promise.all([
-    permissions.can_view_financial_status
+    includeFinance
       ? adminClient.from("payments").select("*").eq("profile_id", profile.id).order("due_date", { ascending: false }).limit(1)
       : Promise.resolve({ data: [], error: null }),
-    permissions.can_view_performance_metrics
+    includePerformance
       ? adminClient.from("athlete_metrics").select("*").eq("profile_id", profile.id).order("measurement_date", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    permissions.can_view_development_profile
+    includeDevelopment
       ? adminClient
           .from("training_participants")
           .select("attendance_status, marked_at, training_schedule(title, start_time)")
@@ -704,23 +756,35 @@ export async function getAthletePanelSnapshot() {
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  return {
-    profile,
-    permissions,
-    payment: (paymentRes.data || [])[0] || null,
-    metrics: (metricRes.data || []).map((m) => ({
+  const response: {
+    profile: typeof profile;
+    permissions: typeof permissions;
+    payment?: unknown;
+    metrics?: Array<{ tarih: string; boy: number | null; kilo: number | null; yag: number | null }>;
+    attendancePreview?: Array<{ title: string; at: string; status: string }>;
+  } = { profile, permissions };
+
+  if (includeFinance) {
+    response.payment = (paymentRes.data || [])[0] || null;
+  }
+  if (includePerformance) {
+    response.metrics = (metricRes.data || []).map((m) => ({
       tarih: new Date(m.measurement_date).toLocaleDateString("tr-TR", { month: "short" }),
       boy: m.height != null ? Number(m.height) : null,
       kilo: m.weight != null ? Number(m.weight) : null,
       yag: m.body_fat != null ? Number(m.body_fat) : null,
-    })),
-    attendancePreview: (attendanceRes.data || []).map((row: AttendancePreviewJoinRow) => {
+    }));
+  }
+  if (includeDevelopment) {
+    response.attendancePreview = (attendanceRes.data || []).map((row: AttendancePreviewJoinRow) => {
       const sched = firstScheduleSnippet(row.training_schedule);
       const st = row.attendance_status || "registered";
       const label = st === "attended" ? "Katıldı" : st === "missed" ? "Gelmedi" : st === "cancelled" ? "İptal" : "Kayıtlı";
       return { title: sched?.title || "Antrenman", at: row.marked_at || sched?.start_time || "", status: label };
-    }),
-  };
+    });
+  }
+
+  return response;
   });
 }
 
@@ -742,6 +806,18 @@ export async function getDashboardSnapshot() {
 
   if (actor.role === "coach") {
     const permissions = await getCoachPermissions(actor.id, actor.organizationId);
+    const features = await loadSnapshotOrganizationFeatures(actor.organizationId);
+    const showNotifications = isSnapshotBranchFeatureVisible(
+      SNAPSHOT_BRANCH_IDS.dashboardCoachNotifications,
+      features
+    );
+    const showPrograms =
+      permissions.can_manage_training_notes &&
+      isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.dashboardCoachPrograms, features);
+    const showOpsMetrics = isSnapshotBranchFeatureVisible(
+      SNAPSHOT_BRANCH_IDS.dashboardCoachOpsMetrics,
+      features
+    );
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date();
@@ -760,22 +836,28 @@ export async function getDashboardSnapshot() {
         .gte("start_time", dayStart.toISOString())
         .neq("status", "cancelled")
         .order("start_time", { ascending: true }),
-      adminClient.from("notifications").select("id, message, read, created_at").eq("user_id", actor.id).order("created_at", { ascending: false }).limit(5),
-      adminClient
-        .from("training_schedule")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", actor.organizationId)
-        .eq("coach_id", actor.id)
-        .gte("start_time", weekAgo.toISOString())
-        .neq("status", "cancelled"),
-      adminClient
-        .from("training_schedule")
-        .select("id")
-        .eq("organization_id", actor.organizationId)
-        .eq("coach_id", actor.id)
-        .gte("start_time", thirtyAgo.toISOString())
-        .neq("status", "cancelled"),
-      permissions.can_manage_training_notes
+      showNotifications
+        ? adminClient.from("notifications").select("id, message, read, created_at").eq("user_id", actor.id).order("created_at", { ascending: false }).limit(5)
+        : Promise.resolve({ data: [], error: null }),
+      showOpsMetrics
+        ? adminClient
+            .from("training_schedule")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", actor.organizationId)
+            .eq("coach_id", actor.id)
+            .gte("start_time", weekAgo.toISOString())
+            .neq("status", "cancelled")
+        : Promise.resolve({ count: 0, error: null }),
+      showOpsMetrics
+        ? adminClient
+            .from("training_schedule")
+            .select("id")
+            .eq("organization_id", actor.organizationId)
+            .eq("coach_id", actor.id)
+            .gte("start_time", thirtyAgo.toISOString())
+            .neq("status", "cancelled")
+        : Promise.resolve({ data: [], error: null }),
+      showPrograms
         ? adminClient
             .from("athlete_programs")
             .select("id, title, created_at, is_active, athlete_profile:profiles!athlete_programs_athlete_id_fkey(full_name)")
@@ -796,16 +878,50 @@ export async function getDashboardSnapshot() {
       (lesson.training_participants || []).some((p) => (p.attendance_status || "registered") === "registered")
     );
 
-    const lessonIds30d = ((lessons30dRes.data || []) as Array<{ id: string }>).map((r) => r.id);
-    let attendanceRate = "-";
-    let activeAthletes = 0;
-    if (lessonIds30d.length > 0) {
-      const partRes = await adminClient.from("training_participants").select("profile_id, attendance_status").in("training_id", lessonIds30d);
-      const rows = (partRes.data || []) as Array<{ profile_id: string; attendance_status?: string | null }>;
-      activeAthletes = new Set(rows.map((r) => r.profile_id)).size;
-      const marked = rows.filter((r) => r.attendance_status === "attended" || r.attendance_status === "missed");
-      const attended = marked.filter((r) => r.attendance_status === "attended").length;
-      attendanceRate = marked.length > 0 ? `${Math.round((attended / marked.length) * 100)}%` : "-";
+    let opsMetrics: { lessons7d: number; attendanceRate: string; activeAthletes: number } | undefined;
+    if (showOpsMetrics) {
+      const lessonIds30d = ((lessons30dRes.data || []) as Array<{ id: string }>).map((r) => r.id);
+      let attendanceRate = "-";
+      let activeAthletes = 0;
+      if (lessonIds30d.length > 0) {
+        const partRes = await adminClient.from("training_participants").select("profile_id, attendance_status").in("training_id", lessonIds30d);
+        const rows = (partRes.data || []) as Array<{ profile_id: string; attendance_status?: string | null }>;
+        activeAthletes = new Set(rows.map((r) => r.profile_id)).size;
+        const marked = rows.filter((r) => r.attendance_status === "attended" || r.attendance_status === "missed");
+        const attended = marked.filter((r) => r.attendance_status === "attended").length;
+        attendanceRate = marked.length > 0 ? `${Math.round((attended / marked.length) * 100)}%` : "-";
+      }
+      opsMetrics = {
+        lessons7d: lessons7dRes.count ?? 0,
+        attendanceRate,
+        activeAthletes,
+      };
+    }
+
+    const coach: {
+      permissions: CoachPermissions;
+      todayLessons: CoachSnapshotLesson[];
+      upcomingLessons: CoachSnapshotLesson[];
+      pendingAttendanceLessons: CoachSnapshotLesson[];
+      activeTrainings: number;
+      notificationPreview?: Array<{ id: string; message: string; read: boolean; created_at: string }>;
+      recentPrograms?: CoachDashboardProgramRow[];
+      opsMetrics?: { lessons7d: number; attendanceRate: string; activeAthletes: number };
+    } = {
+      permissions,
+      todayLessons,
+      upcomingLessons,
+      pendingAttendanceLessons,
+      activeTrainings: lessons.length,
+    };
+    if (showNotifications) {
+      coach.notificationPreview = (notificationRes.data || []) as Array<{ id: string; message: string; read: boolean; created_at: string }>;
+    }
+    if (showPrograms) {
+      coach.recentPrograms = (programsRes.data || []) as CoachDashboardProgramRow[];
+    }
+    if (opsMetrics) {
+      coach.opsMetrics = opsMetrics;
     }
 
     return {
@@ -813,24 +929,25 @@ export async function getDashboardSnapshot() {
       orgName,
       orgTimeZone,
       organizationId: actor.organizationId,
-      coach: {
-        permissions,
-        todayLessons,
-        upcomingLessons,
-        pendingAttendanceLessons,
-        notificationPreview: (notificationRes.data || []) as Array<{ id: string; message: string; read: boolean; created_at: string }>,
-        recentPrograms: (programsRes.data || []) as CoachDashboardProgramRow[],
-        opsMetrics: {
-          lessons7d: lessons7dRes.count ?? 0,
-          attendanceRate,
-          activeAthletes,
-        },
-        activeTrainings: lessons.length,
-      },
+      coach,
     };
   }
 
   if (actor.role !== "admin") return { role: actor.role, orgName, orgTimeZone, organizationId: actor.organizationId };
+
+  const features = await loadSnapshotOrganizationFeatures(actor.organizationId);
+  const showFinanceStats = isSnapshotBranchFeatureVisible(
+    SNAPSHOT_BRANCH_IDS.dashboardAdminFinanceStats,
+    features
+  );
+  const showRevenueMetrics = isSnapshotBranchFeatureVisible(
+    SNAPSHOT_BRANCH_IDS.dashboardAdminRevenueMetrics,
+    features
+  );
+  const showFieldTestOnboarding = isSnapshotBranchFeatureVisible(
+    SNAPSHOT_BRANCH_IDS.dashboardAdminFieldTestOnboarding,
+    features
+  );
 
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
@@ -867,9 +984,9 @@ export async function getDashboardSnapshot() {
       .not("marked_at", "is", null)
       .order("marked_at", { ascending: false })
       .limit(5),
-    // Faz 5.3 — Onboarding checklist için saha testi metrik sayısı (count-only).
-    // organization_id kolonu eski kurulumda olmayabilir; basit count yeterli.
-    adminClient.from("test_definitions").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId),
+    showFieldTestOnboarding
+      ? adminClient.from("test_definitions").select("*", { count: "exact", head: true }).eq("organization_id", actor.organizationId)
+      : Promise.resolve({ count: 0, error: null }),
   ]);
 
   type AdminDashboardStats = {
@@ -953,48 +1070,80 @@ export async function getDashboardSnapshot() {
     .order("created_at", { ascending: false })
     .limit(6);
 
+  const statsPayload: {
+    totalPlayers: number;
+    activeTrainings: number;
+    attendanceRate: string;
+    monthlyRevenue?: string;
+  } = {
+    totalPlayers: playersRes.count || 0,
+    activeTrainings: trainingRes.count || 0,
+    attendanceRate,
+  };
+  if (showFinanceStats) {
+    statsPayload.monthlyRevenue = monthlyRevenue;
+  }
+
+  const admin: {
+    stats: typeof statsPayload;
+    attendanceTrend: string;
+    revenueTrend?: string;
+    recentActivities: RecentActivityRow[];
+    coaches: CoachProfileRow[];
+    teamStats?: Array<{ name: string; completionRate: number; paymentStatus: string; warning: boolean }>;
+    adminTodayLessons: AdminTodayLessonRow[];
+    adminPendingAttendance: AdminTodayLessonRow[];
+    activeCoachCountToday: number;
+    adminRecentPrograms: AdminDashboardProgramRow[];
+    adminRecentAttendanceUpdates: Array<{ training_id: string; marked_at: string | null; athlete_name: string }>;
+    onboarding?: {
+      totalAthletes: number;
+      totalTeams: number;
+      totalLessons: number;
+      totalFieldTestMetrics: number;
+      totalPayments?: number;
+    };
+  } = {
+    stats: statsPayload,
+    attendanceTrend:
+      Number.isNaN(Number(attendanceRate)) ? "VERI YOK" : Number(attendanceRate) >= 90 ? "HEDEF USTU" : Number(attendanceRate) >= 75 ? "HEDEFE YAKIN" : "GELISIM GEREKLI",
+    recentActivities: (recentRes.data || []) as RecentActivityRow[],
+    coaches: ((coachRes.data || []) as CoachProfileRow[]).filter((r) => getSafeRole(r.role) === "coach"),
+    adminTodayLessons,
+    adminPendingAttendance,
+    activeCoachCountToday,
+    adminRecentPrograms: (programsData || []) as AdminDashboardProgramRow[],
+    adminRecentAttendanceUpdates: ((recentAttendanceRes.data || []) as AdminAttendancePreviewRow[]).map((row) => {
+      const athlete = Array.isArray(row.athlete_profile) ? row.athlete_profile[0] : row.athlete_profile;
+      return {
+        training_id: row.training_id,
+        marked_at: row.marked_at,
+        athlete_name: toDisplayName(athlete?.full_name, athlete?.email, "Sporcu"),
+      };
+    }),
+  };
+  if (showRevenueMetrics) {
+    admin.revenueTrend = revenueTrend;
+  }
+  if (showFinanceStats) {
+    admin.teamStats = teamStats;
+  }
+  if (showFieldTestOnboarding) {
+    admin.onboarding = {
+      totalAthletes: playersRes.count || 0,
+      totalTeams: totalTeamCount,
+      totalLessons: trainingRes.count || 0,
+      totalFieldTestMetrics: fieldTestDefRes.count || 0,
+      ...(showFinanceStats ? { totalPayments: totalPaymentsCount } : {}),
+    };
+  }
+
   return {
     role: actor.role,
     orgName,
     orgTimeZone,
     organizationId: actor.organizationId,
-    admin: {
-      stats: {
-        totalPlayers: playersRes.count || 0,
-        activeTrainings: trainingRes.count || 0,
-        attendanceRate,
-        monthlyRevenue,
-      },
-      attendanceTrend:
-        Number.isNaN(Number(attendanceRate)) ? "VERI YOK" : Number(attendanceRate) >= 90 ? "HEDEF USTU" : Number(attendanceRate) >= 75 ? "HEDEFE YAKIN" : "GELISIM GEREKLI",
-      revenueTrend,
-      recentActivities: (recentRes.data || []) as RecentActivityRow[],
-      coaches: ((coachRes.data || []) as CoachProfileRow[]).filter((r) => getSafeRole(r.role) === "coach"),
-      teamStats,
-      adminTodayLessons,
-      adminPendingAttendance,
-      activeCoachCountToday,
-      adminRecentPrograms: (programsData || []) as AdminDashboardProgramRow[],
-      adminRecentAttendanceUpdates: ((recentAttendanceRes.data || []) as AdminAttendancePreviewRow[]).map((row) => {
-        const athlete = Array.isArray(row.athlete_profile) ? row.athlete_profile[0] : row.athlete_profile;
-        return {
-          training_id: row.training_id,
-          marked_at: row.marked_at,
-          athlete_name: toDisplayName(athlete?.full_name, athlete?.email, "Sporcu"),
-        };
-      }),
-      /**
-       * Faz 5.3 — Onboarding checklist için minimum sinyaller.
-       * Yeni eklenen alanlar opsiyonel okunmalı; eski tüketiciler etkilenmez.
-       */
-      onboarding: {
-        totalAthletes: playersRes.count || 0,
-        totalTeams: totalTeamCount,
-        totalLessons: trainingRes.count || 0,
-        totalFieldTestMetrics: fieldTestDefRes.count || 0,
-        totalPayments: totalPaymentsCount,
-      },
-    },
+    admin,
   };
   });
 }

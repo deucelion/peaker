@@ -15,6 +15,13 @@ import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import type { CoachPermissions } from "@/lib/types";
 import type { PrivateLessonSessionListItem } from "@/lib/types";
 import { listUpcomingPrivateLessonSessionsForCoach } from "@/lib/actions/privateLessonSessionActions";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { DASHBOARD_WIDGET_IDS } from "@/lib/organization/features/surfaces/widgetEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import {
+  shouldRenderDashboardWidget,
+  type DashboardWidgetVisibilityContext,
+} from "@/lib/navigation/widgetFeatureVisibility";
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
@@ -150,6 +157,7 @@ export default function Dashboard() {
   } | null>(null);
   const [coachPrivateSessions, setCoachPrivateSessions] = useState<PrivateLessonSessionListItem[]>([]);
   const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const router = useRouter();
 
   const fetchDashboardData = useCallback(async (opts?: { soft?: boolean }) => {
@@ -245,22 +253,37 @@ export default function Dashboard() {
 
   useLiveAttendanceDashboard({
     enabled: !loading && (role === "admin" || role === "coach"),
+    organizationFeatures,
     onSoftRefresh: softRefreshDashboard,
   });
 
   const presenceCounts = useOrgPresenceCounts(
     !loading && role === "admin" ? currentOrgId : null,
-    !loading && role === "admin" ? "admin" : null
+    !loading && role === "admin" ? "admin" : null,
+    organizationFeatures
   );
 
   useOrgPresenceCounts(
     !loading && role === "coach" ? currentOrgId : null,
-    !loading && role === "coach" ? "coach" : null
+    !loading && role === "coach" ? "coach" : null,
+    organizationFeatures
   );
 
   useEffect(() => {
     void fetchDashboardData();
   }, [fetchDashboardData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCoachCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -333,6 +356,42 @@ export default function Dashboard() {
   const canManageTrainingNotes = Boolean(coachPermissions?.can_manage_training_notes);
   const canViewReports = Boolean(coachPermissions?.can_view_reports);
 
+  const coachWidgetCtx = (permissionAllowed: boolean): DashboardWidgetVisibilityContext => ({
+    roleAllowed: role === "coach",
+    permissionAllowed,
+    organizationFeatures,
+  });
+  const adminWidgetCtx: DashboardWidgetVisibilityContext = {
+    roleAllowed: role === "admin",
+    permissionAllowed: true,
+    organizationFeatures,
+  };
+  const showCoachOpsMetrics = shouldRenderDashboardWidget(
+    DASHBOARD_WIDGET_IDS.coachOpsMetrics,
+    coachWidgetCtx(true)
+  );
+  const showCoachPerformanceBand = shouldRenderDashboardWidget(
+    DASHBOARD_WIDGET_IDS.coachPerformanceBand,
+    coachWidgetCtx(canViewReports)
+  );
+  const showCoachPrivateSessions = shouldRenderDashboardWidget(
+    DASHBOARD_WIDGET_IDS.coachPrivateSessions,
+    coachWidgetCtx(canManageTrainingNotes)
+  );
+  const showCoachNotificationsPreview = shouldRenderDashboardWidget(
+    DASHBOARD_WIDGET_IDS.coachNotificationsPreview,
+    coachWidgetCtx(true)
+  );
+  const showAdminOnboardingChecklist = shouldRenderDashboardWidget(
+    DASHBOARD_WIDGET_IDS.adminOnboardingChecklist,
+    adminWidgetCtx
+  );
+  const showAdminStatsGrid = shouldRenderDashboardWidget(DASHBOARD_WIDGET_IDS.adminStatsGrid, adminWidgetCtx);
+  const showAdminRevenueCard = shouldRenderDashboardWidget(DASHBOARD_WIDGET_IDS.adminRevenueCard, adminWidgetCtx);
+  const showAdminTodayLessons = shouldRenderDashboardWidget(DASHBOARD_WIDGET_IDS.adminTodayLessons, adminWidgetCtx);
+  const showAdminTeamPayments = shouldRenderDashboardWidget(DASHBOARD_WIDGET_IDS.adminTeamPayments, adminWidgetCtx);
+  const showAdminRecentPrograms = shouldRenderDashboardWidget(DASHBOARD_WIDGET_IDS.adminRecentPrograms, adminWidgetCtx);
+
   if (role === "coach") {
     return (
       <div className="ui-page min-w-0 overflow-x-hidden animate-in fade-in duration-700">
@@ -355,7 +414,7 @@ export default function Dashboard() {
               value={pendingAttendanceLessons.length}
               tone={pendingAttendanceLessons.length > 0 ? "amber" : "emerald"}
             />
-            {coachOpsMetrics ? (
+            {showCoachOpsMetrics && coachOpsMetrics ? (
               <>
                 <CompactMetricCard label="7 gün ders" value={coachOpsMetrics.lessons7d} tone="neutral" />
                 <CompactMetricCard label="Yoklama oranı" value={coachOpsMetrics.attendanceRate} tone="sky" />
@@ -393,7 +452,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {canViewReports ? (
+        {showCoachPerformanceBand ? (
           <section className="ui-card min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="ui-h2-sm">Performans özeti</h3>
@@ -506,7 +565,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        {canManageTrainingNotes && coachPrivateSessions.length > 0 ? (
+        {showCoachPrivateSessions && coachPrivateSessions.length > 0 ? (
           <section className="ui-card min-w-0">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="ui-h2-sm shrink-0">Yaklaşan özel dersler</h3>
@@ -580,32 +639,34 @@ export default function Dashboard() {
           </section>
         )}
 
-        <section className="ui-card min-w-0">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
-            <h3 className="ui-h2-sm shrink-0">Bildirimler</h3>
-            <Link href="/bildirimler" className="text-[#7c3aed] text-[10px] font-black uppercase py-2 sm:py-0 touch-manipulation shrink-0">
-              TUMUNU GOR
-            </Link>
-          </div>
-          {notificationPreview.length === 0 ? (
-            <EmptyStateCard
-              title="Kayıt bulunamadı"
-              description="Bildirim akışında gösterilecek kayıt yok."
-              reason="Bu dönemde yeni sistem bildirimi oluşmamış olabilir."
-              primaryAction={{ label: "Bildirim merkezine git", href: "/bildirimler" }}
-              compact
-            />
-          ) : (
-            <div className="grid gap-2">
-              {notificationPreview.map((n) => (
-                <div key={n.id} className={`rounded-xl px-4 py-3 border min-w-0 ${n.read ? "bg-white/[0.02] border-white/5" : "bg-[#7c3aed]/10 border-[#7c3aed]/20"}`}>
-                  <p className="text-white text-xs font-black italic break-words">{n.message}</p>
-                  <p className="text-[10px] text-gray-500 font-bold italic">{new Date(n.created_at).toLocaleString("tr-TR")}</p>
-                </div>
-              ))}
+        {showCoachNotificationsPreview ? (
+          <section className="ui-card min-w-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
+              <h3 className="ui-h2-sm shrink-0">Bildirimler</h3>
+              <Link href="/bildirimler" className="text-[#7c3aed] text-[10px] font-black uppercase py-2 sm:py-0 touch-manipulation shrink-0">
+                TUMUNU GOR
+              </Link>
             </div>
-          )}
-        </section>
+            {notificationPreview.length === 0 ? (
+              <EmptyStateCard
+                title="Kayıt bulunamadı"
+                description="Bildirim akışında gösterilecek kayıt yok."
+                reason="Bu dönemde yeni sistem bildirimi oluşmamış olabilir."
+                primaryAction={{ label: "Bildirim merkezine git", href: "/bildirimler" }}
+                compact
+              />
+            ) : (
+              <div className="grid gap-2">
+                {notificationPreview.map((n) => (
+                  <div key={n.id} className={`rounded-xl px-4 py-3 border min-w-0 ${n.read ? "bg-white/[0.02] border-white/5" : "bg-[#7c3aed]/10 border-[#7c3aed]/20"}`}>
+                    <p className="text-white text-xs font-black italic break-words">{n.message}</p>
+                    <p className="text-[10px] text-gray-500 font-bold italic">{new Date(n.created_at).toLocaleString("tr-TR")}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
       </div>
     );
   }
@@ -642,7 +703,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {onboardingProgress ? <OnboardingChecklist progress={onboardingProgress} /> : null}
+      {showAdminOnboardingChecklist && onboardingProgress ? <OnboardingChecklist progress={onboardingProgress} /> : null}
 
       <section className="ui-card min-w-0">
         <h3 className="ui-h2-sm mb-3">Bugün Öncelik</h3>
@@ -672,43 +733,50 @@ export default function Dashboard() {
 
       {/* STAT CARDS - Grid Gap ve Padding optimize edildi */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 min-w-0">
-        <StatCard 
-          icon={<Users size={20} />} 
-          label="Toplam Sporcu" 
-          value={stats.totalPlayers} 
-          trend="ORGANIZASYON" 
-          color="from-[#7c3aed] to-[#4c1d95]" 
-          action="Sporcu listesini güncel tutun."
-        />
-        <StatCard 
-          icon={<Calendar size={20} />} 
-          label="Bugünkü Ders"
-          value={stats.activeTrainings} 
-          trend={`${adminPendingAttendance.length} YOKLAMA BEKLIYOR`}
-          color="from-blue-600 to-indigo-900" 
-          action="Önce yoklaması eksik dersleri tamamlayın."
-        />
-        <StatCard
-          icon={<AlertCircle size={20} />}
-          label="Bekleyen Yoklama"
-          value={adminPendingAttendance.length}
-          trend={adminPendingAttendance.length > 0 ? "AKSİYON GEREKLİ" : "TEMİZ"}
-          color="from-amber-500 to-orange-900"
-          action={adminPendingAttendance.length > 0 ? "Yoklama yönetimine geçin." : "Bugün kritik yoklama beklemiyor."}
-        />
-        <StatCard 
-          icon={<CreditCard size={20} />} 
-          label="Aylık Ciro" 
-          value={stats.monthlyRevenue === "-" ? "-" : `₺${stats.monthlyRevenue}`} 
-          trend={revenueTrend}
-          color="from-emerald-500 to-green-900" 
-          action="Aidat bekleyenleri finans sayfasından kapatın."
-        />
+        {showAdminStatsGrid ? (
+          <>
+            <StatCard 
+              icon={<Users size={20} />} 
+              label="Toplam Sporcu" 
+              value={stats.totalPlayers} 
+              trend="ORGANIZASYON" 
+              color="from-[#7c3aed] to-[#4c1d95]" 
+              action="Sporcu listesini güncel tutun."
+            />
+            <StatCard 
+              icon={<Calendar size={20} />} 
+              label="Bugünkü Ders"
+              value={stats.activeTrainings} 
+              trend={`${adminPendingAttendance.length} YOKLAMA BEKLIYOR`}
+              color="from-blue-600 to-indigo-900" 
+              action="Önce yoklaması eksik dersleri tamamlayın."
+            />
+            <StatCard
+              icon={<AlertCircle size={20} />}
+              label="Bekleyen Yoklama"
+              value={adminPendingAttendance.length}
+              trend={adminPendingAttendance.length > 0 ? "AKSİYON GEREKLİ" : "TEMİZ"}
+              color="from-amber-500 to-orange-900"
+              action={adminPendingAttendance.length > 0 ? "Yoklama yönetimine geçin." : "Bugün kritik yoklama beklemiyor."}
+            />
+          </>
+        ) : null}
+        {showAdminRevenueCard ? (
+          <StatCard 
+            icon={<CreditCard size={20} />} 
+            label="Aylık Ciro" 
+            value={stats.monthlyRevenue === "-" ? "-" : `₺${stats.monthlyRevenue}`} 
+            trend={revenueTrend}
+            color="from-emerald-500 to-green-900" 
+            action="Aidat bekleyenleri finans sayfasından kapatın."
+          />
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-w-0">
         {/* LEFT COLUMN */}
         <div className="lg:col-span-8 space-y-6 min-w-0">
+          {showAdminTodayLessons ? (
           <section className="ui-card min-w-0">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 min-w-0">
               <h3 className="ui-h2 min-w-0 break-words">Bugünkü Operasyon Özeti</h3>
@@ -748,6 +816,7 @@ export default function Dashboard() {
               </div>
             )}
           </section>
+          ) : null}
 
           <section className="ui-card relative overflow-hidden min-w-0">
             <h3 className="ui-h2 flex flex-wrap items-center gap-3 mb-8 relative z-10 min-w-0">
@@ -796,7 +865,7 @@ export default function Dashboard() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#7c3aed]/5 rounded-full blur-[100px]" />
           </section>
 
-          {teamPaymentRows.length > 0 && (
+          {showAdminTeamPayments && teamPaymentRows.length > 0 ? (
             <section className="ui-card min-w-0">
               <h3 className="ui-h2 flex flex-wrap items-center gap-3 mb-6 min-w-0">
                 <CreditCard className="text-[#7c3aed] shrink-0" size={22} /> <span className="break-words">Takım tahsilat özeti</span>
@@ -824,7 +893,7 @@ export default function Dashboard() {
                 ))}
               </div>
             </section>
-          )}
+          ) : null}
 
           <section className="ui-card min-w-0">
             <h3 className="ui-h2 mb-8 break-words">Son Hareketler</h3>
@@ -839,7 +908,8 @@ export default function Dashboard() {
               )) : (
                 <p className="text-gray-500 italic text-center py-6 uppercase font-black text-[10px] tracking-widest">Ders hareketi yok</p>
               )}
-              {adminRecentPrograms.slice(0, 2).map((p) => {
+              {showAdminRecentPrograms
+                ? adminRecentPrograms.slice(0, 2).map((p) => {
                 const coach = Array.isArray(p.coach_profile) ? p.coach_profile[0] : p.coach_profile;
                 const athlete = Array.isArray(p.athlete_profile) ? p.athlete_profile[0] : p.athlete_profile;
                 return (
@@ -850,7 +920,8 @@ export default function Dashboard() {
                     </p>
                   </div>
                 );
-              })}
+              })
+                : null}
               {adminRecentAttendanceUpdates.slice(0, 2).map((item) => (
                 <div
                   key={`${item.training_id}-${item.marked_at ?? "x"}`}

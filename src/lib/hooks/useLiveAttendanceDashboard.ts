@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { bumpClientRealtimeStat } from "@/lib/realtime/clientRealtimeStats";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { REALTIME_SUBSCRIPTION_IDS } from "@/lib/organization/features/surfaces/realtimeEntitlementMap";
+import { shouldSubscribeRealtime } from "@/lib/navigation/realtimeFeatureVisibility";
 
 const DEBOUNCE_MS = 1_200;
 
 export type LiveAttendanceDashboardOptions = {
   enabled: boolean;
+  organizationFeatures?: OrganizationFeatures | null;
   /** Called after debounce; use soft refresh that avoids full-page loading UX. */
   onSoftRefresh: () => void;
 };
@@ -16,7 +20,11 @@ export type LiveAttendanceDashboardOptions = {
  * Subscribes to training_participants changes visible under RLS (coach/admin org scope).
  * Debounced; coalesces bursts. When tab hidden, marks pending and runs once on visible.
  */
-export function useLiveAttendanceDashboard({ enabled, onSoftRefresh }: LiveAttendanceDashboardOptions) {
+export function useLiveAttendanceDashboard({
+  enabled,
+  organizationFeatures = null,
+  onSoftRefresh,
+}: LiveAttendanceDashboardOptions) {
   const pendingHidden = useRef(false);
   const debounceRef = useRef<number | null>(null);
   const onSoftRefreshRef = useRef(onSoftRefresh);
@@ -50,7 +58,14 @@ export function useLiveAttendanceDashboard({ enabled, onSoftRefresh }: LiveAtten
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    const subscribeAllowed =
+      enabled &&
+      shouldSubscribeRealtime(REALTIME_SUBSCRIPTION_IDS.liveAttendanceDashboard, {
+        roleAllowed: true,
+        permissionAllowed: true,
+        organizationFeatures,
+      });
+    if (!subscribeAllowed) return;
 
     const channel = supabase
       .channel(`attendance-participants-live`)
@@ -74,5 +89,5 @@ export function useLiveAttendanceDashboard({ enabled, onSoftRefresh }: LiveAtten
       if (debounceRef.current) clearTimeout(debounceRef.current);
       void supabase.removeChannel(channel);
     };
-  }, [enabled, fire]);
+  }, [enabled, organizationFeatures, fire]);
 }

@@ -9,6 +9,8 @@ import {
   submitWellnessReportToday,
 } from "@/lib/actions/wellnessFormActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { buildOfflineScopeKey } from "@/lib/offline/scope";
 import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
@@ -32,6 +34,7 @@ export default function SporcuWellnessGiris() {
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [draftQueued, setDraftQueued] = useState(false);
   const [scopeKey, setScopeKey] = useState("");
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const online = useOnlineStatus();
   const { values: form, setValue, hasDraft: hasFormDraft, clearDraft } = useFormDraft({
     scopeKey,
@@ -86,6 +89,18 @@ export default function SporcuWellnessGiris() {
     })();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (isAllowed === false) {
     return (
       <div className="min-w-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
@@ -115,6 +130,7 @@ export default function SporcuWellnessGiris() {
         scopeKey: buildOfflineScopeKey(me.organizationId, me.userId),
         payload: { form },
         title: "Sabah raporu taslağı",
+        organizationFeatures,
       });
       if ("error" in queued) {
         setSubmitError(queued.error);

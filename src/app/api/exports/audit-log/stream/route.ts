@@ -46,6 +46,8 @@ import { ensureRateLimitSetup } from "@/lib/rateLimit";
 import { checkExportRateLimitAsync, formatRateLimitRetryMessage } from "@/lib/rateLimit/exportRateLimit";
 import { logger } from "@/lib/monitoring/logger";
 import { reportExportRun, reportExportStreamTerminal } from "@/lib/monitoring/advancedTelemetry";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -108,6 +110,11 @@ export async function GET(request: Request) {
       return jsonError("Geçersiz organizasyon filtresi.", 400, { errorKind: "invalid_input" });
     }
     scopeOrg = wantOrg || null;
+  }
+
+  const featureDenial = await assertExportFeatureForOrg(EXPORT_ENDPOINT_IDS.auditLogStream, scopeOrg);
+  if (featureDenial) {
+    return jsonError(featureDenial.error, 403, { errorKind: featureDenial.errorKind });
   }
 
   // Rate limit — sync action ile aynı policy, async adapter (distributed-safe).

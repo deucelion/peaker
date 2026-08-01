@@ -87,6 +87,10 @@ import { PerformanceOrgSummaryBand } from "@/components/performance/PerformanceO
 import { PerformanceTeamListView } from "@/components/performance/PerformanceTeamListView";
 import { PartialDataNotice } from "@/components/performance/PartialDataNotice";
 import { PerformanceExportHint } from "@/components/performance/PerformanceExportHint";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 import { hrefWellnessArchive } from "@/lib/navigation/wellnessArchiveLinks";
 import { hrefAthleteDetailWithRange, parsePerformansSearchParams } from "@/lib/navigation/performanceLinks";
 import { loadPerformancePreferences, savePerformancePreferences } from "@/lib/performance/performancePreferences";
@@ -175,6 +179,25 @@ export default function PerformanceAnalytics() {
   const [dailyReports, setDailyReports] = useState<Array<{ profile_id?: string | null; rpe_score?: number }>>([]);
   // FAZ 32: sunucu tarafindaki sporcu hard-cap kesintisi gorunur uyariya baglanir.
   const [capWarning, setCapWarning] = useState<{ cap: number; total: number } | null>(null);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showPerformanceCsvExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.performanceSummaryCsv, {
+    roleAllowed: true,
+    permissionAllowed: true,
+    organizationFeatures,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -541,6 +564,7 @@ export default function PerformanceAnalytics() {
             <Loader2 className={`size-3.5 shrink-0 ${loading ? "animate-spin text-[#7c3aed]" : "opacity-60"}`} aria-hidden />
             Yenile
           </button>
+          {showPerformanceCsvExportUi ? (
           <button
             type="button"
             disabled={!orgId || exportBusy}
@@ -585,6 +609,7 @@ export default function PerformanceAnalytics() {
             )}
             CSV indir
           </button>
+          ) : null}
           <button
             type="button"
             disabled={!orgId || !selectedAthleteId || pdfExportBusy}

@@ -17,6 +17,8 @@ import type { AthleteProgram } from "@/lib/types";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
 import { buildOfflineScopeKey } from "@/lib/offline/scope";
 import { coachNoteDraftKey, coachNoteIdempotencyKey } from "@/lib/offline/draftKeys";
@@ -67,6 +69,7 @@ export default function ProgramNotesPage() {
   });
   const online = useOnlineStatus();
   const [scopeKey, setScopeKey] = useState("");
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const [noteDraftRestored, setNoteDraftRestored] = useState(false);
 
   function isImageAsset(url: string | null) {
@@ -129,6 +132,18 @@ export default function ProgramNotesPage() {
       if (!me.ok) return;
       setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const noteDraftKey = useMemo(() => {
@@ -260,6 +275,7 @@ export default function ProgramNotesPage() {
         },
         title: form.title?.trim() || "Koç sporcu notu",
         subjectLabel: athleteName,
+        organizationFeatures,
       });
       if ("error" in queued) {
         setMessage(queued.error);

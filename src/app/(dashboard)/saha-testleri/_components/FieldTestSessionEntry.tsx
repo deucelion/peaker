@@ -37,6 +37,10 @@ import {
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
 import { buildOfflineScopeKey } from "@/lib/offline/scope";
 import { fieldTestDraftKey, fieldTestIdempotencyKey } from "@/lib/offline/draftKeys";
@@ -74,6 +78,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
   const [saveFeedback, setSaveFeedback] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const [contextPulse, setContextPulse] = useState(false);
   
   const [metrics, setMetrics] = useState<TestDefinitionRow[]>([]); 
@@ -214,6 +219,24 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
       setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showFieldTestExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.fieldTestResultsCsv, {
+    roleAllowed: true,
+    permissionAllowed: true,
+    organizationFeatures,
+  });
 
   const fieldDraftStorageKey = useMemo(() => {
     if (!actorUserId || !activeAthleteId) return "";
@@ -469,6 +492,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
             notes: notesPayload,
           },
           title: `Saha testi · ${sessionDate}`,
+          organizationFeatures,
         });
         if ("error" in queued) {
           setSaveMessage(queued.error);
@@ -631,6 +655,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         <PerformanceTabsNav activeKey="saha" />
         <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <PerformanceExportHint scope="session-csv" className="max-w-xl" />
+          {showFieldTestExportUi ? (
           <button
             type="button"
             disabled={exportBusy}
@@ -673,6 +698,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
             )}
             CSV indir
           </button>
+          ) : null}
         </div>
         {exportMessage ? (
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300" role="status">

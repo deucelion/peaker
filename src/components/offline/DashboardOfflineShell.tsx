@@ -8,20 +8,33 @@ import { SyncStatusCenter } from "@/components/offline/SyncStatusCenter";
 import { OfflineActionToast } from "@/components/offline/OfflineActionToast";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 
 export function DashboardOfflineShell({
   organizationId,
   userId,
+  organizationFeatures = null,
 }: {
   organizationId: string | null;
   userId: string | null;
+  organizationFeatures?: OrganizationFeatures | null;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { online, scopeKey, pendingCount, syncing, items, lastResult, refresh, runSync } =
+  const { online, scopeKey, pendingCount, syncing, items, lastResult, refresh, runSync, offlineShellEnabled } =
     useOfflineSync({
       organizationId,
       userId,
+      organizationFeatures,
     });
+
+  if (!offlineShellEnabled) {
+    return (
+      <>
+        <ServiceWorkerRegister />
+        <PwaInstallBanner />
+      </>
+    );
+  }
 
   return (
     <>

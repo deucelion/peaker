@@ -26,6 +26,8 @@ import {
   fieldTestSaveFailure,
   type FieldTestSaveFailure,
 } from "@/lib/fieldTests/fieldTestSaveErrors";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -1225,6 +1227,14 @@ export async function exportFieldTestResultsCSV(input: {
   return withServerActionGuard("fieldTest.exportFieldTestResultsCSV", async () => {
   const resolved = await resolveFieldTestActor();
   if ("error" in resolved) return { error: resolved.error ?? "Yetki kontrolu başarısız." };
+
+  const featureDenial = await assertExportFeatureForOrg(
+    EXPORT_ENDPOINT_IDS.fieldTestResultsCsv,
+    resolved.organizationId
+  );
+  if (featureDenial) {
+    return { error: featureDenial.error };
+  }
 
   const dateFrom = input.dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(input.dateFrom) ? input.dateFrom : null;
   const dateTo = input.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(input.dateTo) ? input.dateTo : null;

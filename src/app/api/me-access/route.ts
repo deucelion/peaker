@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { attachOrganizationFeaturesToMeAccessPayload } from "@/lib/auth/meAccessBootstrap";
 import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
@@ -18,11 +19,13 @@ export async function GET() {
 
   if (role === "coach" && orgId) {
     const coachPermissions = await getCoachPermissions(actor.id, orgId);
-    return NextResponse.json({
-      role,
-      coachPermissions,
-      athletePermissions: null,
-    });
+    return NextResponse.json(
+      await attachOrganizationFeaturesToMeAccessPayload(orgId, {
+        role,
+        coachPermissions,
+        athletePermissions: null,
+      })
+    );
   }
 
   if (role === "sporcu" && orgId) {
@@ -35,19 +38,22 @@ export async function GET() {
       .eq("organization_id", orgId)
       .maybeSingle();
 
-    return NextResponse.json({
-      role,
-      coachPermissions: null,
-      athletePermissions: normalizeAthletePermissions(
-        (data as Partial<Record<AthletePermissionKey, boolean>> | null) || undefined
-      ),
-    });
+    return NextResponse.json(
+      await attachOrganizationFeaturesToMeAccessPayload(orgId, {
+        role,
+        coachPermissions: null,
+        athletePermissions: normalizeAthletePermissions(
+          (data as Partial<Record<AthletePermissionKey, boolean>> | null) || undefined
+        ),
+      })
+    );
   }
 
-  return NextResponse.json({
-    role,
-    coachPermissions: null as Partial<Record<CoachPermissionKey, boolean>> | null,
-    athletePermissions: null as Partial<Record<AthletePermissionKey, boolean>> | null,
-  });
+  return NextResponse.json(
+    await attachOrganizationFeaturesToMeAccessPayload(orgId, {
+      role,
+      coachPermissions: null as Partial<Record<CoachPermissionKey, boolean>> | null,
+      athletePermissions: null as Partial<Record<AthletePermissionKey, boolean>> | null,
+    })
+  );
 }
-

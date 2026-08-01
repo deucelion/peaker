@@ -17,6 +17,8 @@ import { reportExportRun, reportExportStreamTerminal } from "@/lib/monitoring/ad
 import { loadReceivablesDashboard } from "@/lib/actions/receivableDashboardActions";
 import { RECEIVABLE_STATUS_LABEL_TR, type ReceivableComputedStatus } from "@/lib/finance/receivableStatus";
 import type { PackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,6 +57,11 @@ export async function GET(request: Request) {
   }
   if (!scopeOrg) {
     return jsonError("Dışa aktarım için organizasyon belirtilmeli.", 400, { errorKind: "invalid_input" });
+  }
+
+  const featureDenial = await assertExportFeatureForOrg(EXPORT_ENDPOINT_IDS.receivablesStream, scopeOrg);
+  if (featureDenial) {
+    return jsonError(featureDenial.error, 403, { errorKind: featureDenial.errorKind });
   }
 
   const kindRaw = (url.searchParams.get("kind") || "packages").trim();

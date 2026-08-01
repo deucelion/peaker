@@ -38,6 +38,8 @@ import { csvFilename } from "@/lib/export/csv";
 import { buildCsvFromRows } from "@/lib/export/csvStream";
 import { createJobContext, runJob } from "@/lib/jobs";
 import { checkExportRateLimit } from "@/lib/rateLimit";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import {
   shouldUseDailyTrainingLoadMv,
   fetchDailyTrainingLoadMvRows,
@@ -446,6 +448,17 @@ export async function exportPerformanceSummaryCSV(
         errorKind: "permission_denied" as PerformanceAnalyticsErrorKind,
       };
     }
+  }
+
+  const featureDenial = await assertExportFeatureForOrg(
+    EXPORT_ENDPOINT_IDS.performanceSummaryCsv,
+    organizationId
+  );
+  if (featureDenial) {
+    return {
+      error: featureDenial.error,
+      errorKind: featureDenial.errorKind as PerformanceAnalyticsErrorKind,
+    };
   }
 
   // Faz 11.7 — Rate limit.

@@ -17,6 +17,10 @@ import {
 } from "@/lib/privateLessons/packageStatus";
 import { resolvePaymentsExportDateRange } from "@/lib/export/paymentsExportDateRange";
 import { useStreamingCsvDownload } from "@/lib/hooks/useStreamingCsvDownload";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 import { useReceivablesDashboard } from "@/lib/hooks/useReceivablesDashboard";
 import { isUuid } from "@/lib/validation/uuid";
 import type { ReceivableFiltersState } from "./types";
@@ -93,6 +97,25 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
   const [noteMethod, setNoteMethod] = useState<"phone" | "whatsapp" | "in_person" | "other">("phone");
   const [noteFollowUp, setNoteFollowUp] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showReceivablesExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.receivablesStream, {
+    roleAllowed: true,
+    permissionAllowed: true,
+    organizationFeatures,
+  });
 
   const buildFilters = useCallback(
     (cf: ReceivableFiltersState): ReceivableDashboardFilters => ({
@@ -412,6 +435,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
           >
             Sıfırla
           </button>
+          {showReceivablesExportUi ? (
           <FinanceExportMenu
             exporting={csv.exporting}
             items={[
@@ -420,6 +444,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               { id: "packages", label: "Paket borcu", description: "Tüm paket satırları", onSelect: () => runExport("packages") },
             ]}
           />
+          ) : null}
         </div>
       </section>
 

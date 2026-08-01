@@ -12,6 +12,10 @@ import type {
 } from "@/lib/offline/types";
 import { filterQueueForScope } from "@/lib/offline/scope";
 import { enrichQueueItem, queueItemMetaFromPayload } from "@/lib/offline/queueItemMeta";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { evaluateOfflineFeatureAccess } from "@/lib/navigation/offlineFeatureVisibility";
+
+const OFFLINE_FEATURE_DENIED_MESSAGE = "Bu modul organizasyonunuz icin aktif degil." as const;
 
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -27,6 +31,7 @@ export type EnqueueOfflineInput = {
   draftId?: string;
   subjectLabel?: string;
   navigationHref?: string;
+  organizationFeatures?: OrganizationFeatures | null;
 };
 
 export function listOfflineActions(scopeKey?: string): OfflineQueuedAction[] {
@@ -48,6 +53,13 @@ export function enqueueOfflineAction(input: EnqueueOfflineInput): OfflineQueuedA
       error:
         "Bu işlem çevrimdışı otomatik gönderilemez. Bağlantı gelince ilgili ekrandan tekrar deneyin.",
     };
+  }
+
+  if (
+    input.organizationFeatures &&
+    evaluateOfflineFeatureAccess(input.kind, input.organizationFeatures) === "deny"
+  ) {
+    return { error: OFFLINE_FEATURE_DENIED_MESSAGE };
   }
 
   const status: OfflineActionStatus =

@@ -10,10 +10,13 @@ import {
 import { replayOfflineActions } from "@/lib/offline/replayOfflineActions";
 import type { OfflineQueuedAction, OfflineReplayResult } from "@/lib/offline/types";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderOfflineShell } from "@/lib/navigation/offlineFeatureVisibility";
 
 export function useOfflineSync(scope: {
   organizationId: string | null | undefined;
   userId: string | null | undefined;
+  organizationFeatures?: OrganizationFeatures | null;
 }) {
   const online = useOnlineStatus();
   const scopeKey = useMemo(
@@ -25,6 +28,7 @@ export function useOfflineSync(scope: {
   const [syncing, setSyncing] = useState(false);
   const [lastResult, setLastResult] = useState<OfflineReplayResult | null>(null);
   const [items, setItems] = useState<OfflineQueuedAction[]>([]);
+  const offlineShellEnabled = shouldRenderOfflineShell(scope.organizationFeatures ?? null);
 
   const refresh = useCallback(() => {
     setItems(listOfflineActions(scopeKey));
@@ -32,6 +36,7 @@ export function useOfflineSync(scope: {
   }, [scopeKey]);
 
   useEffect(() => {
+    if (!offlineShellEnabled) return;
     let cancelled = false;
     void prepareOfflineQueueForScope(scopeKey).then(() => {
       if (!cancelled) {
@@ -42,24 +47,25 @@ export function useOfflineSync(scope: {
     return () => {
       cancelled = true;
     };
-  }, [scopeKey, refresh]);
+  }, [offlineShellEnabled, scopeKey, refresh]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!offlineShellEnabled || !ready) return;
     const onChange = () => refresh();
     window.addEventListener("peaker-offline-queue-changed", onChange);
     return () => window.removeEventListener("peaker-offline-queue-changed", onChange);
-  }, [ready, refresh]);
+  }, [offlineShellEnabled, ready, refresh]);
 
   const runSync = useCallback(
     async (opts?: { includeConfirmation?: boolean; onlyIds?: string[] }) => {
-      if (!online) return null;
+      if (!online || !offlineShellEnabled) return null;
       setSyncing(true);
       try {
         const result = await replayOfflineActions({
           scopeKey,
           includeConfirmation: opts?.includeConfirmation,
           onlyIds: opts?.onlyIds,
+          organizationFeatures: scope.organizationFeatures ?? null,
         });
         setLastResult(result);
         refresh();
@@ -71,20 +77,21 @@ export function useOfflineSync(scope: {
         setSyncing(false);
       }
     },
-    [online, scopeKey, refresh]
+    [online, offlineShellEnabled, scope.organizationFeatures, scopeKey, refresh]
   );
 
   useEffect(() => {
-    if (!online || !ready || pendingCount === 0) return;
+    if (!online || !ready || !offlineShellEnabled || pendingCount === 0) return;
     const id = window.setTimeout(() => {
       void runSync();
     }, 800);
     return () => window.clearTimeout(id);
-  }, [online, ready, pendingCount, runSync]);
+  }, [online, ready, offlineShellEnabled, pendingCount, runSync]);
 
   return {
     online,
-    ready,
+    ready: offlineShellEnabled ? ready : false,
+    offlineShellEnabled,
     scopeKey,
     pendingCount,
     syncing,

@@ -37,6 +37,8 @@ import { buildCsvFromRows } from "@/lib/export/csvStream";
 import { logger } from "@/lib/monitoring";
 import { lookupMonthlyFinanceMv } from "@/lib/finance/monthlyFinanceMv";
 import { checkExportRateLimit } from "@/lib/rateLimit";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import {
   getAccountingPaymentKindLabel,
   getAccountingPaymentScopeLabel,
@@ -1593,7 +1595,15 @@ export async function exportAccountingFinancePaymentsCSV(
   // Faz 11.7 — Rate limit.
   const resolvedForRl = await resolveSessionActor({ claimRequiresOrganization: false });
   if (!("error" in resolvedForRl)) {
-    const orgIdForRl = resolvedForRl.actor.organizationId || (rawFilters.orgId || "global");
+    const scopeOrg = resolvedForRl.actor.organizationId || (rawFilters.orgId?.trim() || null);
+    const featureDenial = await assertExportFeatureForOrg(
+      EXPORT_ENDPOINT_IDS.accountingFinancePaymentsCsv,
+      scopeOrg
+    );
+    if (featureDenial) {
+      return { error: featureDenial.error };
+    }
+    const orgIdForRl = scopeOrg || "global";
     const rl = checkExportRateLimit({
       userId: resolvedForRl.actor.id,
       organizationId: orgIdForRl,

@@ -15,6 +15,8 @@ import { reportAuditListFetch } from "@/lib/monitoring/advancedTelemetry";
 import { auditDateEndIso, auditDateStartIso } from "@/lib/audit/auditQueryRange";
 import { checkExportRateLimit } from "@/lib/rateLimit";
 import { auditListUserMessage } from "@/lib/schemaCompat/userMessages";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 
 const AUDIT_LIST_QUERY_TIMEOUT_MS = 25_000;
 
@@ -308,6 +310,14 @@ export async function exportAuditLogsCSV(filter: AuditLogFilter = {}) {
         return { error: "Geçersiz organizasyon filtresi.", errorKind: "invalid_input" as AuditLogErrorKind };
       }
       scopeOrg = wantOrg || null;
+    }
+
+    const featureDenial = await assertExportFeatureForOrg(EXPORT_ENDPOINT_IDS.auditLogsCsv, scopeOrg);
+    if (featureDenial) {
+      return {
+        error: featureDenial.error,
+        errorKind: featureDenial.errorKind as AuditLogErrorKind,
+      };
     }
 
     // Faz 11.7 — Rate limit: export kategori başına per-user + per-org koruma.

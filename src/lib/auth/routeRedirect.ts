@@ -5,6 +5,7 @@ export type RouteRedirectReason =
   | "forbidden_route"
   | "coach_permission_denied"
   | "athlete_permission_denied"
+  | "feature_entitlement_denied"
   | "not_super_admin"
   | "same_path_guard";
 

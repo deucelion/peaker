@@ -22,10 +22,27 @@ import {
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { looksLikeSuperAdminRole } from "@/lib/auth/resolveRouteRole";
 import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { createDefaultBranding } from "@/lib/organization/branding/defaults";
+import { resolveLayoutBranding } from "@/lib/organization/branding/surfaces/resolveLayoutBranding";
+import { createLayoutThemeStyle, LAYOUT_THEME_VARS } from "@/lib/navigation/layoutThemeTokens";
+import {
+  buildSidebarNavIconStyle,
+  buildSidebarNavItemStyle,
+  createSidebarThemeStyleFromBranding,
+  SIDEBAR_THEME_VARS,
+} from "@/lib/navigation/sidebarThemeTokens";
+import {
+  createDefaultOrganizationBrandingPresentation,
+  createOrganizationBrandingPresentation,
+  type OrganizationBrandingPresentation,
+} from "@/lib/navigation/organizationBrandingPresentation";
+import { BrandingDocumentMetadata } from "@/components/branding/BrandingDocumentMetadata";
+import { BrandingSidebarLogo } from "@/components/branding/BrandingSidebarLogo";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import { hrefTahsilatKaydet } from "@/lib/finance/tahsilatMerkeziLinks";
 import type { CoachPermissions, AthletePermissions } from "@/lib/types";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { PeakerDebugInstaller } from "@/components/dev/PeakerDebugInstaller";
 import { DashboardOfflineShell } from "@/components/offline";
 import { CoachMobileQuickStrip } from "@/components/mobile/CoachMobileQuickStrip";
@@ -61,9 +78,20 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { unreadCount, badgePulse } = useUnreadNotificationsLive();
   const [coachPermissions, setCoachPermissions] = useState<CoachPermissions | null>(null);
   const [athletePermissions, setAthletePermissions] = useState<AthletePermissions | null>(null);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+  const [featuresRevision, setFeaturesRevision] = useState<number | null>(null);
+  const [layoutThemeStyle, setLayoutThemeStyle] = useState<Record<string, string>>(() =>
+    createLayoutThemeStyle(createDefaultBranding().theme)
+  );
+  const [sidebarThemeStyle, setSidebarThemeStyle] = useState<Record<string, string>>(() =>
+    createSidebarThemeStyleFromBranding(createDefaultBranding())
+  );
+  const [brandingPresentation, setBrandingPresentation] = useState<OrganizationBrandingPresentation>(() =>
+    createDefaultOrganizationBrandingPresentation()
+  );
+  const { unreadCount, badgePulse } = useUnreadNotificationsLive(organizationFeatures);
   const [organizationName, setOrganizationName] = useState("PEAKER");
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -170,8 +198,19 @@ export default function DashboardLayout({
           setPermissionsLoading(true);
           setCoachPermissions(null);
           setAthletePermissions(null);
+          setOrganizationFeatures(null);
+          setFeaturesRevision(null);
+          setLayoutThemeStyle(createLayoutThemeStyle(createDefaultBranding().theme));
+          setSidebarThemeStyle(createSidebarThemeStyleFromBranding(createDefaultBranding()));
+          setBrandingPresentation(createDefaultOrganizationBrandingPresentation());
           const accessPayload = await fetchMeAccessClient();
           if (!cancelled && accessPayload.ok) {
+            setOrganizationFeatures(accessPayload.organizationFeatures);
+            setFeaturesRevision(accessPayload.featuresRevision);
+            const layoutBranding = resolveLayoutBranding(accessPayload.organizationBranding);
+            setLayoutThemeStyle(createLayoutThemeStyle(layoutBranding.theme));
+            setSidebarThemeStyle(createSidebarThemeStyleFromBranding(accessPayload.organizationBranding));
+            setBrandingPresentation(createOrganizationBrandingPresentation(accessPayload.organizationBranding));
             if (payload.role === "coach") {
               setCoachPermissions(accessPayload.coachPermissions || DEFAULT_COACH_PERMISSIONS);
             } else if (payload.role === "sporcu") {
@@ -217,6 +256,7 @@ export default function DashboardLayout({
     role: safeRole,
     coachPermissions,
     athletePermissions,
+    organizationFeatures,
   };
 
   const visibleNav = (section: NavSection) =>
@@ -261,7 +301,14 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="h-[100dvh] bg-[#09090b] flex flex-col items-center justify-center text-[#7c3aed]">
+      <div
+        className="h-[100dvh] flex flex-col items-center justify-center"
+        style={{
+          ...layoutThemeStyle,
+          backgroundColor: LAYOUT_THEME_VARS.BACKGROUND,
+          color: LAYOUT_THEME_VARS.PRIMARY,
+        }}
+      >
         <Loader2 className="animate-spin mb-4" size={40} />
         <span className="text-[10px] font-black uppercase tracking-[0.5em] italic">SENKRONİZE EDİLİYOR</span>
       </div>
@@ -272,18 +319,24 @@ export default function DashboardLayout({
 
   const sidebarBody = (onNavigate?: () => void) => (
     <>
-      <div className="flex items-center gap-2.5 p-6 mb-4">
-        <div className="w-8 h-8 bg-[#7c3aed] rounded-lg flex items-center justify-center font-black italic text-base text-white shadow-lg shadow-[#7c3aed]/20">P</div>
-        <div className="flex flex-col text-white">
-          <span className="text-xl font-black tracking-tighter italic leading-none">{organizationName}<span className="text-[#7c3aed]">.</span></span>
-          <span className="text-[8px] text-gray-600 font-bold tracking-[0.2em] uppercase mt-0.5">Powered by Peaker</span>
-        </div>
-      </div>
+      <BrandingSidebarLogo
+        logo={brandingPresentation.logo}
+        metadata={brandingPresentation.metadata}
+        organizationName={organizationName}
+      />
 
-      <nav className="flex-1 space-y-0.5 px-4 text-sm overflow-y-auto custom-scrollbar">
+      <nav
+        className="flex-1 space-y-0.5 px-4 text-sm overflow-y-auto custom-scrollbar"
+        style={{ scrollbarColor: `${SIDEBAR_THEME_VARS.SIDEBAR_TEXT} transparent` }}
+      >
         {isSuperAdmin && (
           <div className="mb-6">
-            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SYSTEM OWNER</p>
+            <p
+              className="text-[9px] font-black uppercase tracking-[0.2em] mb-3 ml-2 italic"
+              style={{ color: SIDEBAR_THEME_VARS.SIDEBAR_TEXT, opacity: 0.4 }}
+            >
+              SYSTEM OWNER
+            </p>
             {visibleNav("super_admin").map((item) => (
               <NavItem
                 key={`${item.section}-${item.href}`}
@@ -300,7 +353,12 @@ export default function DashboardLayout({
 
         {isCoachOrAdmin && (
           <div className="mb-6">
-            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">İŞ AKIŞLARI</p>
+            <p
+              className="text-[9px] font-black uppercase tracking-[0.2em] mb-3 ml-2 italic"
+              style={{ color: SIDEBAR_THEME_VARS.SIDEBAR_TEXT, opacity: 0.4 }}
+            >
+              İŞ AKIŞLARI
+            </p>
             {visibleNav("management").map((item) => (
               <NavItem
                 key={`${item.section}-${item.href}`}
@@ -316,7 +374,12 @@ export default function DashboardLayout({
         )}
         {isAthlete && (
           <>
-            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] mb-3 ml-2 italic opacity-40">SPORCU ERİŞİMİ</p>
+            <p
+              className="text-[9px] font-black uppercase tracking-[0.2em] mb-3 ml-2 italic"
+              style={{ color: SIDEBAR_THEME_VARS.SIDEBAR_TEXT, opacity: 0.4 }}
+            >
+              SPORCU ERİŞİMİ
+            </p>
             {visibleNav("athlete").map((item) => (
               <NavItem
                 key={`${item.section}-${item.href}`}
@@ -332,7 +395,10 @@ export default function DashboardLayout({
         )}
       </nav>
 
-      <div className="p-4 border-t border-white/5 space-y-0.5">
+      <div
+        className="p-4 border-t space-y-0.5"
+        style={{ borderColor: `color-mix(in srgb, ${SIDEBAR_THEME_VARS.SURFACE} 70%, transparent)` }}
+      >
         {visibleNav("footer").map((item) => (
           <NavItem
             key={`${item.section}-${item.href}`}
@@ -353,6 +419,10 @@ export default function DashboardLayout({
 
   return (
     <>
+      <BrandingDocumentMetadata
+        metadata={brandingPresentation.metadata}
+        favicon={brandingPresentation.favicon}
+      />
       {isSidebarOpen ? (
         <>
           <button
@@ -363,20 +433,49 @@ export default function DashboardLayout({
           />
           <aside
             id="dashboard-sidebar"
-            className="fixed left-0 top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)] z-[110] flex w-64 flex-col border-r border-white/5 bg-[#0b0b0d] lg:hidden dashboard-shell-chrome"
+            className="fixed left-0 top-[env(safe-area-inset-top,0px)] bottom-[env(safe-area-inset-bottom,0px)] z-[110] flex w-64 flex-col border-r lg:hidden dashboard-shell-chrome"
+            style={{
+              ...sidebarThemeStyle,
+              backgroundColor: SIDEBAR_THEME_VARS.SIDEBAR_BACKGROUND,
+              color: SIDEBAR_THEME_VARS.SIDEBAR_TEXT,
+              borderColor: `color-mix(in srgb, ${SIDEBAR_THEME_VARS.SURFACE} 70%, transparent)`,
+            }}
           >
             {sidebarBody(closeMobileSidebar)}
           </aside>
         </>
       ) : null}
 
-      <div className="flex min-h-[100dvh] bg-[#09090b]">
-        <aside className="dashboard-shell-chrome hidden w-64 shrink-0 flex-col border-r border-white/5 bg-[#0b0b0d] lg:flex">
+      <div
+        className="flex min-h-[100dvh]"
+        style={{
+          ...layoutThemeStyle,
+          backgroundColor: LAYOUT_THEME_VARS.BACKGROUND,
+        }}
+      >
+        <aside
+          className="dashboard-shell-chrome hidden w-64 shrink-0 flex-col border-r lg:flex"
+          style={{
+            ...sidebarThemeStyle,
+            backgroundColor: SIDEBAR_THEME_VARS.SIDEBAR_BACKGROUND,
+            color: SIDEBAR_THEME_VARS.SIDEBAR_TEXT,
+            borderColor: `color-mix(in srgb, ${SIDEBAR_THEME_VARS.SURFACE} 70%, transparent)`,
+          }}
+        >
           {sidebarBody()}
         </aside>
 
-        <main className="relative z-0 flex min-w-0 flex-1 flex-col bg-[#09090b] pt-[env(safe-area-inset-top,0px)] lg:pt-0">
-        <header className="dashboard-shell-chrome flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#09090b]/95 px-4 sm:px-6">
+        <main
+          className="relative z-0 flex min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top,0px)] lg:pt-0"
+          style={{ backgroundColor: LAYOUT_THEME_VARS.BACKGROUND }}
+        >
+        <header
+          className="dashboard-shell-chrome flex min-h-16 shrink-0 items-center justify-between border-b border-white/5 px-4 sm:px-6"
+          style={{
+            backgroundColor: LAYOUT_THEME_VARS.BACKGROUND,
+            color: LAYOUT_THEME_VARS.TEXT_PRIMARY,
+          }}
+        >
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -397,7 +496,10 @@ export default function DashboardLayout({
                       Hızlı İşlem
                     </span>
                   </summary>
-                  <div className="absolute right-0 z-30 mt-2 min-w-56 rounded-xl border border-white/10 bg-[#121215] p-1 shadow-2xl">
+                  <div
+                    className="absolute right-0 z-30 mt-2 min-w-56 rounded-xl border border-white/10 p-1 shadow-2xl"
+                    style={{ backgroundColor: LAYOUT_THEME_VARS.SURFACE }}
+                  >
                     {quickActions.map((action) => (
                       <button
                         key={action.href}
@@ -415,8 +517,11 @@ export default function DashboardLayout({
             <div className="flex flex-col items-end">
               <span className="text-[10px] font-black uppercase italic leading-none">{userName}</span>
               <div className="flex items-center gap-1 mt-1">
-                <Trophy size={8} className="text-[#7c3aed]" />
-                <span className="text-[7px] font-black italic uppercase tracking-[0.15em] text-gray-500">
+                <Trophy size={8} style={{ color: LAYOUT_THEME_VARS.PRIMARY }} />
+                <span
+                  className="text-[7px] font-black italic uppercase tracking-[0.15em]"
+                  style={{ color: LAYOUT_THEME_VARS.TEXT_SECONDARY }}
+                >
                   {safeRole === "super_admin" ? "PLATFORM OWNER" : safeRole === "admin" ? "ORG ADMIN" : safeRole === "coach" ? "KOÇ" : "SPORCU"}
                 </span>
               </div>
@@ -430,7 +535,12 @@ export default function DashboardLayout({
               <Bell size={16} />
               {unreadCount > 0 && (
                 <span
-                  className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-[#7c3aed] text-white rounded-full ring-2 ring-[#09090b] text-[8px] font-black flex items-center justify-center transition-transform ${badgePulse ? "animate-pulse scale-110 ring-violet-400/80" : ""}`}
+                  className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full text-[8px] font-black flex items-center justify-center transition-transform ${badgePulse ? "animate-pulse scale-110 ring-violet-400/80" : ""}`}
+                  style={{
+                    backgroundColor: LAYOUT_THEME_VARS.PRIMARY,
+                    color: LAYOUT_THEME_VARS.TEXT_PRIMARY,
+                    boxShadow: `0 0 0 2px ${LAYOUT_THEME_VARS.BACKGROUND}`,
+                  }}
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
@@ -442,7 +552,11 @@ export default function DashboardLayout({
         {/* ANA İÇERİK - children'ın kendi padding yapısına saygı duyan kapsayıcı */}
         <div className="relative z-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 lg:p-6 pb-[max(1rem,env(safe-area-inset-bottom,0px))] w-full max-w-[1400px] mx-auto">
-            <DashboardOfflineShell organizationId={organizationId} userId={userId} />
+            <DashboardOfflineShell
+              organizationId={organizationId}
+              userId={userId}
+              organizationFeatures={organizationFeatures}
+            />
             {isCoachOrAdmin && !permissionsLoading ? (
               <div className="mb-4">
                 <CoachMobileQuickStrip />
@@ -474,15 +588,25 @@ function NavItem({
   onNavigate?: () => void;
 }) {
   const baseStyles =
-    "w-full flex items-center gap-3 px-3 min-h-11 py-2.5 rounded-lg transition-all group text-left font-bold italic tracking-tight text-[12px] touch-manipulation";
-  const variants: Record<"default" | "highlight", string> = {
-    default: active ? 'bg-[#7c3aed]/10 text-white border border-white/5 shadow-md' : 'text-gray-500 sm:hover:text-white sm:hover:bg-white/5',
-    highlight: active ? 'bg-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/20' : 'bg-[#7c3aed]/5 text-[#7c3aed] border border-[#7c3aed]/10 sm:hover:bg-[#7c3aed]/10'
-  };
+    "sidebar-nav-item w-full flex items-center gap-3 px-3 min-h-11 py-2.5 rounded-lg transition-all group text-left font-bold italic tracking-tight text-[12px] touch-manipulation border";
+  const itemStyle = buildSidebarNavItemStyle({ active, variant });
+  const iconStyle = buildSidebarNavIconStyle({ active, variant });
+  const hoverClass =
+    variant === "highlight"
+      ? "sm:hover:bg-[color-mix(in_srgb,var(--peaker-sidebar-theme-PRIMARY)_15%,transparent)]"
+      : "sm:hover:bg-[color-mix(in_srgb,var(--peaker-sidebar-theme-SURFACE)_60%,transparent)] sm:hover:text-[var(--peaker-sidebar-theme-SIDEBAR_ACTIVE)]";
 
   return (
-    <HardNavLink href={href} className={`block ${baseStyles} ${variants[variant]}`} onClick={onNavigate}>
-      <span className={`${active ? 'text-[#7c3aed]' : 'text-gray-500 sm:group-hover:text-[#7c3aed]'} transition-all`}>
+    <HardNavLink
+      href={href}
+      className={`block ${baseStyles} ${hoverClass} ${active ? "shadow-md" : "border-transparent"}`}
+      style={itemStyle}
+      onClick={onNavigate}
+    >
+      <span
+        className="transition-all sm:group-hover:text-[var(--peaker-sidebar-theme-PRIMARY)]"
+        style={iconStyle}
+      >
         {icon}
       </span>
       {label}

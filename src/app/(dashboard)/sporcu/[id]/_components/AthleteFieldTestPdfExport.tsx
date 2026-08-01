@@ -21,6 +21,7 @@ import {
   type FieldTestComparisonRow,
 } from "@/lib/pdf/fieldTestComparisonPdf";
 import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { loadPdfBrandingPresentationFromMeAccess } from "@/lib/navigation/loadPdfBrandingPresentationFromMeAccess";
 import type { TestDefinitionRow } from "@/types/domain";
 
 type Props = {
@@ -110,6 +111,7 @@ export function AthleteFieldTestPdfExport({
           : notesRes.notes.find((n) => n.profile_id === athleteId)?.note ?? null;
 
       setMessage("PDF oluşturuluyor…");
+      const pdfBranding = await loadPdfBrandingPresentationFromMeAccess();
       const bytes = await runPdfTask(() =>
         buildFieldTestSingleDatePdf({
           orgName: pdfOrgName,
@@ -122,6 +124,7 @@ export function AthleteFieldTestPdfExport({
           numericMetrics: buildEntries("number"),
           textMetrics: buildEntries("text"),
           generalNote: note,
+          pdfBranding,
         })
       );
       const outcome = await downloadPdfBytes(bytes, fieldTestSingleDatePdfFilename(athleteName, singleDate));
@@ -203,6 +206,7 @@ export function AthleteFieldTestPdfExport({
       }
 
       setMessage("PDF oluşturuluyor…");
+      const pdfBranding = await loadPdfBrandingPresentationFromMeAccess();
       const bytes = await runPdfTask(() =>
         buildFieldTestComparisonPdf({
           orgName: pdfOrgName,
@@ -210,6 +214,7 @@ export function AthleteFieldTestPdfExport({
           dateFrom: compareFrom,
           dateTo: compareTo,
           rows,
+          pdfBranding,
         })
       );
       const outcome = await downloadPdfBytes(

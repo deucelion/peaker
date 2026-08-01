@@ -15,6 +15,7 @@ import {
   formatEwmaDisplay,
   PDF_RISK_RGB,
 } from "@/lib/pdf/pdfLayout";
+import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 import {
   applyFootersToAllPages,
   downsampleChartPoints,
@@ -26,6 +27,7 @@ import {
   drawSimpleLineChart,
   ensureSpace,
   pdfToBytes,
+  resolvePdfBrandOptions,
   type PdfTextContext,
 } from "@/lib/pdf/pdfCommon";
 
@@ -38,10 +40,8 @@ export type PerformancePdfInput = {
   loads30: TrainingLoadRow[];
   acwr30: AcwrPoint[];
   chartImages?: { acwr?: string | null; ewma?: string | null };
-  logoDataUrl?: string | null;
+  pdfBranding?: PdfBrandingPresentation;
 };
-
-const PERFORMANCE_FOOTER = "Peaker Yük Analizi Raporu";
 
 export class PerformancePdfNoDataError extends Error {
   constructor(message = "Seçilen dönemde idman yükü kaydı bulunmuyor.") {
@@ -158,14 +158,16 @@ export async function buildPerformanceAnalysisPdf(input: PerformancePdfInput): P
   const dominant = dominantRiskLevel(smart.acwr.riskLevel, smart.ewma.riskLevel);
   const riskRgb = PDF_RISK_RGB[dominant];
 
+  const resolvedBranding = resolvePdfBrandOptions({
+    orgName: input.orgName,
+    reportTitle: "Yük Dengesi Analiz Raporu",
+    subtitle: `${displayName} · ${input.periodLabel}`,
+    pdfBranding: input.pdfBranding,
+  });
+
   let y = drawReportHeader(
     doc,
-    {
-      orgName: input.orgName,
-      reportTitle: "Yük Dengesi Analiz Raporu",
-      subtitle: `${displayName} · ${input.periodLabel}`,
-      logoDataUrl: input.logoDataUrl,
-    },
+    resolvedBranding,
     ctx
   );
 
@@ -217,7 +219,7 @@ export async function buildPerformanceAnalysisPdf(input: PerformancePdfInput): P
     ctx
   );
 
-  applyFootersToAllPages(doc, ctx, PERFORMANCE_FOOTER);
+  applyFootersToAllPages(doc, ctx, resolvedBranding.pdfBranding.title);
   return pdfToBytes(doc);
 }
 

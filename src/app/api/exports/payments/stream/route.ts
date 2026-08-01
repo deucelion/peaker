@@ -37,6 +37,8 @@ import { ensureRateLimitSetup } from "@/lib/rateLimit";
 import { checkExportRateLimitAsync, formatRateLimitRetryMessage } from "@/lib/rateLimit/exportRateLimit";
 import { logger } from "@/lib/monitoring/logger";
 import { reportExportRun, reportExportStreamTerminal } from "@/lib/monitoring/advancedTelemetry";
+import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -104,6 +106,11 @@ export async function GET(request: Request) {
     return jsonError("Tahsilat dışa aktarımı için organizasyon belirtilmeli.", 400, {
       errorKind: "invalid_input",
     });
+  }
+
+  const featureDenial = await assertExportFeatureForOrg(EXPORT_ENDPOINT_IDS.paymentsStream, scopeOrg);
+  if (featureDenial) {
+    return jsonError(featureDenial.error, 403, { errorKind: featureDenial.errorKind });
   }
 
   const dateFrom = (url.searchParams.get("dateFrom") || "").trim();

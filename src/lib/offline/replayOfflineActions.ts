@@ -18,11 +18,14 @@ import {
   trackOfflineReplayFailure,
 } from "@/lib/monitoring/runtime";
 import type { OfflineReplayResult } from "@/lib/offline/types";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { evaluateOfflineFeatureAccess } from "@/lib/navigation/offlineFeatureVisibility";
 
 export async function replayOfflineActions(options: {
   scopeKey: string;
   includeConfirmation?: boolean;
   onlyIds?: string[];
+  organizationFeatures?: OrganizationFeatures | null;
 }): Promise<OfflineReplayResult> {
   const batchStarted = Date.now();
   const result: OfflineReplayResult = {
@@ -35,6 +38,12 @@ export async function replayOfflineActions(options: {
   };
 
   let candidates = listOfflineActions(options.scopeKey).filter((item) => {
+    if (
+      options.organizationFeatures &&
+      evaluateOfflineFeatureAccess(item.kind, options.organizationFeatures) === "deny"
+    ) {
+      return false;
+    }
     if (options.onlyIds?.length) return options.onlyIds.includes(item.id);
     if (item.status === "requires_confirmation" && !options.includeConfirmation) {
       result.skippedConfirmation += 1;

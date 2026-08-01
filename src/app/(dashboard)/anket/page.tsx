@@ -16,6 +16,8 @@ import {
 import Notification from "@/components/Notification";
 import { getRpeSurveyEligibility, submitAthleteTrainingLoadSurvey } from "@/lib/actions/trainingLoadSurveyActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { buildOfflineScopeKey } from "@/lib/offline/scope";
 import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
@@ -37,6 +39,7 @@ const RPE_INITIAL = {
 
 export default function RPEAnketi() {
   const [scopeKey, setScopeKey] = useState("");
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const [draftQueued, setDraftQueued] = useState(false);
   const online = useOnlineStatus();
   const { values, setValue, hasDraft, clearDraft } = useFormDraft({
@@ -70,6 +73,18 @@ export default function RPEAnketi() {
       if (!me.ok) return;
       setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (isAllowed === false) {
@@ -116,6 +131,7 @@ export default function RPEAnketi() {
           sessionType: selectedSession,
         },
         title: "RPE raporu taslağı",
+        organizationFeatures,
       });
       if ("error" in queued) {
         setSubmitError(queued.error);

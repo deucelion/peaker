@@ -7,6 +7,10 @@ import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonStatGrid, SkeletonTable } from "@/components/ui/skeletons";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 import {
   type AccountingFinanceSnapshot,
   type AccountingFinanceFilters,
@@ -175,6 +179,7 @@ export function MuhasebeFinansPanel({
   const [paymentModalBusy, setPaymentModalBusy] = useState(false);
 
   const [canOpenAthletePayments, setCanOpenAthletePayments] = useState(false);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const [refreshAck, setRefreshAck] = useState(false);
   const [financeLiveAt, setFinanceLiveAt] = useState<string | null>(null);
   const csvExport = useStreamingCsvDownload();
@@ -309,6 +314,7 @@ export function MuhasebeFinansPanel({
   useFinanceRealtimeSync({
     organizationId: snapshot?.organizationId ?? null,
     enabled: Boolean(snapshot?.organizationId),
+    organizationFeatures,
     onInvalidate: () => {
       void refreshFinanceSoft();
     },
@@ -354,6 +360,24 @@ export function MuhasebeFinansPanel({
       clearTimeout(id);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showPaymentsExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.paymentsStream, {
+    roleAllowed: canOpenAthletePayments,
+    permissionAllowed: true,
+    organizationFeatures,
+  });
 
   const paymentKindOptions = useMemo(() => snapshot?.options.paymentKinds || [], [snapshot]);
   const periodLabel = useMemo(
@@ -469,7 +493,7 @@ export function MuhasebeFinansPanel({
         {loading && snapshot ? <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden /> : null}
         Yenile
       </button>
-      {resolvedView === "genel" ? (
+      {resolvedView === "genel" && showPaymentsExportUi ? (
         <FinanceExportMenu
           exporting={csvExport.exporting}
           items={[

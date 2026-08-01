@@ -7,6 +7,9 @@ import {
 import { tr } from "@/lib/i18n/tr";
 import type { CoachPermissionKey, CoachPermissions } from "@/lib/types/permission";
 import type { AthletePermissionKey, AthletePermissions } from "@/lib/types/athletePermission";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import type { NavigationEntitlementMapKey } from "@/lib/organization/features/surfaces/navigationEntitlementMap";
+import { isNavigationItemFeatureVisible } from "@/lib/navigation/navigationFeatureVisibility";
 
 export type NavSection = "super_admin" | "management" | "athlete" | "footer";
 
@@ -33,6 +36,8 @@ export type DashboardNavItem = {
   icon: DashboardNavIcon;
   label: string;
   section: NavSection;
+  /** NAVIGATION_ENTITLEMENT_MAP lookup kimligi */
+  navItemId: NavigationEntitlementMapKey;
   roles: readonly UserRole[];
   /** Yalnızca organizasyon admini */
   adminOnly?: boolean;
@@ -46,15 +51,34 @@ export type DashboardNavItem = {
   variant?: "default" | "highlight";
 };
 
+import { NAV_ITEM_IDS } from "@/lib/organization/features/surfaces/navigationEntitlementMap";
+
 export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
-  { href: PATHS.superAdmin, icon: "LayoutDashboard", label: tr.nav.superAdmin, section: "super_admin", roles: ["super_admin"], activeMatch: "prefix" },
-  { href: PATHS.sistemSaglik, icon: "Activity", label: tr.nav.systemHealth, section: "super_admin", roles: ["super_admin"], activeMatch: "exact" },
+  {
+    href: PATHS.superAdmin,
+    icon: "LayoutDashboard",
+    label: tr.nav.superAdmin,
+    section: "super_admin",
+    navItemId: NAV_ITEM_IDS.superAdminDashboard,
+    roles: ["super_admin"],
+    activeMatch: "prefix",
+  },
+  {
+    href: PATHS.sistemSaglik,
+    icon: "Activity",
+    label: tr.nav.systemHealth,
+    section: "super_admin",
+    navItemId: NAV_ITEM_IDS.superAdminSystemHealth,
+    roles: ["super_admin"],
+    activeMatch: "exact",
+  },
 
   {
     href: PATHS.home,
     icon: "LayoutDashboard",
     label: "Ana Panel",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementHome,
     roles: ["admin", "coach"],
     activeMatch: "exact",
   },
@@ -63,6 +87,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Users",
     label: "Sporcu Yönetimi",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementAthleteManagement,
     roles: ["admin", "coach"],
     activeMatch: "prefix",
     activePrefixes: [PATHS.oyuncular, PATHS.sporcularYeni, PATHS.takimlar, PATHS.sporcu],
@@ -72,6 +97,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Calendar",
     label: "Ders Yönetimi",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementLessonManagement,
     roles: ["admin", "coach"],
     activeMatch: "prefix",
     activePrefixes: [
@@ -87,6 +113,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Bolt",
     label: "Performans ve Raporlar",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementPerformanceReports,
     roles: ["admin", "coach"],
     coachNeedsAll: ["can_view_reports"],
     activeMatch: "prefix",
@@ -97,6 +124,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "CreditCard",
     label: "Sporcu Ödemeleri",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementCoachPayments,
     roles: ["coach"],
     coachNeedsAll: ["can_view_reports"],
     activeMatch: "prefix",
@@ -107,6 +135,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "CreditCard",
     label: "Tahsilat Merkezi",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementCollectionCenter,
     roles: ["admin"],
     activeMatch: "prefix",
     activePrefixes: [PATHS.tahsilatMerkezi, PATHS.muhasebeFinans, PATHS.finans],
@@ -116,6 +145,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Users",
     label: tr.nav.coaches,
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementCoaches,
     roles: ["admin"],
     adminOnly: true,
     activeMatch: "prefix",
@@ -126,6 +156,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Shield",
     label: "Audit Kayıtları",
     section: "management",
+    navItemId: NAV_ITEM_IDS.managementAuditLog,
     roles: ["admin"],
     adminOnly: true,
     activeMatch: "prefix",
@@ -136,6 +167,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Shield",
     label: "Audit Kayıtları",
     section: "super_admin",
+    navItemId: NAV_ITEM_IDS.superAdminAuditLog,
     roles: ["super_admin"],
     activeMatch: "prefix",
     activePrefixes: [PATHS.auditLog],
@@ -146,6 +178,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "TrendingUp",
     label: tr.nav.rpeEntry,
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteRpeEntry,
     roles: ["sporcu"],
     athleteNeeds: "can_view_rpe_entry",
     activeMatch: "exact",
@@ -156,16 +189,27 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Moon",
     label: "Sabah Raporu",
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteMorningReport,
     roles: ["sporcu"],
     athleteNeeds: "can_view_morning_report",
     activeMatch: "exact",
   },
-  { href: PATHS.takvim, icon: "Calendar", label: "Takvim", section: "athlete", roles: ["sporcu"], athleteNeeds: "can_view_calendar", activeMatch: "exact" },
+  {
+    href: PATHS.takvim,
+    icon: "Calendar",
+    label: "Takvim",
+    section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteCalendar,
+    roles: ["sporcu"],
+    athleteNeeds: "can_view_calendar",
+    activeMatch: "exact",
+  },
   {
     href: PATHS.programlarim,
     icon: "FileText",
     label: tr.nav.myPrograms,
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteMyPrograms,
     roles: ["sporcu"],
     athleteNeeds: "can_view_programs",
     activeMatch: "exact",
@@ -175,6 +219,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "FileText",
     label: tr.nav.privatePackagesMine,
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteMyPrivatePackages,
     roles: ["sporcu"],
     athleteNeeds: "can_view_programs",
     activeMatch: "exact",
@@ -184,6 +229,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Bell",
     label: "Bildirimler",
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteNotifications,
     roles: ["sporcu"],
     athleteNeeds: "can_view_notifications",
     activeMatch: "exact",
@@ -193,6 +239,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "User",
     label: tr.nav.developmentProfile,
     section: "athlete",
+    navItemId: NAV_ITEM_IDS.athleteDevelopmentProfile,
     roles: ["sporcu"],
     athleteNeeds: "can_view_development_profile",
     activeMatch: "exact",
@@ -203,32 +250,33 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     icon: "Settings",
     label: "Ayarlar",
     section: "footer",
+    navItemId: NAV_ITEM_IDS.footerSettings,
     roles: ["super_admin", "admin", "coach", "sporcu"],
     activeMatch: "exact",
   },
 ] as const;
 
-export function isDashboardNavItemVisible(
-  item: DashboardNavItem,
-  ctx: {
-    role: UserRole | null;
-    coachPermissions: CoachPermissions | null;
-    athletePermissions: AthletePermissions | null;
-  }
-): boolean {
+export type DashboardNavVisibilityContext = {
+  role: UserRole | null;
+  coachPermissions: CoachPermissions | null;
+  athletePermissions: AthletePermissions | null;
+  organizationFeatures: OrganizationFeatures | null;
+};
+
+export function isDashboardNavItemVisible(item: DashboardNavItem, ctx: DashboardNavVisibilityContext): boolean {
   if (!ctx.role || !item.roles.includes(ctx.role)) return false;
   if (item.adminOnly && ctx.role !== "admin") return false;
   if (item.coachNeedsAll?.length && ctx.role === "coach") {
     const coachPermissions = ctx.coachPermissions;
     if (!coachPermissions) return false;
-    return item.coachNeedsAll.every((k) => Boolean(coachPermissions[k]));
-  }
-  if (item.athleteNeeds && ctx.role === "sporcu") {
+    if (!item.coachNeedsAll.every((k) => Boolean(coachPermissions[k]))) return false;
+  } else if (item.athleteNeeds && ctx.role === "sporcu") {
     const athletePermissions = ctx.athletePermissions;
     if (!athletePermissions) return false;
-    return Boolean(athletePermissions[item.athleteNeeds]);
+    if (!athletePermissions[item.athleteNeeds]) return false;
   }
-  return true;
+
+  return isNavigationItemFeatureVisible(item.navItemId, ctx.organizationFeatures);
 }
 
 export function isDashboardNavItemActive(pathname: string, item: DashboardNavItem): boolean {

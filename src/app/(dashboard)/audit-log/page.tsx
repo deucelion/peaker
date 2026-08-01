@@ -36,6 +36,10 @@ import {
   type AuditLogFilterState as FilterState,
 } from "@/lib/hooks/useAuditLogViewer";
 import { DataTablePagination } from "@/components/ui/data-display";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 
 type FilterPreset = "today" | "7d" | "30d" | "all";
 
@@ -89,7 +93,26 @@ export default function AuditLogPage() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [selectedDetail, setSelectedDetail] = useState<AuditLogListItem | null>(null);
   const [showCustomRange, setShowCustomRange] = useState(false);
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const csvExport = useStreamingCsvDownload();
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showAuditExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.auditLogStream, {
+    roleAllowed: true,
+    permissionAllowed: true,
+    organizationFeatures,
+  });
 
   const runStreamingExport = useCallback(() => {
     void csvExport.run(
@@ -256,6 +279,7 @@ export default function AuditLogPage() {
             />
             Yenile
           </button>
+          {showAuditExportUi ? (
           <button
             type="button"
             disabled={csvExport.exporting}
@@ -270,7 +294,8 @@ export default function AuditLogPage() {
             )}
             CSV indir
           </button>
-          {csvExport.exporting ? (
+          ) : null}
+          {showAuditExportUi && csvExport.exporting ? (
             <button
               type="button"
               onClick={csvExport.cancel}
@@ -280,17 +305,17 @@ export default function AuditLogPage() {
             </button>
           ) : null}
         </div>
-        {csvExport.exporting ? (
+        {showAuditExportUi && csvExport.exporting ? (
           <p className="text-[10px] font-bold text-gray-500" aria-live="polite">
             Aktarılıyor… {csvExport.bytes > 0 ? `${(csvExport.bytes / 1024).toFixed(1)} KB` : ""}
           </p>
         ) : null}
-        {csvExport.phase === "aborted" ? (
+        {showAuditExportUi && csvExport.phase === "aborted" ? (
           <span className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-200">
             İptal
           </span>
         ) : null}
-        {csvExport.phase === "failed" ? (
+        {showAuditExportUi && csvExport.phase === "failed" ? (
           <button
             type="button"
             onClick={runStreamingExport}

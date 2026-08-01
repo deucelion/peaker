@@ -9,6 +9,7 @@ import {
 } from "@/lib/fieldTests/comparisonVerdict";
 import { formatPdfPersonName } from "@/lib/pdf/pdfFormat";
 import { drawComparisonSummary, drawTableHeaderBar, PDF_LAYOUT_MARGIN } from "@/lib/pdf/pdfLayout";
+import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 import {
   applyFootersToAllPages,
   drawReportHeader,
@@ -16,6 +17,7 @@ import {
   ensureSpace,
   pdfT,
   pdfToBytes,
+  resolvePdfBrandOptions,
   type PdfTextContext,
 } from "@/lib/pdf/pdfCommon";
 
@@ -36,7 +38,7 @@ export type FieldTestComparisonPdfInput = {
   dateFrom: string;
   dateTo: string;
   rows: FieldTestComparisonRow[];
-  logoDataUrl?: string | null;
+  pdfBranding?: PdfBrandingPresentation;
 };
 
 function formatTrDate(isoDate: string): string {
@@ -128,16 +130,14 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
   const resolved = buildComparisonRowsResolved(input.rows);
   const displayName = formatPdfPersonName(input.athleteName);
 
-  let y = drawReportHeader(
-    doc,
-    {
-      orgName: input.orgName,
-      reportTitle: "Saha Testi Kıyas Raporu",
-      subtitle: `${displayName} · ${formatTrDate(input.dateFrom)} → ${formatTrDate(input.dateTo)}`,
-      logoDataUrl: input.logoDataUrl,
-    },
-    ctx
-  );
+  const resolvedBranding = resolvePdfBrandOptions({
+    orgName: input.orgName,
+    reportTitle: "Saha Testi Kıyas Raporu",
+    subtitle: `${displayName} · ${formatTrDate(input.dateFrom)} → ${formatTrDate(input.dateTo)}`,
+    pdfBranding: input.pdfBranding,
+  });
+
+  let y = drawReportHeader(doc, resolvedBranding, ctx);
 
   const counts = resolved.reduce(
     (acc, r) => {
@@ -230,7 +230,7 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
   }
 
   doc.setTextColor(40, 40, 40);
-  applyFootersToAllPages(doc, ctx, "Peaker Saha Testi Kıyas Raporu");
+  applyFootersToAllPages(doc, ctx, resolvedBranding.pdfBranding.title);
   return pdfToBytes(doc);
 }
 

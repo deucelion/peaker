@@ -9,6 +9,7 @@ import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRang
 import { prepareAthletePerformancePdf, hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
 import { PerformancePdfNoDataError } from "@/lib/pdf/performancePdf";
 import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { loadPdfBrandingPresentationFromMeAccess } from "@/lib/navigation/loadPdfBrandingPresentationFromMeAccess";
 
 type Props = {
   athleteName: string;
@@ -58,8 +59,9 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
     setBusy(true);
     setMessage("PDF oluşturuluyor…");
     try {
+      const pdfBranding = await loadPdfBrandingPresentationFromMeAccess();
       const { bytes, filename } = await runPdfTask(() =>
-        prepareAthletePerformancePdf(athleteName, loads, dateFrom, dateTo)
+        prepareAthletePerformancePdf(athleteName, loads, dateFrom, dateTo, pdfBranding)
       );
       const outcome = await downloadPdfBytes(bytes, filename);
       setMessage(pdfDownloadUserMessage(outcome, "Analiz PDF indirildi."));

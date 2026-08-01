@@ -18,6 +18,8 @@ import type { TrainingParticipantRow, TrainingScheduleRow } from "@/types/domain
 import Notification from "@/components/Notification";
 import { setAttendanceStatus } from "@/lib/actions/attendanceActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
 import { attendanceDraftKey } from "@/lib/offline/draftKeys";
 import {
@@ -83,6 +85,7 @@ export default function AntrenmanYonetimi() {
   const lessonMenuRef = useRef<HTMLDivElement>(null);
   const online = useOnlineStatus();
   const [scopeKey, setScopeKey] = useState("");
+  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
   const [actorUserId, setActorUserId] = useState("");
   const [hasAttendanceDraft, setHasAttendanceDraft] = useState(false);
 
@@ -147,6 +150,18 @@ export default function AntrenmanYonetimi() {
       router.replace(`${pathname}?${next.toString()}`, { scroll: false });
     }
   }, [moduleView, pathname, requestedView, router, searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeAccessClient().then((payload) => {
+      if (!cancelled && payload.ok) {
+        setOrganizationFeatures(payload.organizationFeatures);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!lessonMenuOpen) return;
@@ -334,6 +349,7 @@ export default function AntrenmanYonetimi() {
         profileName,
         status,
         lessonTitle: selectedTraining?.title,
+        organizationFeatures,
       });
       if ("error" in queued) setActionMessage(queued.error);
       else setActionMessage("Yoklama kuyruğa alındı. Bağlantı gelince senkronize edilir.");
@@ -417,6 +433,7 @@ export default function AntrenmanYonetimi() {
           profileName: p?.profiles?.full_name,
           status,
           lessonTitle: selectedTraining?.title,
+          organizationFeatures,
         });
         if ("error" in queued) errors += 1;
       }

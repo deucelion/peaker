@@ -17,6 +17,7 @@ import {
   loadAthletePermissionsForProxy,
   loadCoachPermissionsForProxy,
 } from "@/lib/auth/proxyPermissionReads";
+import { evaluateProxyRouteFeatureAccess } from "@/lib/auth/proxyRouteFeatureAccess";
 
 /**
  * Yalnızca oturum (cookie + Supabase session) kontrolü.
@@ -180,6 +181,22 @@ export async function proxy(request: NextRequest) {
         });
         return NextResponse.redirect(new URL(safeAthleteTarget, request.url));
       }
+    }
+
+    const featureDecision = await evaluateProxyRouteFeatureAccess(pathname, organizationId);
+    if (featureDecision === "deny") {
+      if (isTransportRequest) return jsonError(403, "forbidden");
+      const featureFallback = role ? getDefaultRouteForRole(role) : fallbackRouteForDeniedAccess(role);
+      const safeFeatureTarget = safeRedirectPath(pathname, featureFallback);
+      if (!safeFeatureTarget) return response;
+      logRouteRedirectDecision("proxy", {
+        pathname,
+        role,
+        organizationId,
+        target: safeFeatureTarget,
+        reason: "feature_entitlement_denied",
+      });
+      return NextResponse.redirect(new URL(safeFeatureTarget, request.url));
     }
   }
 

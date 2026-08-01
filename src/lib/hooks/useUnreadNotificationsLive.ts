@@ -5,6 +5,9 @@ import { getUnreadNotificationCount } from "@/lib/actions/notificationActions";
 import { supabase } from "@/lib/supabase";
 import { bumpClientRealtimeStat } from "@/lib/realtime/clientRealtimeStats";
 import { useDocumentVisibility } from "@/lib/hooks/useDocumentVisibility";
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+import { REALTIME_SUBSCRIPTION_IDS } from "@/lib/organization/features/surfaces/realtimeEntitlementMap";
+import { shouldSubscribeRealtime } from "@/lib/navigation/realtimeFeatureVisibility";
 
 const MIN_FETCH_GAP_MS = 850;
 const REALTIME_DEBOUNCE_MS = 450;
@@ -21,7 +24,9 @@ export type UseUnreadNotificationsLiveResult = {
  * Navbar / shell: unread badge via server action count + Supabase Realtime (RLS user scope).
  * Throttle + hidden-tab aware polling fallback.
  */
-export function useUnreadNotificationsLive(): UseUnreadNotificationsLiveResult {
+export function useUnreadNotificationsLive(
+  organizationFeatures: OrganizationFeatures | null = null
+): UseUnreadNotificationsLiveResult {
   const visible = useDocumentVisibility();
   const [userId, setUserId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -83,6 +88,12 @@ export function useUnreadNotificationsLive(): UseUnreadNotificationsLiveResult {
 
   useEffect(() => {
     if (!userId) return;
+    const realtimeAllowed = shouldSubscribeRealtime(REALTIME_SUBSCRIPTION_IDS.unreadNotifications, {
+      roleAllowed: true,
+      permissionAllowed: true,
+      organizationFeatures,
+    });
+    if (!realtimeAllowed) return;
 
     const channel = supabase
       .channel(`notifications-global-${userId}`)
@@ -116,7 +127,7 @@ export function useUnreadNotificationsLive(): UseUnreadNotificationsLiveResult {
       if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       void supabase.removeChannel(channel);
     };
-  }, [userId, fetchCount, scheduleRealtimeFetch]);
+  }, [userId, fetchCount, scheduleRealtimeFetch, organizationFeatures]);
 
   useEffect(() => {
     if (!userId) return;

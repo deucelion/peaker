@@ -1,5 +1,19 @@
 import * as Sentry from "@sentry/nextjs";
 import { isSentryRuntimeEnabled } from "@/lib/observability/sentryEnv";
+import { runServerActionWithFeatureGate, type ServerActionGuardContext } from "@/lib/auth/serverActionFeatureGate";
+
+export type { ServerActionGuardContext };
+export {
+  assertOrganizationFeatureForAction,
+  evaluateServerActionFeatureAccess,
+  evaluateServerActionFeatureAccessAfterPermissions,
+  isServerActionFeatureDenial,
+  isServerActionPermissionDeniedResult,
+} from "@/lib/auth/serverActionFeatureAccess";
+export type {
+  ServerActionFeatureDecision,
+  ServerActionFeatureDenial,
+} from "@/lib/auth/serverActionFeatureAccess";
 
 /**
  * Server action / sunucu işleminde yakalanan hatayı güvenli şekilde raporlar.
@@ -36,11 +50,14 @@ export function captureServerActionSignal(
 
 /**
  * Beklenmeyen throw'ları raporlar; davranışı korur (aynı hatayı yeniden fırlatır).
- * Çoğu action `{ error: string }` döndüğü için throw seyrek — yine de ağ/seri hata durumunda görünürlük sağlar.
+ * Permission sonrası feature gate icin ctx.assertOrganizationFeature(orgId) kullanin.
  */
-export async function withServerActionGuard<T>(actionName: string, fn: () => Promise<T>): Promise<T> {
+export async function withServerActionGuard<T>(
+  actionName: string,
+  fn: (ctx: ServerActionGuardContext) => Promise<T>
+): Promise<T> {
   try {
-    return await fn();
+    return await runServerActionWithFeatureGate(actionName, fn);
   } catch (err) {
     captureServerActionError(actionName, err);
     throw err;

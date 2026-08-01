@@ -1,4 +1,6 @@
 import type { jsPDF } from "jspdf";
+import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
+import { createDefaultPdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 
 /** jsPDF Helvetica icin ASCII fallback. */
 export function pdfSafeTr(text: string): string {
@@ -31,32 +33,31 @@ export type PdfBrandOptions = {
   orgName?: string;
   reportTitle: string;
   subtitle?: string;
-  logoDataUrl?: string | null;
+  pdfBranding?: PdfBrandingPresentation;
 };
 
 const MARGIN = 14;
 const FOOTER_H = 10;
 const BRAND_COLOR: [number, number, number] = [124, 58, 237];
 
+export function resolvePdfBrandOptions(opts: PdfBrandOptions): Required<Pick<PdfBrandOptions, "pdfBranding">> & PdfBrandOptions {
+  return {
+    ...opts,
+    pdfBranding: opts.pdfBranding ?? createDefaultPdfBrandingPresentation(),
+  };
+}
+
 export function drawReportHeader(doc: jsPDF, opts: PdfBrandOptions, ctx: PdfTextContext): number {
+  const resolved = resolvePdfBrandOptions(opts);
   const pageW = doc.internal.pageSize.getWidth();
   doc.setFillColor(...BRAND_COLOR);
   doc.rect(0, 0, pageW, 22, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   pdfSetFont(doc, ctx, "bold");
-  if (opts.logoDataUrl) {
-    try {
-      doc.addImage(opts.logoDataUrl, "PNG", MARGIN, 4, 14, 14);
-      doc.text(pdfT(opts.orgName || "PEAKER", ctx), MARGIN + 17, 10);
-    } catch {
-      doc.text(pdfT(opts.orgName || "PEAKER", ctx), MARGIN, 10);
-    }
-  } else {
-    doc.text(pdfT(opts.orgName || "PEAKER", ctx), MARGIN, 10);
-  }
+  doc.text(pdfT(resolved.orgName || resolved.pdfBranding.title, ctx), MARGIN, 10);
   doc.setFontSize(11);
-  doc.text(pdfT(opts.reportTitle, ctx), MARGIN, 17);
+  doc.text(pdfT(resolved.reportTitle, ctx), MARGIN, 17);
   doc.setTextColor(40, 40, 40);
   pdfSetFont(doc, ctx, "normal");
   doc.setFontSize(9);

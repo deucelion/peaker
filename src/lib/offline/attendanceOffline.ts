@@ -19,6 +19,8 @@ export function persistAttendanceDraft(
   saveScopedFormDraft(scopeKey, draftKey, payload as unknown as Record<string, unknown>);
 }
 
+import type { OrganizationFeatures } from "@/lib/organization/features/types";
+
 export function enqueueAttendanceChange(input: {
   scopeKey: string;
   trainingId: string;
@@ -26,6 +28,7 @@ export function enqueueAttendanceChange(input: {
   profileName?: string;
   status: "registered" | "attended" | "missed" | "cancelled";
   lessonTitle?: string;
+  organizationFeatures?: OrganizationFeatures | null;
 }): { ok: true } | { error: string } {
   const queued = enqueueOfflineAction({
     kind: "attendance_draft",
@@ -41,6 +44,7 @@ export function enqueueAttendanceChange(input: {
     title: input.profileName
       ? `Yoklama · ${input.profileName}`
       : "Yoklama taslağı",
+    organizationFeatures: input.organizationFeatures,
   });
   if ("error" in queued) return { error: queued.error };
   return { ok: true };

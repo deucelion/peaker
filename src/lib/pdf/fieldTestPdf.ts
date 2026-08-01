@@ -9,6 +9,7 @@ import {
   drawTableHeaderBar,
   PDF_LAYOUT_MARGIN,
 } from "@/lib/pdf/pdfLayout";
+import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 import {
   applyFootersToAllPages,
   drawReportHeader,
@@ -16,6 +17,7 @@ import {
   ensureSpace,
   pdfT,
   pdfToBytes,
+  resolvePdfBrandOptions,
   type PdfTextContext,
 } from "@/lib/pdf/pdfCommon";
 
@@ -40,10 +42,9 @@ export type FieldTestSingleDatePdfInput = {
   numericMetrics: FieldTestMetricEntry[];
   textMetrics: FieldTestMetricEntry[];
   generalNote?: string | null;
-  logoDataUrl?: string | null;
+  pdfBranding?: PdfBrandingPresentation;
 };
 
-const FIELD_TEST_FOOTER = "Peaker Saha Testi Raporu";
 const MARGIN = PDF_LAYOUT_MARGIN;
 
 function formatTrDate(isoDate: string): string {
@@ -159,16 +160,14 @@ export async function buildFieldTestSingleDatePdf(input: FieldTestSingleDatePdfI
   const dateLabel = formatTrDate(input.athlete.testDate);
   const categories = groupByCategory(input.numericMetrics);
 
-  let y = drawReportHeader(
-    doc,
-    {
-      orgName: input.orgName,
-      reportTitle: "Saha Testi Raporu",
-      subtitle: `${displayName} · ${dateLabel}`,
-      logoDataUrl: input.logoDataUrl,
-    },
-    ctx
-  );
+  const resolvedBranding = resolvePdfBrandOptions({
+    orgName: input.orgName,
+    reportTitle: "Saha Testi Raporu",
+    subtitle: `${displayName} · ${dateLabel}`,
+    pdfBranding: input.pdfBranding,
+  });
+
+  let y = drawReportHeader(doc, resolvedBranding, ctx);
 
   const chips: string[] = [];
   if (input.numericMetrics.length > 0) chips.push(`${input.numericMetrics.length} sayısal test`);
@@ -217,7 +216,7 @@ export async function buildFieldTestSingleDatePdf(input: FieldTestSingleDatePdfI
     y = drawNoteCard(doc, y, "Veri yok", "Bu tarihte kayıtlı test değeri bulunmuyor.", ctx);
   }
 
-  applyFootersToAllPages(doc, ctx, FIELD_TEST_FOOTER);
+  applyFootersToAllPages(doc, ctx, resolvedBranding.pdfBranding.title);
   return pdfToBytes(doc);
 }
 
