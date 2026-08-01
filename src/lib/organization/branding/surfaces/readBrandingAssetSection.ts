@@ -3,10 +3,7 @@ import type { BrandingAssetKind, BrandingAssetReference, OrganizationBranding } 
 import { validateBrandingAssetReference } from "../validation";
 import { BRANDING_CANONICAL_SECTION_REFS, type BrandingCanonicalSectionRef } from "./types";
 
-const ASSET_SECTION_BY_REF: Record<
-  typeof BRANDING_CANONICAL_SECTION_REFS.assetsLogo | typeof BRANDING_CANONICAL_SECTION_REFS.assetsFavicon,
-  BrandingAssetKind
-> = {
+const ASSET_SECTION_BY_REF: Partial<Record<BrandingCanonicalSectionRef, BrandingAssetKind>> = {
   [BRANDING_CANONICAL_SECTION_REFS.assetsLogo]: BRANDING_ASSET_KINDS.logo,
   [BRANDING_CANONICAL_SECTION_REFS.assetsFavicon]: BRANDING_ASSET_KINDS.favicon,
 };
@@ -23,7 +20,7 @@ export function readBrandingAssetSection(
   sectionRef: BrandingCanonicalSectionRef,
   expectedKind: BrandingAssetKind
 ): BrandingAssetReference {
-  const mappedKind = ASSET_SECTION_BY_REF[sectionRef as keyof typeof ASSET_SECTION_BY_REF];
+  const mappedKind = ASSET_SECTION_BY_REF[sectionRef];
   if (mappedKind !== expectedKind) {
     throw new Error(`Unsupported branding asset section: ${sectionRef}`);
   }

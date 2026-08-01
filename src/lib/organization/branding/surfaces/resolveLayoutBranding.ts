@@ -10,7 +10,7 @@ export type LayoutBrandingSnapshot = {
 };
 
 function isBrandingTheme(value: unknown): value is BrandingTheme {
-  return Boolean(value) && typeof value === "object" && "primary" in value;
+  return value !== null && typeof value === "object" && !Array.isArray(value) && "primary" in value;
 }
 
 function readBrandingThemeSection(

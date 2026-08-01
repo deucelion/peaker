@@ -4,13 +4,6 @@ export type {
   BrandingNestedAssetSectionRef,
   BrandingSurfaceKind,
   BrandingTopLevelSectionPath,
-  LayoutSurfaceId,
-  SidebarSurfaceId,
-  LogoSurfaceId,
-  FaviconSurfaceId,
-  PdfSurfaceId,
-  EmailSurfaceId,
-  MetadataSurfaceId,
   SurfaceBrandingMap,
 } from "./types";
 
@@ -48,12 +41,19 @@ export type { PdfBrandingSnapshot } from "./resolvePdfBranding";
 export { resolveEmailBranding } from "./resolveEmailBranding";
 export type { EmailBrandingSnapshot } from "./resolveEmailBranding";
 export { LAYOUT_BRANDING_MAP, LAYOUT_SURFACE_IDS } from "./layoutBrandingMap";
+export type { LayoutSurfaceId } from "./layoutBrandingMap";
 export { SIDEBAR_BRANDING_MAP, SIDEBAR_SURFACE_IDS } from "./sidebarBrandingMap";
+export type { SidebarSurfaceId } from "./sidebarBrandingMap";
 export { LOGO_BRANDING_MAP, LOGO_SURFACE_IDS } from "./logoBrandingMap";
+export type { LogoSurfaceId } from "./logoBrandingMap";
 export { FAVICON_BRANDING_MAP, FAVICON_SURFACE_IDS } from "./faviconBrandingMap";
+export type { FaviconSurfaceId } from "./faviconBrandingMap";
 export { PDF_BRANDING_MAP, PDF_SURFACE_IDS } from "./pdfBrandingMap";
+export type { PdfSurfaceId } from "./pdfBrandingMap";
 export { EMAIL_BRANDING_MAP, EMAIL_SURFACE_IDS } from "./emailBrandingMap";
+export type { EmailSurfaceId } from "./emailBrandingMap";
 export { METADATA_BRANDING_MAP, METADATA_SURFACE_IDS } from "./metadataBrandingMap";
+export type { MetadataSurfaceId } from "./metadataBrandingMap";
 
 import type { BrandingCanonicalSectionRef } from "./types";
 import { EMAIL_BRANDING_MAP } from "./emailBrandingMap";

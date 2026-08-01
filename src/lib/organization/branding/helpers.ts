@@ -1,8 +1,12 @@
 import { createDefaultBranding } from "./defaults";
 import { BRANDING_ASSET_KIND_LIST, BRANDING_COLOR_TOKEN_KEY_LIST, isBrandingAssetKind } from "./tokens";
 import type {
+  BrandingApplication,
   BrandingAssetReference,
   BrandingAssets,
+  BrandingEmail,
+  BrandingPdf,
+  BrandingSidebar,
   BrandingTheme,
   OrganizationBranding,
 } from "./types";
@@ -52,7 +56,10 @@ export function parseBrandingAssetReference(
   const record = raw as Record<string, unknown>;
   const candidate: BrandingAssetReference = {
     assetId: readNonEmptyStringOrUndefined(record.assetId) ?? fallback.assetId,
-    kind: isBrandingAssetKind(record.kind) ? record.kind : fallback.kind,
+    kind:
+      typeof record.kind === "string" && isBrandingAssetKind(record.kind)
+        ? record.kind
+        : fallback.kind,
     storagePath: readNonEmptyStringOrUndefined(record.storagePath) ?? fallback.storagePath,
     contentType: readNonEmptyStringOrUndefined(record.contentType) ?? fallback.contentType,
     updatedAt: readNonEmptyStringOrUndefined(record.updatedAt) ?? fallback.updatedAt,
@@ -69,19 +76,21 @@ export function mergeBrandingAssetsFromPartial(
   base: BrandingAssets,
   partial: Record<string, unknown>
 ): BrandingAssets {
-  const next: BrandingAssets = {
-    logo: base.logo,
-    mark: base.mark,
-    favicon: base.favicon,
-  };
+  let logo = base.logo;
+  let mark = base.mark;
+  let favicon = base.favicon;
 
   for (const kind of BRANDING_ASSET_KIND_LIST) {
-    if (partial[kind] !== undefined) {
-      next[kind] = parseBrandingAssetReference(partial[kind], base[kind]);
+    if (partial[kind] === undefined) {
+      continue;
     }
+    const parsed = parseBrandingAssetReference(partial[kind], base[kind]);
+    if (kind === "logo") logo = parsed;
+    else if (kind === "mark") mark = parsed;
+    else favicon = parsed;
   }
 
-  return next;
+  return { logo, mark, favicon };
 }
 
 export function mergeBrandingAssetReferences(
@@ -97,7 +106,7 @@ export function mergeBrandingAssetReferences(
   });
 }
 
-export function mergeBrandingSectionFromPartial<T extends Record<string, string>>(
+export function mergeBrandingSectionFromPartial<T extends { [K in keyof T]: string }>(
   base: T,
   partial: unknown
 ): T {
@@ -109,7 +118,7 @@ export function mergeBrandingSectionFromPartial<T extends Record<string, string>
   for (const key of Object.keys(base) as Array<keyof T>) {
     const value = readNonEmptyStringOrUndefined((partial as Record<string, unknown>)[key as string]);
     if (value !== undefined) {
-      next[key] = value;
+      next[key] = value as T[keyof T];
     }
   }
   return Object.freeze(next);
@@ -144,10 +153,10 @@ export function mergeBranding(
     brandingRevision: patch.brandingRevision ?? base.brandingRevision,
     theme: mergeBrandingThemeFromPartial(base.theme, themePartial),
     assets: mergeBrandingAssetsFromPartial(base.assets, assetsPartial),
-    application: mergeBrandingSectionFromPartial(base.application, patch.application),
-    sidebar: mergeBrandingSectionFromPartial(base.sidebar, patch.sidebar),
-    pdf: mergeBrandingSectionFromPartial(base.pdf, patch.pdf),
-    email: mergeBrandingSectionFromPartial(base.email, patch.email),
+    application: mergeBrandingSectionFromPartial<BrandingApplication>(base.application, patch.application),
+    sidebar: mergeBrandingSectionFromPartial<BrandingSidebar>(base.sidebar, patch.sidebar),
+    pdf: mergeBrandingSectionFromPartial<BrandingPdf>(base.pdf, patch.pdf),
+    email: mergeBrandingSectionFromPartial<BrandingEmail>(base.email, patch.email),
   });
 }
 

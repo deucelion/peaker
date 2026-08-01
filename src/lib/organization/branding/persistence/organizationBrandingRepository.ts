@@ -6,6 +6,7 @@ import { serializeBranding } from "./constants";
 import type {
   GetOrganizationBrandingResult,
   OrganizationBrandingPersistencePort,
+  OrganizationBrandingRepositoryErrorCode,
   OrganizationBrandingRuntimeRow,
   SaveOrganizationBrandingInput,
   SaveOrganizationBrandingResult,
@@ -14,7 +15,7 @@ import type {
 const BRANDING_RUNTIME_SELECT = "branding, branding_revision" as const;
 
 function repositoryError(
-  code: SaveOrganizationBrandingResult extends { ok: false; code: infer C } ? C : never,
+  code: OrganizationBrandingRepositoryErrorCode,
   message: string
 ): SaveOrganizationBrandingResult {
   return { ok: false, code, message };

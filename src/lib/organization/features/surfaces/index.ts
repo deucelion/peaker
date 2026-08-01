@@ -27,7 +27,6 @@ export type { QuickActionEntitlementMapKey } from "./quickActionEntitlementMap";
 export { EXPORT_ENTITLEMENT_MAP, EXPORT_ENDPOINT_IDS } from "./exportEntitlementMap";
 export type { ExportEntitlementMapKey } from "./exportEntitlementMap";
 export { resolveExportEntitlementKey } from "./resolveExportEntitlement";
-export type { ExportEntitlementMapKey } from "./exportEntitlementMap";
 
 export { OFFLINE_ENTITLEMENT_MAP, OFFLINE_KIND_IDS } from "./offlineEntitlementMap";
 export type { OfflineEntitlementMapKey } from "./offlineEntitlementMap";
@@ -40,12 +39,10 @@ export { resolveRealtimeEntitlementKey } from "./resolveRealtimeEntitlement";
 export { SNAPSHOT_BRANCH_IDS, SNAPSHOT_ENTITLEMENT_MAP } from "./snapshotEntitlementMap";
 export type { SnapshotEntitlementMapKey } from "./snapshotEntitlementMap";
 export { resolveSnapshotEntitlementKey } from "./resolveSnapshotEntitlement";
-export type { SnapshotEntitlementMapKey } from "./snapshotEntitlementMap";
 
 export { DASHBOARD_WIDGET_IDS, WIDGET_ENTITLEMENT_MAP } from "./widgetEntitlementMap";
 export type { WidgetEntitlementMapKey } from "./widgetEntitlementMap";
 export { resolveWidgetEntitlementKey } from "./resolveWidgetEntitlement";
-export type { WidgetEntitlementMapKey } from "./widgetEntitlementMap";
 
 export { ACTION_NAMESPACE_ENTITLEMENT_MAP, ACTION_NAMESPACE_IDS } from "./actionNamespaceMap";
 export type { ActionNamespaceMapKey } from "./actionNamespaceMap";

@@ -5,7 +5,7 @@ import {
   mergeBrandingSectionFromPartial,
 } from "./helpers";
 import { BRANDING_SCHEMA_VERSION } from "./tokens";
-import type { OrganizationBranding, ParseOrganizationBrandingResult } from "./types";
+import type { OrganizationBranding, ParseBrandingFailureReason, ParseOrganizationBrandingResult } from "./types";
 import {
   readNonNegativeIntOrUndefined,
   stripUnknownAssetKeys,
@@ -83,9 +83,7 @@ export function parseOrganizationBranding(raw: unknown): ParseOrganizationBrandi
   return { ok: true, branding };
 }
 
-function failClosed(
-  reason: ParseOrganizationBrandingResult extends { ok: false; reason: infer R } ? R : never
-): ParseOrganizationBrandingResult {
+function failClosed(reason: ParseBrandingFailureReason): ParseOrganizationBrandingResult {
   return {
     ok: false as const,
     branding: createDefaultBranding(),

@@ -115,7 +115,8 @@ export {
 
 export { runWithOrganizationFeaturesRequestCacheAsync } from "./runtime/requestCache";
 
-export type { SurfaceEntitlementMap, SurfaceMapContractIssue } from "./surfaces/types";
+export type { SurfaceEntitlementMap } from "./surfaces/types";
+export type { SurfaceMapContractIssue } from "./surfaces/contractValidation";
 
 export {
   assertSurfaceMapContract,

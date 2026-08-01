@@ -1,6 +1,5 @@
-import * as Sentry from "@sentry/nextjs";
-import { isSentryRuntimeEnabled } from "@/lib/observability/sentryEnv";
 import { runServerActionWithFeatureGate, type ServerActionGuardContext } from "@/lib/auth/serverActionFeatureGate";
+import { captureServerActionError } from "@/lib/observability/serverActionTelemetry";
 
 export type { ServerActionGuardContext };
 export {
@@ -15,38 +14,7 @@ export type {
   ServerActionFeatureDenial,
 } from "@/lib/auth/serverActionFeatureAccess";
 
-/**
- * Server action / sunucu işleminde yakalanan hatayı güvenli şekilde raporlar.
- * - PII eklemez; action adı tag olarak gider.
- * - Önce konsola (sunucu log / hosting drain) düşer, sonra Sentry açıksa capture.
- */
-export function captureServerActionError(
-  actionName: string,
-  err: unknown,
-  extra?: Record<string, unknown>
-): void {
-  const error = err instanceof Error ? err : new Error(typeof err === "string" ? err : JSON.stringify(err));
-  console.error(`[Peaker] server action error: ${actionName}`, error);
-  if (!isSentryRuntimeEnabled()) return;
-  Sentry.captureException(error, {
-    tags: { server_action: actionName },
-    extra: extra ?? {},
-  });
-}
-
-export function captureServerActionSignal(
-  actionName: string,
-  message: string,
-  extra?: Record<string, unknown>
-): void {
-  console.error(`[Peaker][signal] ${actionName}: ${message}`, extra ?? {});
-  if (!isSentryRuntimeEnabled()) return;
-  Sentry.captureMessage(`[${actionName}] ${message}`, {
-    level: "error",
-    tags: { server_action: actionName, signal_type: "handled_error" },
-    extra: extra ?? {},
-  });
-}
+export { captureServerActionError, captureServerActionSignal } from "@/lib/observability/serverActionTelemetry";
 
 /**
  * Beklenmeyen throw'ları raporlar; davranışı korur (aynı hatayı yeniden fırlatır).

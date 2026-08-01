@@ -10,7 +10,14 @@ export type SidebarBrandingSnapshot = {
 };
 
 function isBrandingSidebar(value: unknown): value is BrandingSidebar {
-  return Boolean(value) && typeof value === "object" && "background" in value && "text" in value && "active" in value;
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "background" in value &&
+    "text" in value &&
+    "active" in value
+  );
 }
 
 function readBrandingSidebarSection(

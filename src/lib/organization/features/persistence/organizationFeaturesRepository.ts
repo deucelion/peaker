@@ -6,6 +6,7 @@ import { serializeOrganizationFeaturesForPersistence } from "./constants";
 import type {
   GetOrganizationFeaturesResult,
   OrganizationFeaturesPersistencePort,
+  OrganizationFeaturesRepositoryErrorCode,
   OrganizationFeaturesRuntimeRow,
   SaveOrganizationFeatureConfigurationInput,
   SaveOrganizationFeatureConfigurationResult,
@@ -16,7 +17,7 @@ const FEATURES_RUNTIME_SELECT = "features, features_revision" as const;
 const FEATURES_WRITE_SELECT = "features, features_revision, feature_preset, feature_overrides" as const;
 
 function repositoryError(
-  code: SaveOrganizationFeatureConfigurationResult extends { ok: false; code: infer C } ? C : never,
+  code: OrganizationFeaturesRepositoryErrorCode,
   message: string
 ): SaveOrganizationFeatureConfigurationResult {
   return { ok: false, code, message };

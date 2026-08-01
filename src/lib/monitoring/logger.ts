@@ -13,7 +13,7 @@
  *   logger.error("performance.export", err, { athleteCount });
  */
 
-import { captureServerActionError, captureServerActionSignal } from "@/lib/observability/serverActionError";
+import { captureServerActionError, captureServerActionSignal } from "@/lib/observability/serverActionTelemetry";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 

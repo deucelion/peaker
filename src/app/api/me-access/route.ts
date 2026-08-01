@@ -4,7 +4,7 @@ import { resolveSessionActor } from "@/lib/auth/resolveSessionActor";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCoachPermissions } from "@/lib/auth/coachPermissions";
 import { normalizeAthletePermissions } from "@/lib/auth/athletePermissions";
-import type { AthletePermissionKey, CoachPermissionKey } from "@/lib/types";
+import type { AthletePermissionKey } from "@/lib/types";
 
 export async function GET() {
   const resolved = await resolveSessionActor();
@@ -52,8 +52,8 @@ export async function GET() {
   return NextResponse.json(
     await attachOrganizationFeaturesToMeAccessPayload(orgId, {
       role,
-      coachPermissions: null as Partial<Record<CoachPermissionKey, boolean>> | null,
-      athletePermissions: null as Partial<Record<AthletePermissionKey, boolean>> | null,
+      coachPermissions: null,
+      athletePermissions: null,
     })
   );
 }

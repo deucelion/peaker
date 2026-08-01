@@ -207,7 +207,12 @@ export default function Dashboard() {
 
       if (snapshot.role === "admin" && snapshot.admin) {
         setCoachPermissions(null);
-        setStats(snapshot.admin.stats || { totalPlayers: 0, activeTrainings: 0, attendanceRate: "-", monthlyRevenue: "-" });
+        setStats({
+          totalPlayers: snapshot.admin.stats?.totalPlayers ?? 0,
+          activeTrainings: snapshot.admin.stats?.activeTrainings ?? 0,
+          attendanceRate: snapshot.admin.stats?.attendanceRate ?? "-",
+          monthlyRevenue: snapshot.admin.stats?.monthlyRevenue ?? "-",
+        });
         const onboardingMetrics =
           (snapshot.admin as { onboarding?: { totalAthletes?: number; totalTeams?: number; totalLessons?: number; totalFieldTestMetrics?: number; totalPayments?: number } }).onboarding ??
           null;

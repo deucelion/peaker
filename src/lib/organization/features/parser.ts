@@ -8,7 +8,7 @@ import {
   validateEffectiveFeatures,
 } from "./validation";
 import { buildOrganizationFeaturesFromConfigurable } from "./helpers";
-import type { OrganizationFeatures, ParseOrganizationFeaturesResult } from "./types";
+import type { OrganizationFeatures, ParseFailureReason, ParseOrganizationFeaturesResult } from "./types";
 
 /**
  * ADR parse policy:
@@ -52,7 +52,7 @@ export function parseOrganizationFeatures(raw: unknown): ParseOrganizationFeatur
   return { ok: true, features };
 }
 
-function failClosed(reason: ParseOrganizationFeaturesResult extends { ok: false; reason: infer R } ? R : never) {
+function failClosed(reason: ParseFailureReason): ParseOrganizationFeaturesResult {
   const features = assertAlwaysOnEntitlements(
     buildOrganizationFeaturesFromConfigurable(createFailClosedConfigurable())
   );
