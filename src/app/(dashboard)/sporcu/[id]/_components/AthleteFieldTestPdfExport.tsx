@@ -10,6 +10,7 @@ import {
   getFieldTestOrganizationDisplayName,
 } from "@/lib/actions/athleticFieldActions";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
+import { fieldTestUserFacingText } from "@/lib/fieldTests/fieldTestEditSeqMetadata";
 import {
   buildFieldTestSingleDatePdf,
   fieldTestSingleDatePdfFilename,
@@ -103,7 +104,7 @@ export function AthleteFieldTestPdfExport({
             const row = resultMap.get(m.id);
             const value =
               kind === "text"
-                ? (row?.value_text || "").trim() || "—"
+                ? fieldTestUserFacingText(row?.value_text) || "—"
                 : typeof row?.value === "number"
                   ? String(row.value)
                   : "—";
@@ -184,8 +185,8 @@ export function AthleteFieldTestPdfExport({
           return {
             name: m.name,
             unit: m.unit,
-            oldDisplay: (oldR?.value_text || "").trim() || "—",
-            newDisplay: (newR?.value_text || "").trim() || "—",
+            oldDisplay: fieldTestUserFacingText(oldR?.value_text) || "—",
+            newDisplay: fieldTestUserFacingText(newR?.value_text) || "—",
             direction,
             isText: true,
           };

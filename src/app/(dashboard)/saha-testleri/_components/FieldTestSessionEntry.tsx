@@ -59,6 +59,11 @@ import {
   shouldSkipFieldTestAutosave,
 } from "@/lib/fieldTests/fieldTestAutosave";
 import {
+  FIELD_TEST_DRAFT_UNSYNCED_MARKER,
+  shouldPersistFieldTestDraft,
+  shouldRestoreFieldTestDraft,
+} from "@/lib/fieldTests/fieldTestDraftLifecycle";
+import {
   clearSavedFieldTestDirtyKeysIfUnchanged,
   incrementFieldTestDirtyGeneration,
   mergeFieldTestValuesForSave,
@@ -295,9 +300,21 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
 
   useEffect(() => {
     if (!scopeKey || !fieldDraftStorageKey) return;
+    if (
+      !shouldPersistFieldTestDraft({
+        saveFeedback,
+        hasPendingSave: hasFieldTestPendingSave(
+          dirtyCellKeysRef.current,
+          dirtyNoteProfileIdsRef.current
+        ),
+      })
+    ) {
+      return;
+    }
     const id = window.setTimeout(() => {
       saveScopedFormDraft(scopeKey, fieldDraftStorageKey, {
         testDate: sessionDate,
+        [FIELD_TEST_DRAFT_UNSYNCED_MARKER]: true,
         selectedProfileIds: activeAthleteId ? [activeAthleteId] : [],
         testValues,
         generalNotes,
@@ -308,28 +325,40 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
       });
     }, 700);
     return () => clearTimeout(id);
-  }, [scopeKey, fieldDraftStorageKey, sessionDate, activeAthleteId, testValues, generalNotes, metrics]);
+  }, [
+    scopeKey,
+    fieldDraftStorageKey,
+    sessionDate,
+    activeAthleteId,
+    testValues,
+    generalNotes,
+    metrics,
+    saveFeedback,
+  ]);
 
   useEffect(() => {
     if (!scopeKey || !fieldDraftStorageKey || fieldDraftRestored) return;
     const draft = loadScopedFormDraft(scopeKey, fieldDraftStorageKey);
-    if (!draft?.payload) return;
-    if (String(draft.payload.testDate) !== sessionDate) return;
-    const ids = draft.payload.selectedProfileIds as string[] | undefined;
-    const values = draft.payload.testValues as Record<string, string | number> | undefined;
-    const notes = draft.payload.generalNotes as Record<string, string> | undefined;
+    const payload = draft?.payload;
+    if (!payload || !shouldRestoreFieldTestDraft({ payload, sessionDate })) return;
+    const ids = payload.selectedProfileIds as string[] | undefined;
+    const values = payload.testValues as Record<string, string | number> | undefined;
+    const notes = payload.generalNotes as Record<string, string> | undefined;
     if (ids?.length) setActiveAthleteId(ids[0] ?? null);
     if (values) {
-      setTestValues(values);
-      testValuesRef.current = values;
+      // Taslak hücre bazında kazanır; taslakta olmayan DB değerleri korunur.
+      const merged = { ...testValuesRef.current, ...values };
+      setTestValues(merged);
+      testValuesRef.current = merged;
       for (const key of Object.keys(values)) {
         dirtyCellKeysRef.current.add(key);
         incrementFieldTestDirtyGeneration(dirtyCellGenerationRef.current, key);
       }
     }
     if (notes) {
-      setGeneralNotes(notes);
-      generalNotesRef.current = notes;
+      const mergedNotes = { ...generalNotesRef.current, ...notes };
+      setGeneralNotes(mergedNotes);
+      generalNotesRef.current = mergedNotes;
       for (const profileId of Object.keys(notes)) {
         dirtyNoteProfileIdsRef.current.add(profileId);
         incrementFieldTestDirtyGeneration(dirtyNoteGenerationRef.current, profileId);

@@ -28,6 +28,27 @@ describe("paginatePostgrestSelect", () => {
     expect(calls).toBe(2);
   });
 
+  it("stops at the safety ceiling instead of paging forever", async () => {
+    const pageSize = 1000;
+    let calls = 0;
+
+    const result = await paginatePostgrestSelect(
+      async () => {
+        calls += 1;
+        return {
+          data: Array.from({ length: pageSize }, (_, index) => ({ id: `row-${index}` })),
+          error: null,
+        };
+      },
+      pageSize,
+      2500
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.data).toHaveLength(3000);
+    expect(calls).toBe(3);
+  });
+
   it("returns first page error without merging partial rows", async () => {
     const result = await paginatePostgrestSelect(async () => ({
       data: null,

@@ -2,7 +2,9 @@ const DEFAULT_PAGE_SIZE = 1000;
 
 export async function paginatePostgrestSelect<T>(
   fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
-  pageSize = DEFAULT_PAGE_SIZE
+  pageSize = DEFAULT_PAGE_SIZE,
+  /** Güvenlik tavanı — sayfalama sonsuz büyümesin. */
+  maxRows = Number.POSITIVE_INFINITY
 ): Promise<{ data: T[]; error: null } | { data: null; error: { message: string } }> {
   const rows: T[] = [];
   let from = 0;
@@ -20,6 +22,9 @@ export async function paginatePostgrestSelect<T>(
 
     rows.push(...page);
     if (page.length < pageSize) {
+      break;
+    }
+    if (rows.length >= maxRows) {
       break;
     }
 

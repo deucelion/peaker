@@ -43,6 +43,17 @@ export function parseStoredFieldTestEditSeq(valueText: string | null | undefined
   return { displayText: valueText, editSeq: 0 };
 }
 
+/**
+ * Kullanıcıya gösterilebilir metin — `value_text` içindeki dahili edit-seq
+ * metadata'sı hiçbir zaman UI/PDF/CSV/rapor çıktısına sızmamalı.
+ *
+ * Ham `value_text` yalnızca stale-write karşılaştırmasının gerektiği yerlerde
+ * kullanılır; diğer tüm tüketiciler bu tek kanonik yardımcıdan geçmelidir.
+ */
+export function fieldTestUserFacingText(valueText: string | null | undefined): string {
+  return (parseStoredFieldTestEditSeq(valueText).displayText ?? "").trim();
+}
+
 export function shouldSkipStaleFieldTestCellWrite(params: {
   incomingEditSeq: number;
   storedEditSeq: number;

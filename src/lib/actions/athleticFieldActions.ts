@@ -30,6 +30,7 @@ import {
   fieldTestSaveFailure,
   type FieldTestSaveFailure,
 } from "@/lib/fieldTests/fieldTestSaveErrors";
+import { fieldTestUserFacingText } from "@/lib/fieldTests/fieldTestEditSeqMetadata";
 import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import { paginatePostgrestSelect } from "@/lib/db/paginatePostgrestRange";
@@ -1128,6 +1129,9 @@ export type FieldTestPreviousResultRow = {
 };
 
 /** Oturum tarihinden önceki son test sonuçları (profil + metrik başına en güncel). */
+/** Önceki ölçüm hidrasyonu için sayfalama tavanı (kadro × metrik × tarih). */
+const PREVIOUS_RESULTS_MAX_ROWS = 20000;
+
 export async function listPreviousFieldTestResultsForActor(input: {
   profileIds: string[];
   beforeTestDate: string;
@@ -1159,15 +1163,25 @@ export async function listPreviousFieldTestResultsForActor(input: {
       return { results: [] as FieldTestPreviousResultRow[] };
     }
 
+    // PostgREST tek istekte 1000 satır döner; sayfalama olmadan kalabalık
+    // kadrolarda bazı sporcuların "önceki ölçüm" değeri sessizce kaybolur.
     const chunkedRes = await chunkedInQuery(
       filteredIds,
       async (chunk) =>
-        await resolved.adminClient
-          .from("athletic_results")
-          .select("profile_id, test_id, test_date, value, value_text")
-          .in("profile_id", chunk)
-          .lt("test_date", beforeTestDate)
-          .order("test_date", { ascending: false }),
+        await paginatePostgrestSelect<FieldTestPreviousResultRow>(
+          async (from, to) =>
+            await resolved.adminClient
+              .from("athletic_results")
+              .select("profile_id, test_id, test_date, value, value_text")
+              .in("profile_id", chunk)
+              .lt("test_date", beforeTestDate)
+              .order("test_date", { ascending: false })
+              .order("profile_id", { ascending: true })
+              .order("test_id", { ascending: true })
+              .range(from, to),
+          1000,
+          PREVIOUS_RESULTS_MAX_ROWS
+        ),
       { scope: "athleticFieldActions.listPreviousFieldTestResults" }
     );
 
@@ -1421,7 +1435,7 @@ export async function exportFieldTestResultsCSV(input: {
       meta?.category || "",
       meta?.unit || "",
       r.value != null && Number.isFinite(r.value) ? r.value : "",
-      r.value_text || "",
+      fieldTestUserFacingText(r.value_text),
       directionLabel[meta?.improvement_direction || "unknown"] || "Belirsiz",
     ];
   });
