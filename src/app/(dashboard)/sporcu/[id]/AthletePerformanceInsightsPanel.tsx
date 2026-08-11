@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   ComposedChart,
@@ -13,6 +14,7 @@ import {
   LineChart,
 } from "recharts";
 import { ChartFrame, chartTooltipStyle } from "@/components/ui/charts";
+import { DataTable, uiTableRowHoverClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import {
   Activity,
   AlertTriangle,
@@ -153,8 +155,8 @@ export function AthletePerformanceInsightsPanel({
       onClick={() => toggle(key)}
       className={`min-h-11 touch-manipulation rounded-xl border px-3 py-2 text-[8px] font-black uppercase tracking-widest transition-all ${
         vis[key]
-          ? "bg-[#7c3aed]/20 border-[#7c3aed]/40 text-white"
-          : "bg-black/40 border-white/10 text-gray-600 line-through"
+          ? "bg-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] text-white"
+          : "ui-tabs-nav__tab--inactive text-gray-600 line-through"
       }`}
     >
       {label}
@@ -164,16 +166,16 @@ export function AthletePerformanceInsightsPanel({
   return (
     <div
       id="performans-analitigi"
-      className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl space-y-6 md:space-y-7 min-w-0 overflow-x-hidden"
+      className="ui-card border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl space-y-6 md:space-y-7 min-w-0 overflow-x-hidden"
     >
       <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6 xl:gap-8 min-w-0">
         <div className="flex items-start gap-4 min-w-0">
-          <div className="shrink-0 rounded-xl bg-[#7c3aed]/10 p-2 text-[#7c3aed]">
+          <div className="shrink-0 rounded-xl bg-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] p-2 text-[color:var(--peaker-ui-PRIMARY)]">
             <BarChart3 size={18} aria-hidden />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm md:text-base font-black italic text-white uppercase tracking-tight break-words">
-              Performans <span className="text-[#7c3aed]">Analitiği</span>
+              Performans <span className="text-[color:var(--peaker-ui-PRIMARY)]">Analitiği</span>
             </h3>
             <p className="text-[8px] font-black text-gray-600 uppercase tracking-[0.2em] sm:tracking-[0.3em] mt-1 italic leading-relaxed break-words">
               ACWR · EWMA · yük · wellness — Performans Merkezi ile aynı hesap mantığı
@@ -187,7 +189,7 @@ export function AthletePerformanceInsightsPanel({
               type="button"
               onClick={() => setView("grafik")}
               className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[8px] font-black uppercase tracking-widest touch-manipulation ${
-                view === "grafik" ? "bg-[#7c3aed] border-[#7c3aed] text-white" : "bg-black/40 border-white/10 text-gray-500"
+                view === "grafik" ? "ui-tabs-nav__tab--active text-white" : "ui-tabs-nav__tab--inactive text-gray-500"
               }`}
             >
               <LineChartIcon size={12} aria-hidden /> Grafik
@@ -196,7 +198,7 @@ export function AthletePerformanceInsightsPanel({
               type="button"
               onClick={() => setView("tablo")}
               className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-[8px] font-black uppercase tracking-widest touch-manipulation ${
-                view === "tablo" ? "bg-[#7c3aed] border-[#7c3aed] text-white" : "bg-black/40 border-white/10 text-gray-500"
+                view === "tablo" ? "ui-tabs-nav__tab--active text-white" : "ui-tabs-nav__tab--inactive text-gray-500"
               }`}
             >
               <Table2 size={12} aria-hidden /> Sayısal
@@ -208,12 +210,12 @@ export function AthletePerformanceInsightsPanel({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[8px] font-black uppercase tracking-widest text-gray-600 flex items-center gap-2">
-            <LayoutGrid size={12} className="text-[#7c3aed]" aria-hidden /> Koç: gösterilecek bloklar
+            <LayoutGrid size={12} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> Koç: gösterilecek bloklar
           </p>
           <button
             type="button"
             onClick={toggleAllDetails}
-            className="min-h-9 touch-manipulation rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-gray-300 transition-colors sm:hover:bg-white/5"
+            className="min-h-9 touch-manipulation rounded-xl ui-input px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-gray-300 transition-colors sm:hover:bg-white/5"
             aria-pressed={allDetailsOn}
           >
             {allDetailsOn ? "Detayları gizle" : "Tüm detayları aç"}
@@ -299,7 +301,7 @@ export function AthletePerformanceInsightsPanel({
           {vis.acwr && (
             <div className="bg-black/30 border border-white/5 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 min-w-0">
               <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-2 italic">
-                <TrendingUp size={14} className="text-[#7c3aed]" /> ACWR
+                <TrendingUp size={14} className="text-[color:var(--peaker-ui-PRIMARY)]" /> ACWR
               </h4>
               <ChartFrame
                 isEmpty={acwrData.length === 0}
@@ -311,15 +313,15 @@ export function AthletePerformanceInsightsPanel({
                   <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
                   <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
                   <defs>
                     <linearGradient id="spAcwrAkut" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--peaker-ui-PRIMARY)" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="var(--peaker-ui-PRIMARY)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <Area yAxisId="load" type="monotone" dataKey="akut" stroke="#7c3aed" fill="url(#spAcwrAkut)" strokeWidth={2} />
+                  <Area yAxisId="load" type="monotone" dataKey="akut" stroke="var(--peaker-ui-PRIMARY)" fill="url(#spAcwrAkut)" strokeWidth={2} />
                   <Line yAxisId="load" type="monotone" dataKey="kronik" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
                   <Line yAxisId="ratio" type="monotone" dataKey="ratio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
@@ -329,7 +331,7 @@ export function AthletePerformanceInsightsPanel({
           {vis.ewma && (
             <div className="bg-black/30 border border-white/5 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 min-w-0">
               <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-2 italic">
-                <Waves size={14} className="text-[#7c3aed]" /> EWMA
+                <Waves size={14} className="text-[color:var(--peaker-ui-PRIMARY)]" /> EWMA
               </h4>
               <ChartFrame
                 isEmpty={ewmaData.length === 0}
@@ -341,9 +343,9 @@ export function AthletePerformanceInsightsPanel({
                   <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="load" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="ratio" orientation="right" tick={{ fill: "#f59e0b", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
                   <ReferenceLine yAxisId="ratio" y={1.5} stroke="#ef4444" strokeDasharray="4 4" />
-                  <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                  <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="var(--peaker-ui-PRIMARY)" strokeWidth={2} dot={false} />
                   <Line yAxisId="load" type="monotone" dataKey="chronicEwma" stroke="#4b5563" strokeWidth={1} strokeDasharray="4 4" dot={false} />
                   <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
@@ -354,49 +356,51 @@ export function AthletePerformanceInsightsPanel({
       )}
 
       {(vis.acwr || vis.ewma || vis.loads) && view === "tablo" && (
-        <div className="overflow-x-auto rounded-[2rem] border border-white/5">
-          <table className="w-full text-left text-xs min-w-[640px]">
-            <thead>
-              <tr className="border-b border-white/10 text-[8px] font-black uppercase tracking-widest text-gray-500 bg-black/40">
-                <th className="p-4">Tarih</th>
+        <DataTable
+          bare
+          className="overflow-hidden rounded-[2rem] border border-white/5"
+          scrollClassName=""
+          tableClassName="w-full text-left text-xs min-w-[640px]"
+          headClassName="ui-table-head ui-table-head--divided ui-table-head--filled text-[8px] font-black uppercase tracking-widest"
+          head={
+            <tr>
+              <th className={`${uiTableThClass} p-4`}>Tarih</th>
+              {vis.loads && (
+                <>
+                  <th className={`${uiTableThClass} p-4`}>Yük (AU)</th>
+                  <th className={`${uiTableThClass} p-4`}>RPE</th>
+                </>
+              )}
+              {vis.acwr && <th className={`${uiTableThClass} p-4`}>ACWR</th>}
+              {vis.ewma && <th className={`${uiTableThClass} p-4`}>EWMA oran</th>}
+            </tr>
+          }
+        >
+          {normalizedLoads.length === 0 ? (
+            <tr>
+              <td
+                colSpan={Math.max(loadTableColCount, 1)}
+                className="p-12 text-center text-gray-600 font-black uppercase text-[9px] tracking-widest"
+              >
+                Antrenman yükü kaydı yok
+              </td>
+            </tr>
+          ) : (
+            normalizedLoads.map((row, i) => (
+              <tr key={`${row.measurement_date}-${i}`} className={`${uiTableRowHoverClass} font-bold text-white`}>
+                <td className={`${uiTableTdClass} p-4 tabular-nums`}>{getLoadDate(row).toLocaleDateString("tr-TR")}</td>
                 {vis.loads && (
                   <>
-                    <th className="p-4">Yük (AU)</th>
-                    <th className="p-4">RPE</th>
+                    <td className={`${uiTableTdClass} p-4 tabular-nums`}>{row.total_load ?? "—"}</td>
+                    <td className={`${uiTableTdClass} p-4 tabular-nums`}>{row.rpe_score ?? "—"}</td>
                   </>
                 )}
-                {vis.acwr && <th className="p-4">ACWR</th>}
-                {vis.ewma && <th className="p-4">EWMA oran</th>}
+                {vis.acwr && <td className={`${uiTableTdClass} p-4 tabular-nums`}>{acwrData[i]?.ratio ?? "—"}</td>}
+                {vis.ewma && <td className={`${uiTableTdClass} p-4 tabular-nums`}>{ewmaData[i]?.ewmaRatio ?? "—"}</td>}
               </tr>
-            </thead>
-            <tbody>
-              {normalizedLoads.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={Math.max(loadTableColCount, 1)}
-                    className="p-12 text-center text-gray-600 font-black uppercase text-[9px] tracking-widest"
-                  >
-                    Antrenman yükü kaydı yok
-                  </td>
-                </tr>
-              ) : (
-                normalizedLoads.map((row, i) => (
-                  <tr key={`${row.measurement_date}-${i}`} className="border-b border-white/5 text-white font-bold">
-                    <td className="p-4 tabular-nums">{getLoadDate(row).toLocaleDateString("tr-TR")}</td>
-                    {vis.loads && (
-                      <>
-                        <td className="p-4 tabular-nums">{row.total_load ?? "—"}</td>
-                        <td className="p-4 tabular-nums">{row.rpe_score ?? "—"}</td>
-                      </>
-                    )}
-                    {vis.acwr && <td className="p-4 tabular-nums">{acwrData[i]?.ratio ?? "—"}</td>}
-                    {vis.ewma && <td className="p-4 tabular-nums">{ewmaData[i]?.ewmaRatio ?? "—"}</td>}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))
+          )}
+        </DataTable>
       )}
 
       {vis.loads && view === "grafik" && (
@@ -416,8 +420,8 @@ export function AthletePerformanceInsightsPanel({
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
               <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
-              <Line type="monotone" dataKey="yuk" stroke="#7c3aed" strokeWidth={3} dot={{ r: 3 }} />
+              <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
+              <Line type="monotone" dataKey="yuk" stroke="var(--peaker-ui-PRIMARY)" strokeWidth={3} dot={{ r: 3 }} />
             </LineChart>
           </ChartFrame>
         </div>
@@ -426,37 +430,40 @@ export function AthletePerformanceInsightsPanel({
       {vis.wellness && wellnessReports.length > 0 && (
         <div className="bg-black/30 border border-white/5 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 overflow-x-auto min-w-0">
           <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-4 flex items-center gap-2 italic">
-            <Heart size={14} className="text-[#7c3aed]" /> Wellness
+            <Heart size={14} className="text-[color:var(--peaker-ui-PRIMARY)]" /> Wellness
           </h4>
           {view === "tablo" ? (
-            <table className="w-full text-left text-[11px] min-w-[720px]">
-              <thead>
-                <tr className="border-b border-white/10 text-[8px] font-black uppercase text-gray-500">
-                  <th className="py-2 pr-3">Tarih</th>
-                  <th className="py-2 pr-3">Skor</th>
-                  <th className="py-2 pr-3">Uyku</th>
-                  <th className="py-2 pr-3">Enerji</th>
-                  <th className="py-2 pr-3">Stres</th>
-                  <th className="py-2 pr-3">Yorgunluk</th>
-                  <th className="py-2 pr-3">Ağrı</th>
-                  <th className="py-2">Nabız</th>
+            <DataTable
+              bare
+              scrollClassName=""
+              tableClassName="w-full text-left text-[11px] min-w-[720px]"
+              headClassName="ui-table-head ui-table-head--divided text-[8px] font-black uppercase"
+              head={
+                <tr>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Tarih</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Skor</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Uyku</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Enerji</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Stres</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Yorgunluk</th>
+                  <th className={`${uiTableThClass} py-2 pr-3`}>Ağrı</th>
+                  <th className={`${uiTableThClass} py-2`}>Nabız</th>
                 </tr>
-              </thead>
-              <tbody>
-                {wellnessReports.map((r) => (
-                  <tr key={r.id} className="border-b border-white/5 text-gray-200">
-                    <td className="py-3 pr-3 font-black">{new Date(r.report_date).toLocaleDateString("tr-TR")}</td>
-                    <td className="py-3 pr-3 text-[#7c3aed] font-black">{getReadinessScore(r)}</td>
-                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("sleep_quality", r.sleep_quality)}`}>{r.sleep_quality ?? "—"}</td>
-                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("energy_level", r.energy_level)}`}>{r.energy_level ?? "—"}</td>
-                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("stress_level", r.stress_level)}`}>{r.stress_level ?? "—"}</td>
-                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("fatigue", r.fatigue)}`}>{r.fatigue ?? "—"}</td>
-                    <td className={`py-3 pr-3 font-black ${wellnessCellTone("muscle_soreness", r.muscle_soreness)}`}>{r.muscle_soreness ?? "—"}</td>
-                    <td className="py-3">{r.resting_heart_rate ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              }
+            >
+              {wellnessReports.map((r) => (
+                <tr key={r.id} className={`${uiTableRowHoverClass} text-gray-200`}>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black`}>{new Date(r.report_date).toLocaleDateString("tr-TR")}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black text-[color:var(--peaker-ui-PRIMARY)]`}>{getReadinessScore(r)}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black ${wellnessCellTone("sleep_quality", r.sleep_quality)}`}>{r.sleep_quality ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black ${wellnessCellTone("energy_level", r.energy_level)}`}>{r.energy_level ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black ${wellnessCellTone("stress_level", r.stress_level)}`}>{r.stress_level ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black ${wellnessCellTone("fatigue", r.fatigue)}`}>{r.fatigue ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-3 font-black ${wellnessCellTone("muscle_soreness", r.muscle_soreness)}`}>{r.muscle_soreness ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3`}>{r.resting_heart_rate ?? "—"}</td>
+                </tr>
+              ))}
+            </DataTable>
           ) : (
             <ChartFrame heightClassName="h-[220px]">
               <LineChart
@@ -470,8 +477,8 @@ export function AthletePerformanceInsightsPanel({
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
                 <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
-                <Line type="monotone" dataKey="skor" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Hazırlık" />
+                <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
+                <Line type="monotone" dataKey="skor" stroke="var(--peaker-ui-PRIMARY)" strokeWidth={2} dot={{ r: 2 }} name="Hazırlık" />
               </LineChart>
             </ChartFrame>
           )}
@@ -482,26 +489,29 @@ export function AthletePerformanceInsightsPanel({
         <div className="bg-black/30 border border-white/5 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 overflow-x-auto min-w-0">
           <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-4 italic">Vücut kompozisyonu</h4>
           {view === "tablo" ? (
-            <table className="w-full text-left text-sm max-w-lg">
-              <thead>
-                <tr className="border-b border-white/10 text-[8px] font-black uppercase text-gray-500">
-                  <th className="py-2 pr-4">Tarih</th>
-                  <th className="py-2 pr-4">Boy (cm)</th>
-                  <th className="py-2 pr-4">Kilo (kg)</th>
-                  <th className="py-2">Yağ %</th>
+            <DataTable
+              bare
+              scrollClassName=""
+              tableClassName="w-full max-w-lg text-left text-sm"
+              headClassName="ui-table-head ui-table-head--divided text-[8px] font-black uppercase"
+              head={
+                <tr>
+                  <th className={`${uiTableThClass} py-2 pr-4`}>Tarih</th>
+                  <th className={`${uiTableThClass} py-2 pr-4`}>Boy (cm)</th>
+                  <th className={`${uiTableThClass} py-2 pr-4`}>Kilo (kg)</th>
+                  <th className={`${uiTableThClass} py-2`}>Yağ %</th>
                 </tr>
-              </thead>
-              <tbody>
-                {bodyMetrics.map((b, i) => (
-                  <tr key={`${b.measurement_date}-${i}`} className="border-b border-white/5 text-white font-bold">
-                    <td className="py-3 pr-4">{new Date(b.measurement_date).toLocaleDateString("tr-TR")}</td>
-                    <td className="py-3 pr-4 tabular-nums">{b.height ?? "—"}</td>
-                    <td className="py-3 pr-4 tabular-nums">{b.weight ?? "—"}</td>
-                    <td className="py-3 tabular-nums">{b.body_fat ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              }
+            >
+              {bodyMetrics.map((b, i) => (
+                <tr key={`${b.measurement_date}-${i}`} className={`${uiTableRowHoverClass} font-bold text-white`}>
+                  <td className={`${uiTableTdClass} py-3 pr-4`}>{new Date(b.measurement_date).toLocaleDateString("tr-TR")}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-4 tabular-nums`}>{b.height ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 pr-4 tabular-nums`}>{b.weight ?? "—"}</td>
+                  <td className={`${uiTableTdClass} py-3 tabular-nums`}>{b.body_fat ?? "—"}</td>
+                </tr>
+              ))}
+            </DataTable>
           ) : (
             <ChartFrame heightClassName="h-[220px]">
               <LineChart
@@ -515,9 +525,9 @@ export function AthletePerformanceInsightsPanel({
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
                 <XAxis dataKey="d" tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#6b7280", fontSize: 8 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={chartTooltipStyle.contentStyle} />
+                <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
                 <Line type="monotone" dataKey="boy" stroke="#a78bfa" strokeWidth={2} dot={{ r: 2 }} name="Boy" />
-                <Line type="monotone" dataKey="kilo" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="Kilo" />
+                <Line type="monotone" dataKey="kilo" stroke="var(--peaker-ui-PRIMARY)" strokeWidth={2} dot={{ r: 2 }} name="Kilo" />
                 <Line type="monotone" dataKey="yag" stroke="#22d3ee" strokeWidth={2} dot={{ r: 2 }} name="Yağ %" />
               </LineChart>
             </ChartFrame>
@@ -546,7 +556,7 @@ function MiniKpi({
       ? "border-red-500/20 bg-red-500/[0.04]"
       : tone === "green"
         ? "border-emerald-500/20 bg-emerald-500/[0.04]"
-        : "border-[#7c3aed]/20 bg-[#7c3aed]/[0.06]";
+        : "border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] bg-[color:var(--peaker-ui-PRIMARY)]/[0.06]";
   return (
     <div className={`rounded-2xl border p-3 sm:p-4 min-w-0 ${ring}`}>
       <div className="flex items-start justify-between gap-2 mb-2 text-gray-500 min-w-0">

@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Search, Users, ChevronRight, UserPlus2, X } from "lucide-react";
 import Notification from "@/components/Notification";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import { mapCoach } from "@/lib/mappers";
 import type { CoachProfile } from "@/lib/types";
 import { addCoach, loadCoachesPageData } from "@/lib/actions/coachActions";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
 import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
+import { OverlayDialog, OVERLAY_Z } from "@/components/ui/overlay";
 
 function CoachesPageContent() {
   const searchParams = useSearchParams();
@@ -100,7 +101,7 @@ function CoachesPageContent() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koçlar yükleniyor...</p>
       </div>
     );
@@ -111,7 +112,7 @@ function CoachesPageContent() {
       <header className="flex min-w-0 flex-col gap-4 border-b border-white/5 pb-6 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="ui-h1">
-            Koç <span className="text-[#7c3aed]">Yönetimi</span>
+            Koç <span className="text-[color:var(--peaker-ui-PRIMARY)]">Yönetimi</span>
           </h1>
           <p className="ui-lead break-words">
             Organizasyondaki tüm koçları görüntüleyin.
@@ -125,13 +126,13 @@ function CoachesPageContent() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Koç ara..."
-              className="ui-input min-h-11 bg-[#121215] border-white/5 pl-10 italic uppercase text-base sm:text-xs touch-manipulation"
+              className="ui-input min-h-11 pl-10 italic uppercase text-base sm:text-xs touch-manipulation"
             />
           </div>
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-3 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe] transition sm:hover:bg-[#7c3aed]/25"
+            className="ui-btn-primary inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-wide transition"
           >
             <UserPlus2 size={14} aria-hidden />
             Yeni Koç Ekle
@@ -146,9 +147,9 @@ function CoachesPageContent() {
       ) : null}
 
       {!error && filtered.length === 0 && (
-        <div className="rounded-[2rem] border border-white/5 bg-[#121215] p-8 sm:p-16">
+        <div className="rounded-[2rem] ui-card p-8 sm:p-16">
           <Users size={40} className="mx-auto mb-4 text-gray-700" aria-hidden />
-          <EmptyStateCard
+          <EmptyState
             title="Kayıt bulunamadı"
             description={coaches.length === 0 ? "Bu organizasyonda henüz koç kaydı yok." : "Arama kriterine uygun koç bulunamadı."}
             reason={coaches.length === 0 ? "Koç profili oluşturulmamış olabilir." : "Arama metni mevcut koçlarla eşleşmiyor olabilir."}
@@ -169,7 +170,7 @@ function CoachesPageContent() {
             <Link
               key={coach.id}
               href={`/koclar/${coach.id}${detailQuery}`}
-              className="group block min-w-0 touch-manipulation rounded-[1.75rem] border border-white/5 bg-[#121215] p-4 transition-all sm:p-5 sm:hover:border-[#7c3aed]/30"
+              className="group block min-w-0 touch-manipulation rounded-[1.75rem] ui-card p-4 transition-all sm:p-5 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)]"
             >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 min-w-0">
                 <div className="min-w-0 flex-1">
@@ -184,16 +185,16 @@ function CoachesPageContent() {
                   >
                     {coach.isActive ? "Aktif" : "Pasif"}
                   </span>
-                  <span className="ui-badge-neutral text-[#c4b5fd] border-[#7c3aed]/20 bg-[#7c3aed]/10 shrink-0">
+                  <span className="ui-kpi-chip--brand shrink-0">
                     Bugün {lessonCountersByCoach[coach.id]?.today || 0}
                   </span>
-                  <span className="ui-badge-neutral text-[#c4b5fd] border-[#7c3aed]/20 bg-[#7c3aed]/10 shrink-0">
+                  <span className="ui-kpi-chip--brand shrink-0">
                     Yaklaşan {upcomingCountByCoach[coach.id] || 0}
                   </span>
-                  <span className="ui-badge-neutral text-gray-300 border-white/10 bg-white/5 shrink-0">
+                  <span className="ui-badge-neutral text-gray-300 bg-white/5 shrink-0">
                     Toplam {lessonCountersByCoach[coach.id]?.total || 0}
                   </span>
-                  <ChevronRight size={16} className="ml-auto shrink-0 text-gray-600 sm:ml-0 sm:group-hover:text-[#7c3aed]" aria-hidden />
+                  <ChevronRight size={16} className="ml-auto shrink-0 text-gray-600 sm:ml-0 sm:group-hover:text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                 </div>
               </div>
             </Link>
@@ -202,12 +203,18 @@ function CoachesPageContent() {
       )}
 
       {showCreateModal ? (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="relative w-full max-w-lg rounded-t-[2rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+        <OverlayDialog
+          open
+          onClose={() => setShowCreateModal(false)}
+          layer={OVERLAY_Z.LAYOUT_BACKDROP}
+          strongBackdrop
+          className="p-0 sm:p-4"
+          shellClassName="relative w-full max-w-lg rounded-t-[2rem] ui-card p-5 sm:rounded-[2rem] sm:p-6 !max-w-lg"
+        >
             <button
               type="button"
               onClick={() => setShowCreateModal(false)}
-              className="absolute right-4 top-4 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-400"
+              className="absolute right-4 top-4 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full ui-btn-ghost text-gray-400"
               aria-label="Kapat"
             >
               <X size={16} aria-hidden />
@@ -222,7 +229,7 @@ function CoachesPageContent() {
                   required
                   value={coachForm.fullName}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                  className="ui-input min-h-11 w-full bg-black/40"
+                  className="ui-input min-h-11 w-full"
                   placeholder="Ad Soyad"
                 />
               </div>
@@ -235,7 +242,7 @@ function CoachesPageContent() {
                   autoComplete="email"
                   value={coachForm.email}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, email: normalizeEmailInput(e.target.value) }))}
-                  className="ui-input min-h-11 w-full bg-black/40"
+                  className="ui-input min-h-11 w-full"
                   placeholder="E-posta"
                 />
               </div>
@@ -248,7 +255,7 @@ function CoachesPageContent() {
                   autoComplete="new-password"
                   value={coachForm.password}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, password: e.target.value }))}
-                  className="ui-input min-h-11 w-full bg-black/40 normal-case"
+                  className="ui-input min-h-11 w-full normal-case"
                   placeholder="Geçici şifre (en az 6 karakter)"
                   {...PASSWORD_FIELD_PROPS}
                 />
@@ -256,13 +263,12 @@ function CoachesPageContent() {
               <button
                 type="submit"
                 disabled={coachSubmitting}
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-60"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl ui-btn-primary px-4 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-60"
               >
                 {coachSubmitting ? "Oluşturuluyor..." : "Koçu Oluştur"}
               </button>
             </form>
-          </div>
-        </div>
+        </OverlayDialog>
       ) : null}
 
       {coachFeedback ? (
@@ -279,7 +285,7 @@ export default function CoachesPage() {
     <Suspense
       fallback={
         <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-          <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+          <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
           <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koçlar Yükleniyor...</p>
         </div>
       }

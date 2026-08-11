@@ -85,6 +85,7 @@ export async function replayOfflineActionByKind(
         selectedProfileIds,
         cells,
         notes,
+        writeSource: "offline_replay",
       });
       if ("error" in res && res.error) {
         if (process.env.NODE_ENV !== "production" && "devHint" in res && res.devHint) {

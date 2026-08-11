@@ -41,7 +41,7 @@ function WeeklyRecentCreatedPulseImpl({ range, targetDayKey }: WeeklyRecentCreat
 
   return (
     <div
-      className="pointer-events-none absolute left-1.5 right-1.5 z-10 rounded-2xl border border-[#7c3aed]/45 bg-[#7c3aed]/20 animate-pulse"
+      className="pointer-events-none absolute left-1.5 right-1.5 z-10 rounded-2xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_45%,transparent)] ui-kpi-chip--brand animate-pulse"
       style={{ top: `${pulseTop}%`, height: `${pulseHeight}%` }}
     />
   );

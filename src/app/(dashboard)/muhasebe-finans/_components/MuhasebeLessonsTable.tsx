@@ -1,6 +1,8 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import EmptyState from "@/components/ui/EmptyState";
+import { DataTable, uiTableRowHoverClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import type { AccountingFinanceSnapshot } from "@/lib/actions/accountingFinanceActions";
 import {
   getAccountingLessonStatusLabel,
@@ -42,7 +44,7 @@ export function MuhasebeLessonsTable({ rows, title, onResetFilters, onGoLessonMa
       </div>
       <div className="space-y-3 md:hidden">
         {rows.map((row) => (
-          <article key={`${row.sourceType}-${row.id}`} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+          <article key={`${row.sourceType}-${row.id}`} className="ui-card rounded-2xl p-4">
             <p className="text-sm font-black text-white">{row.title}</p>
             <p className="mt-1 text-[11px] font-semibold text-gray-500">{formatShortDateTime(row.startsAt)}</p>
             <div className="mt-3 space-y-1 text-[11px] font-semibold">
@@ -75,51 +77,52 @@ export function MuhasebeLessonsTable({ rows, title, onResetFilters, onGoLessonMa
           />
         ) : null}
       </div>
-      <div className="hidden overflow-x-auto rounded-2xl border border-white/10 bg-[#121215] md:block">
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-white/10 text-[10px] uppercase text-gray-500">
+      <div className="hidden md:block">
+        <DataTable
+          headClassName="ui-table-head ui-table-head--divided"
+          tableClassName="text-sm"
+          head={
             <tr>
-              <th className="px-3 py-2">Ders</th>
-              <th className="px-3 py-2">Tür</th>
-              <th className="px-3 py-2">Tarih & Saat</th>
-              <th className="px-3 py-2">Koç</th>
-              <th className="px-3 py-2">Lokasyon</th>
-              <th className="px-3 py-2">Durum</th>
-              <th className="px-3 py-2 text-right">Katılımcı</th>
+              <th className={uiTableThClass}>Ders</th>
+              <th className={uiTableThClass}>Tür</th>
+              <th className={uiTableThClass}>Tarih & Saat</th>
+              <th className={uiTableThClass}>Koç</th>
+              <th className={uiTableThClass}>Lokasyon</th>
+              <th className={uiTableThClass}>Durum</th>
+              <th className={`${uiTableThClass} text-right`}>Katılımcı</th>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.sourceType}-${row.id}`} className="border-b border-white/5 text-xs text-gray-200 hover:bg-white/[0.04]">
-                <td className="px-3 py-2">{row.title}</td>
-                <td className="px-3 py-2">{getAccountingLessonTypeLabel(row.sourceType)}</td>
-                <td className="px-3 py-2">{formatShortDateTime(row.startsAt)}</td>
-                <td className="px-3 py-2">{row.coachName}</td>
-                <td className="px-3 py-2">{row.location || "—"}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${lessonStatusBadgeClass(row.status)}`}>
-                    {getAccountingLessonStatusLabel(row.status)}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">{row.participantCount}</td>
-              </tr>
-            ))}
-            {isEmpty ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8">
-                  <EmptyState
-                    variant="filtered_empty"
-                    title="Bu aralıkta ders kaydı yok"
-                    description="Filtreleri değiştirebilir veya ders yönetiminden ders oluşturabilirsiniz."
-                    primaryAction={{ label: "Filtreleri sıfırla", onClick: onResetFilters }}
-                    secondaryAction={{ label: "Ders yönetimi", onClick: onGoLessonManagement }}
-                    bare
-                  />
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+          }
+        >
+          {rows.map((row) => (
+            <tr key={`${row.sourceType}-${row.id}`} className={`${uiTableRowHoverClass} text-xs text-gray-200`}>
+              <td className={uiTableTdClass}>{row.title}</td>
+              <td className={uiTableTdClass}>{getAccountingLessonTypeLabel(row.sourceType)}</td>
+              <td className={uiTableTdClass}>{formatShortDateTime(row.startsAt)}</td>
+              <td className={uiTableTdClass}>{row.coachName}</td>
+              <td className={uiTableTdClass}>{row.location || "—"}</td>
+              <td className={uiTableTdClass}>
+                <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${lessonStatusBadgeClass(row.status)}`}>
+                  {getAccountingLessonStatusLabel(row.status)}
+                </span>
+              </td>
+              <td className={`${uiTableTdClass} text-right tabular-nums`}>{row.participantCount}</td>
+            </tr>
+          ))}
+          {isEmpty ? (
+            <tr>
+              <td colSpan={7} className={`${uiTableTdClass} py-8`}>
+                <EmptyState
+                  variant="filtered_empty"
+                  title="Bu aralıkta ders kaydı yok"
+                  description="Filtreleri değiştirebilir veya ders yönetiminden ders oluşturabilirsiniz."
+                  primaryAction={{ label: "Filtreleri sıfırla", onClick: onResetFilters }}
+                  secondaryAction={{ label: "Ders yönetimi", onClick: onGoLessonManagement }}
+                  bare
+                />
+              </td>
+            </tr>
+          ) : null}
+        </DataTable>
       </div>
     </section>
   );

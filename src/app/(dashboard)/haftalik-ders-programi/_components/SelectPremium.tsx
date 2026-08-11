@@ -25,14 +25,14 @@ export function SelectPremium({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="ui-select min-h-11 w-full appearance-none rounded-xl border-white/10 bg-[#17171f] pr-10 text-sm font-semibold"
+          className="ui-select min-h-11 w-full appearance-none rounded-xl border-white/5 ui-card pr-10 text-sm font-semibold"
         >
           {children}
         </select>
         <ChevronDown
           size={16}
           aria-hidden
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#c4b5fd]"
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
         />
       </div>
     </label>

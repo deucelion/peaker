@@ -45,7 +45,7 @@ export default function SuperAdminCreateOrgForm() {
   }
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+    <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
       <p className="text-white text-sm font-black italic uppercase mb-4 break-words">Yeni Organizasyon Oluştur</p>
       <form
         onSubmit={handleSubmit}
@@ -56,13 +56,13 @@ export default function SuperAdminCreateOrgForm() {
           value={form.organizationName}
           onChange={(e) => setForm((prev) => ({ ...prev, organizationName: e.target.value }))}
           placeholder="ORGANIZASYON ADI"
-          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
+          className="w-full min-w-0 ui-card-inner border border-white/5 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
         />
         <input
           value={form.adminFullName}
           onChange={(e) => setForm((prev) => ({ ...prev, adminFullName: e.target.value }))}
           placeholder="ADMIN AD SOYAD (OPS.)"
-          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
+          className="w-full min-w-0 ui-card-inner border border-white/5 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
         />
         <input
           required
@@ -71,7 +71,7 @@ export default function SuperAdminCreateOrgForm() {
           value={form.adminEmail}
           onChange={(e) => setForm((prev) => ({ ...prev, adminEmail: e.target.value }))}
           placeholder="ADMIN EMAIL"
-          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
+          className="w-full min-w-0 ui-card-inner border border-white/5 rounded-xl px-3 py-3 text-white font-bold italic outline-none"
         />
         <input
           required
@@ -81,7 +81,7 @@ export default function SuperAdminCreateOrgForm() {
           value={form.tempPassword}
           onChange={(e) => setForm((prev) => ({ ...prev, tempPassword: e.target.value }))}
           placeholder="Geçici şifre (min 6)"
-          className="w-full min-w-0 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white font-bold italic outline-none normal-case"
+          className="w-full min-w-0 ui-card-inner border border-white/5 rounded-xl px-3 py-3 text-white font-bold italic outline-none normal-case"
           {...PASSWORD_FIELD_PROPS}
         />
         <label className="block min-w-0">
@@ -91,7 +91,7 @@ export default function SuperAdminCreateOrgForm() {
           <select
             value={form.timeZone}
             onChange={(e) => setForm((prev) => ({ ...prev, timeZone: e.target.value }))}
-            className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-base font-bold italic text-white outline-none sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded-xl ui-card-inner px-3 py-3 text-base font-bold italic text-white outline-none sm:text-xs"
             aria-label="Organizasyon saat dilimi"
           >
             {tzOptions.map((tz) => (
@@ -107,7 +107,7 @@ export default function SuperAdminCreateOrgForm() {
         <button
           disabled={submitting}
           type="submit"
-          className="min-h-11 touch-manipulation bg-[#7c3aed] sm:hover:bg-[#6d28d9] disabled:opacity-60 text-white rounded-xl py-3 text-[10px] font-black uppercase"
+          className="min-h-11 touch-manipulation ui-btn-primary sm:hover:bg-[color:var(--peaker-ui-PRIMARY)] disabled:opacity-60 text-white rounded-xl py-3 text-[10px] font-black uppercase"
         >
           {submitting ? "OLUSTURULUYOR..." : "ORGANIZASYON OLUSTUR"}
         </button>

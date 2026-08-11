@@ -75,15 +75,15 @@ function WeeklyScheduleGridImpl({
   );
 
   return (
-    <div className="mt-5 hidden overflow-x-auto rounded-2xl border border-white/10 bg-[#111114] md:block">
+    <div className="ui-table-shell mt-5 hidden overflow-x-auto md:block">
       <div className="min-w-[1120px]">
         <div
-          className="grid border-b border-white/10"
+          className="ui-table-head--divided grid border-b"
           style={{
             gridTemplateColumns: `88px repeat(${shownDayStarts.length}, minmax(140px, 1fr))`,
           }}
         >
-          <div className="sticky left-0 z-30 bg-[#0f0f13] px-2 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
+          <div className="sticky left-0 z-30 ui-table-head--filled px-2 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">
             Saat
           </div>
           {shownDayStarts.map((dayIso, dayIdx) => {
@@ -95,13 +95,13 @@ function WeeklyScheduleGridImpl({
                 onClick={() => onFocusDay(dayKey)}
                 className={`border-l px-3 py-3 text-[11px] font-black uppercase tracking-wide ${
                   isToday
-                    ? "border-[#7c3aed]/45 bg-gradient-to-b from-[#7c3aed]/18 to-[#7c3aed]/6 text-[#f0e9ff]"
-                    : "border-white/10 bg-white/[0.01] text-white/90"
-                } ${focusedDayKey ? "cursor-default" : "cursor-pointer hover:bg-white/[0.03]"}`}
+                    ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_45%,transparent)] bg-gradient-to-b from-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_18%,transparent)] to-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_6%,transparent)] text-[color:var(--peaker-ui-PRIMARY)]"
+                    : "ui-card-inner text-white/90"
+                } ${focusedDayKey ? "cursor-default" : "cursor-pointer sm:hover:ui-kpi-band"}`}
               >
                 {dayTitle(dayIso, appTz)}
                 {isToday ? (
-                  <span className="ml-2 rounded-md border border-[#7c3aed]/45 bg-[#7c3aed]/15 px-1.5 py-0.5 text-[9px]">
+                  <span className="ml-2 rounded-md border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_45%,transparent)] ui-kpi-chip--brand px-1.5 py-0.5 text-[9px]">
                     Bugün
                   </span>
                 ) : null}
@@ -118,14 +118,12 @@ function WeeklyScheduleGridImpl({
         >
           <WeeklyNowLine appTz={appTz} weekContainsToday={weekContainsToday} />
 
-          <div className="sticky left-0 z-20 relative border-r border-white/10 bg-[#0d0d11]">
+          <div className="sticky left-0 z-20 relative border-r ui-table-head--filled">
             {hourRows.map((h) => (
               <div
                 key={h}
                 className={`h-16 border-b px-2 pt-1 text-[10px] font-black tabular-nums ${
-                  h % 2 === 0
-                    ? "border-white/10 bg-white/[0.028] text-gray-300"
-                    : "border-white/5 text-gray-500"
+                  h % 2 === 0 ? "ui-kpi-band text-gray-300" : "text-gray-500"
                 }`}
               >
                 {String(h).padStart(2, "0")}:00
@@ -171,8 +169,8 @@ function WeeklyScheduleGridImpl({
                 key={dayIso}
                 className={`relative border-r last:border-r-0 ${
                   dayKey === todayKey
-                    ? "border-[#7c3aed]/35 bg-[#7c3aed]/[0.06]"
-                    : "border-white/10 bg-white/[0.01]"
+                    ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_6%,transparent)]"
+                    : "ui-card-inner"
                 }`}
                 style={{ height: `${GRID_CONTAINER_HEIGHT_REM}rem` }}
                 onClick={(e) => {
@@ -200,7 +198,9 @@ function WeeklyScheduleGridImpl({
                   <div
                     key={h}
                     className={`h-16 border-b ${
-                      h % 2 === 0 ? "border-white/10 bg-white/[0.018]" : "border-white/5"
+                      h % 2 === 0
+                        ? "ui-kpi-band"
+                        : "border-[color:color-mix(in_srgb,var(--peaker-ui-TEXT_SECONDARY,#6b7280)_8%,transparent)]"
                     }`}
                   />
                 ))}

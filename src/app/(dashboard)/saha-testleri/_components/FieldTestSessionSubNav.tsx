@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isFieldTestSessionEntryPath } from "@/lib/fieldTests/fieldTestSessionRoutes";
+import { UiTabsNav } from "@/components/ui/navigation/UiTabsNav";
 
 const ITEMS = [
   {
@@ -27,30 +27,21 @@ export function FieldTestSessionSubNav() {
   const pathname = usePathname() || "";
 
   return (
-    <nav
-      className="ml-0 flex flex-wrap gap-1.5 border-l-2 border-[#7c3aed]/30 pl-3"
-      aria-label="Saha testleri alt modülleri"
-    >
-      <span className="w-full text-[8px] font-black uppercase tracking-[0.2em] text-gray-600 sm:w-auto sm:mr-1">
-        Alt modül
-      </span>
-      {ITEMS.map((item) => {
-        const active = item.match(pathname);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`inline-flex min-h-9 items-center rounded-full border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide ${
-              active
-                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                : "border-white/10 bg-white/[0.02] text-gray-400 hover:text-white"
-            }`}
-            aria-current={active ? "page" : undefined}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <UiTabsNav
+      ariaLabel="Saha testleri alt modülleri"
+      subModule
+      size="sm"
+      prefix={
+        <span className="w-full text-[8px] font-black uppercase tracking-[0.2em] text-gray-600 sm:mr-1 sm:w-auto">
+          Alt modül
+        </span>
+      }
+      tabs={ITEMS.map((item) => ({
+        key: item.href,
+        label: item.label,
+        href: item.href,
+        active: item.match(pathname),
+      }))}
+    />
   );
 }

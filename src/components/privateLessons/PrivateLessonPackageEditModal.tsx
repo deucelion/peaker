@@ -6,6 +6,7 @@ import { updatePrivateLessonPackage } from "@/lib/actions/privateLessonPackageAc
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { resolvePackageLifecycleStatus } from "@/lib/privateLessons/packageStatus";
 import { MoneyAmountInput } from "@/components/privateLessons/MoneyAmountInput";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 import type { PrivateLessonPackage } from "@/lib/types";
 
 type Props = {
@@ -84,9 +85,15 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal>
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Kapat" onClick={() => !saving && onClose()} />
-      <form onSubmit={(e) => void handleSubmit(e)} className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#121215] p-5">
+    <OverlayDialog
+      open={open}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+      layer={OVERLAY_Z.DIALOG}
+      shellClassName="relative w-full max-w-lg rounded-2xl ui-card p-5 !max-w-lg"
+    >
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-black uppercase tracking-widest text-white">Paketi düzenle</h2>
           <button type="button" onClick={onClose} disabled={saving} className="text-gray-400 hover:text-white">
@@ -105,7 +112,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
           <label className="block space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Paket adı</span>
             <input
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={packageName}
               onChange={(e) => setPackageName(e.target.value)}
               required
@@ -114,7 +121,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
           <label className="block space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Koç</span>
             <select
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={coachId}
               onChange={(e) => setCoachId(e.target.value)}
               disabled={viewerRole === "coach"}
@@ -134,7 +141,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
             <input
               type="number"
               min={pkg.usedLessons}
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={totalLessons}
               onChange={(e) => setTotalLessons(e.target.value)}
               required
@@ -152,7 +159,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
               <input
                 type="number"
                 min={1}
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={installmentCount}
                 onChange={(e) => setInstallmentCount(e.target.value)}
               />
@@ -162,7 +169,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
               <input
                 type="number"
                 min={1}
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={installmentIntervalDays}
                 onChange={(e) => setInstallmentIntervalDays(e.target.value)}
               />
@@ -171,7 +178,7 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sonraki vade</span>
               <input
                 type="datetime-local"
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={nextPaymentDueAt}
                 onChange={(e) => setNextPaymentDueAt(e.target.value)}
               />
@@ -183,20 +190,20 @@ export function PrivateLessonPackageEditModal({ open, onClose, onSuccess, pkg, c
           </label>
           {error ? <p className="text-[11px] font-bold text-red-300">{error}</p> : null}
         </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border border-white/10 px-4 py-2 text-[10px] font-black uppercase text-gray-300">
+        <OverlayFooter>
+          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl px-4 py-2 text-[10px] font-black uppercase text-gray-300">
             Vazgeç
           </button>
           <button
             type="submit"
             disabled={saving || !isValid}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl ui-btn-primary px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
             Kaydet
           </button>
-        </div>
+        </OverlayFooter>
       </form>
-    </div>
+    </OverlayDialog>
   );
 }

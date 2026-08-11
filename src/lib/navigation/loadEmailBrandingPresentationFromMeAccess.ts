@@ -1,14 +1,20 @@
 "use client";
 
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import {
+  fetchMeAccessClient,
+  readMeAccessClientCache,
+  type MeAccessClientPayload,
+} from "@/lib/auth/meAccessClient";
 import {
   createDefaultEmailBrandingPresentation,
   createEmailBrandingPresentationFromOrganizationBranding,
   type EmailBrandingPresentation,
 } from "@/lib/navigation/emailBrandingPresentation";
 
-export async function loadEmailBrandingPresentationFromMeAccess(): Promise<EmailBrandingPresentation> {
-  const access = await fetchMeAccessClient();
+export async function loadEmailBrandingPresentationFromMeAccess(options?: {
+  access?: MeAccessClientPayload;
+}): Promise<EmailBrandingPresentation> {
+  const access = options?.access ?? readMeAccessClientCache() ?? (await fetchMeAccessClient());
   if (!access.ok) {
     return createDefaultEmailBrandingPresentation();
   }

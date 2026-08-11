@@ -11,7 +11,7 @@ interface NotificationProps {
 const variantClassMap: Record<NotificationVariant, string> = {
   success: "bg-green-500/10 border-green-500/20 text-green-300",
   error: "bg-red-500/10 border-red-500/20 text-red-300",
-  info: "bg-white/5 border-white/10 text-gray-300",
+  info: "ui-notification-info",
 };
 
 export default function Notification({ message, variant = "info", className = "" }: NotificationProps) {

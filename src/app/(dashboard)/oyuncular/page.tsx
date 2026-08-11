@@ -306,7 +306,7 @@ export default function OyuncuYonetimi() {
       <header className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="ui-h1">
-            TAKIM <span className="text-[#7c3aed]">KADROSU</span>
+            TAKIM <span className="text-[color:var(--peaker-ui-PRIMARY)]">KADROSU</span>
           </h1>
           <p className="ui-lead break-words">Atletik Profil & Kadro Yönetimi</p>
         </div>
@@ -319,14 +319,14 @@ export default function OyuncuYonetimi() {
               setTeamDetail(null);
               setWorkspace("teams");
             }}
-            className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-black/30 px-5 text-[10px] font-black uppercase tracking-wide text-gray-200 shadow-lg transition hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/10 hover:text-white sm:min-h-11 sm:w-auto"
+            className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-2xl ui-btn-ghost px-5 text-[10px] font-black uppercase tracking-wide text-gray-200 shadow-lg transition hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] hover:text-white sm:min-h-11 sm:w-auto"
           >
             <Users size={18} aria-hidden />
             Takım yönetimi
           </button>
           <Link
             href="/sporcular/yeni"
-            className="ui-btn-primary w-full min-h-12 sm:w-auto sm:min-h-11 px-6 rounded-2xl inline-flex items-center justify-center gap-3 shadow-xl shadow-[#7c3aed]/20 touch-manipulation shrink-0"
+            className="ui-btn-primary w-full min-h-12 sm:w-auto sm:min-h-11 px-6 rounded-2xl inline-flex items-center justify-center gap-3 shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] touch-manipulation shrink-0"
           >
             <UserPlus size={20} /> YENİ SPORCU EKLE
           </Link>
@@ -392,7 +392,7 @@ export default function OyuncuYonetimi() {
             <div className="relative flex-1 min-w-0 group">
               <Search
                 size={18}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 transition-colors group-focus-within:text-[#7c3aed] sm:left-6"
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 transition-colors group-focus-within:text-[color:var(--peaker-ui-PRIMARY)] sm:left-6"
                 aria-hidden
               />
               <input
@@ -417,7 +417,7 @@ export default function OyuncuYonetimi() {
               </select>
               <Filter
                 size={16}
-                className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-[#7c3aed]"
+                className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-[color:var(--peaker-ui-PRIMARY)]"
                 aria-hidden
               />
             </div>
@@ -433,7 +433,7 @@ export default function OyuncuYonetimi() {
               </select>
               <Filter
                 size={16}
-                className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-[#7c3aed]"
+                className="pointer-events-none absolute right-6 top-1/2 -translate-y-1/2 text-[color:var(--peaker-ui-PRIMARY)]"
                 aria-hidden
               />
             </div>
@@ -496,7 +496,7 @@ export default function OyuncuYonetimi() {
                   type="button"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
+                  className="min-h-10 rounded-xl ui-kpi-band px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
                 >
                   Önceki
                 </button>
@@ -504,7 +504,7 @@ export default function OyuncuYonetimi() {
                   type="button"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
+                  className="min-h-10 rounded-xl ui-kpi-band px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 disabled:opacity-40"
                 >
                   Sonraki
                 </button>

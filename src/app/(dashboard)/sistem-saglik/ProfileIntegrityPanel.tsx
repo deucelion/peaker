@@ -38,7 +38,7 @@ export default function ProfileIntegrityPanel({ summary }: Props) {
   }
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 space-y-3 min-w-0">
+    <section className="ui-card rounded-[1.5rem] p-4 space-y-3 min-w-0">
       <p className="text-white text-sm font-black italic uppercase">Profiles Integrity</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 min-w-0">
         <Metric label="Missing profile" value={summary.missingProfileCount} />
@@ -52,7 +52,7 @@ export default function ProfileIntegrityPanel({ summary }: Props) {
           type="button"
           disabled={!!running}
           onClick={() => void run(true)}
-          className="min-h-11 px-4 py-2 rounded-xl border border-white/15 bg-white/5 text-white text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation w-full sm:w-auto sm:hover:bg-white/10"
+          className="ui-btn-ghost min-h-11 px-4 py-2 text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation w-full sm:w-auto"
         >
           {running === "dry" ? "Dry-run..." : "Dry-run repair"}
         </button>
@@ -72,7 +72,7 @@ export default function ProfileIntegrityPanel({ summary }: Props) {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-2 min-w-0">
+    <div className="ui-kpi-band rounded-xl p-2 min-w-0">
       <p className="text-[9px] font-black uppercase text-gray-500 min-w-0 break-words leading-tight">{label}</p>
       <p className="text-lg font-black italic text-white leading-none mt-1">{value}</p>
     </div>

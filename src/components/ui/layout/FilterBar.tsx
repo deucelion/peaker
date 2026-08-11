@@ -1,12 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 /**
  * Faz 6.2 — FilterBar primitive.
  *
- * Standart filtre çerçevesi: rounded-2xl border + bg-[#121215]/80, içeride
- * filter chips + apply/reset slotları. Davranış yok, yalnızca konteyner.
+ * Standart filtre çerçevesi: ui-toolbar shell, içeride filter chips + apply/reset slotları.
+ * Davranış yok, yalnızca konteyner.
  */
 export function FilterBar({
   ariaLabel = "Filtre",
@@ -20,12 +21,17 @@ export function FilterBar({
   return (
     <section
       aria-label={ariaLabel}
-      className={`rounded-2xl border border-white/8 bg-[#121215]/80 p-4 sm:p-5 space-y-4 min-w-0 ${className}`}
+      className={`${uiBrandingClasses.layout.toolbar} space-y-4 min-w-0 ${className}`}
     >
       {children}
     </section>
   );
 }
+
+const FILTER_CHIP_ACTIVE_CLASS =
+  "border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white";
+const FILTER_CHIP_INACTIVE_CLASS =
+  "border-white/10 bg-black/30 text-gray-500 hover:text-gray-300";
 
 /**
  * Filter chip butonu. Aktif/pasif tonu standart tutar.
@@ -50,9 +56,7 @@ export function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={`min-h-9 rounded-xl border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide touch-manipulation ${
-        active
-          ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-          : "border-white/10 bg-black/30 text-gray-500 hover:text-gray-300"
+        active ? FILTER_CHIP_ACTIVE_CLASS : FILTER_CHIP_INACTIVE_CLASS
       } ${className}`}
     >
       {children}
@@ -106,19 +110,22 @@ export function SectionCard({
   ariaLabel?: string;
 }) {
   const wrapper =
-    tone === "muted"
-      ? "rounded-2xl border border-white/8 bg-[#121215]/80 p-4 sm:p-5"
-      : "rounded-2xl border border-white/10 bg-[#121215]/90 p-4 sm:p-5";
+    tone === "muted" ? uiBrandingClasses.kpi.band : uiBrandingClasses.kpi.section;
+
   return (
     <section aria-label={ariaLabel} className={`${wrapper} min-w-0 ${className}`}>
       {title || actions ? (
         <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
           {title ? (
-            <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">
-              {icon ? <span className="text-[#7c3aed]">{icon}</span> : null}
+            <h3 className="ui-label flex items-center gap-2 tracking-[0.25em]">
+              {icon ? (
+                <span className="text-[color:var(--peaker-ui-PRIMARY)]">{icon}</span>
+              ) : null}
               <span>{title}</span>
             </h3>
-          ) : <span />}
+          ) : (
+            <span />
+          )}
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
       ) : null}

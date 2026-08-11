@@ -1,9 +1,10 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useEffect, useMemo, useState } from "react";
 import { Ban, Loader2, MoreHorizontal, Pencil, X } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import { DataTablePagination } from "@/components/ui/data-display";
+import { DataTable, DataTablePagination, uiTableRowHoverClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import type { AccountingFinancePaymentRow } from "@/lib/actions/accountingFinanceActions";
 import {
   cancelPaymentRecord,
@@ -19,6 +20,7 @@ import {
   getAccountingPaymentRowStatusLabel,
   getPackageLifecycleLabel,
 } from "@/lib/accountingFinance/labels";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 
 const PAYMENTS_PAGE_SIZE = 50;
 
@@ -180,7 +182,7 @@ export function MuhasebePaymentsTable({
 
       <div className="space-y-3 md:hidden">
         {visibleRows.map((row) => (
-          <article key={row.id} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+          <article key={row.id} className="ui-card rounded-2xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-white">{row.athleteName}</p>
@@ -216,12 +218,12 @@ export function MuhasebePaymentsTable({
                   aria-label="Satır işlemleri"
                   aria-expanded={mobileMenuRowId === row.id}
                   onClick={() => setMobileMenuRowId((id) => (id === row.id ? null : row.id))}
-                  className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-gray-300"
+                  className={`${uiBrandingClasses.button.ghost} inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-gray-300`}
                 >
                   <MoreHorizontal size={16} aria-hidden />
                 </button>
                 {mobileMenuRowId === row.id ? (
-                  <div className="absolute bottom-full right-0 z-20 mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-[#101013] py-1 shadow-xl">
+                  <div className="ui-overlay-menu absolute bottom-full right-0 z-20 mb-2 min-w-[10rem] overflow-hidden rounded-xl py-1 shadow-xl">
                     <button
                       type="button"
                       onClick={() => {
@@ -264,98 +266,99 @@ export function MuhasebePaymentsTable({
         ) : null}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-2xl border border-white/10 bg-[#121215] md:block">
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-white/10 text-[10px] uppercase text-gray-500">
+      <div className="hidden md:block">
+        <DataTable
+          headClassName="ui-table-head ui-table-head--divided"
+          tableClassName="text-sm"
+          head={
             <tr>
-              <th className="px-3 py-2">Sporcu</th>
-              <th className="px-3 py-2">Ödeme türü</th>
-              <th className="px-3 py-2">Paket durumu</th>
-              <th className="px-3 py-2">Ödeme zamanı / kaynak</th>
-              <th className="px-3 py-2 text-right">Ödenen</th>
-              <th className="px-3 py-2 text-right">Kalan</th>
-              <th className="px-3 py-2">Ödeme tarihi</th>
-              <th className="px-3 py-2">Açıklama</th>
-              <th className="px-3 py-2">Durum</th>
-              {showOps ? <th className="px-3 py-2">İşlem</th> : null}
+              <th className={uiTableThClass}>Sporcu</th>
+              <th className={uiTableThClass}>Ödeme türü</th>
+              <th className={uiTableThClass}>Paket durumu</th>
+              <th className={uiTableThClass}>Ödeme zamanı / kaynak</th>
+              <th className={`${uiTableThClass} text-right`}>Ödenen</th>
+              <th className={`${uiTableThClass} text-right`}>Kalan</th>
+              <th className={uiTableThClass}>Ödeme tarihi</th>
+              <th className={uiTableThClass}>Açıklama</th>
+              <th className={uiTableThClass}>Durum</th>
+              {showOps ? <th className={uiTableThClass}>İşlem</th> : null}
             </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((row) => (
-              <tr key={row.id} className="border-b border-white/5 text-xs text-gray-200 transition-colors hover:bg-white/[0.04]">
-                <td className="px-3 py-2">{row.athleteName}</td>
-                <td className="px-3 py-2">
-                  <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-gray-300">
-                    {getPaymentTuruBucket(row.paymentKind)}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-[11px] text-gray-400">
-                  {row.packageId ? getPackageLifecycleLabel(row.packageLifecycleStatus) : "—"}
-                </td>
-                <td className="max-w-[11rem] px-3 py-2 text-[11px] text-gray-300">{row.channelLabel}</td>
-                <td className="px-3 py-2 text-right font-bold tabular-nums text-emerald-200/95">
-                  {formatMoney(row.paidAmount)}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{formatRemainingBalanceCell(row)}</td>
-                <td className="px-3 py-2">
-                  {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "—"}
-                </td>
-                <td className="max-w-[14rem] px-3 py-2 text-[11px] text-gray-400">{row.descriptionText}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${getAccountingPaymentRowStatusBadgeClass(row)}`}
-                  >
-                    {getAccountingPaymentRowStatusLabel(row)}
-                  </span>
-                </td>
-                {showOps ? (
-                  <td className="px-3 py-2">
-                    {rowIsAdjustable(row) ? (
-                      <div className="flex flex-col gap-1">
+          }
+        >
+          {visibleRows.map((row) => (
+            <tr key={row.id} className={`${uiTableRowHoverClass} text-xs text-gray-200`}>
+              <td className={uiTableTdClass}>{row.athleteName}</td>
+              <td className={uiTableTdClass}>
+                <span className="ui-badge-neutral inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold text-gray-300">
+                  {getPaymentTuruBucket(row.paymentKind)}
+                </span>
+              </td>
+              <td className={`${uiTableTdClass} text-[11px] text-gray-400`}>
+                {row.packageId ? getPackageLifecycleLabel(row.packageLifecycleStatus) : "—"}
+              </td>
+              <td className={`${uiTableTdClass} max-w-[11rem] text-[11px] text-gray-300`}>{row.channelLabel}</td>
+              <td className={`${uiTableTdClass} text-right font-bold tabular-nums text-emerald-200/95`}>
+                {formatMoney(row.paidAmount)}
+              </td>
+              <td className={`${uiTableTdClass} text-right tabular-nums text-gray-300`}>{formatRemainingBalanceCell(row)}</td>
+              <td className={uiTableTdClass}>
+                {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("tr-TR") : "—"}
+              </td>
+              <td className={`${uiTableTdClass} max-w-[14rem] text-[11px] text-gray-400`}>{row.descriptionText}</td>
+              <td className={uiTableTdClass}>
+                <span
+                  className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${getAccountingPaymentRowStatusBadgeClass(row)}`}
+                >
+                  {getAccountingPaymentRowStatusLabel(row)}
+                </span>
+              </td>
+              {showOps ? (
+                <td className={uiTableTdClass}>
+                  {rowIsAdjustable(row) ? (
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        title="Kayıt silinmez; iptal olarak işaretlenir (denetim izi kalır)."
+                        onClick={() => openAdjustDialog({ mode: "cancel", row, isLedger: Boolean(row.ledgerRowId) })}
+                        className="inline-flex items-center justify-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase text-rose-100"
+                      >
+                        <Ban className="size-3" aria-hidden />
+                        İptal
+                      </button>
+                      {row.status === "odendi" ? (
                         <button
                           type="button"
-                          title="Kayıt silinmez; iptal olarak işaretlenir (denetim izi kalır)."
-                          onClick={() => openAdjustDialog({ mode: "cancel", row, isLedger: Boolean(row.ledgerRowId) })}
-                          className="inline-flex items-center justify-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase text-rose-100"
+                          title="Eski satır iptal + yeni tutarla kayıt (paket defteri için ayrı akış)."
+                          onClick={() => openAdjustDialog({ mode: "correct", row, isLedger: Boolean(row.ledgerRowId) })}
+                          className="inline-flex items-center justify-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase text-amber-100"
                         >
-                          <Ban className="size-3" aria-hidden />
-                          İptal
+                          <Pencil className="size-3" aria-hidden />
+                          Düzelt
                         </button>
-                        {row.status === "odendi" ? (
-                          <button
-                            type="button"
-                            title="Eski satır iptal + yeni tutarla kayıt (paket defteri için ayrı akış)."
-                            onClick={() => openAdjustDialog({ mode: "correct", row, isLedger: Boolean(row.ledgerRowId) })}
-                            className="inline-flex items-center justify-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase text-amber-100"
-                          >
-                            <Pencil className="size-3" aria-hidden />
-                            Düzelt
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-gray-600">—</span>
-                    )}
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-            {isEmpty ? (
-              <tr>
-                <td colSpan={showOps ? 10 : 9} className="px-3 py-8">
-                  <EmptyState
-                    variant="filtered_empty"
-                    title="Bu aralıkta tahsilat kaydı yok"
-                    description="Filtreleri değiştirebilir veya yeni tahsilat ekleyebilirsiniz."
-                    primaryAction={{ label: "Tahsilat ekle", onClick: onAddPayment }}
-                    secondaryAction={{ label: "Filtreleri sıfırla", onClick: onResetFilters }}
-                    bare
-                  />
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-600">—</span>
+                  )}
                 </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+              ) : null}
+            </tr>
+          ))}
+          {isEmpty ? (
+            <tr>
+              <td colSpan={showOps ? 10 : 9} className={`${uiTableTdClass} py-8`}>
+                <EmptyState
+                  variant="filtered_empty"
+                  title="Bu aralıkta tahsilat kaydı yok"
+                  description="Filtreleri değiştirebilir veya yeni tahsilat ekleyebilirsiniz."
+                  primaryAction={{ label: "Tahsilat ekle", onClick: onAddPayment }}
+                  secondaryAction={{ label: "Filtreleri sıfırla", onClick: onResetFilters }}
+                  bare
+                />
+              </td>
+            </tr>
+          ) : null}
+        </DataTable>
       </div>
 
       {!isEmpty && rows.length > PAYMENTS_PAGE_SIZE ? (
@@ -363,17 +366,14 @@ export function MuhasebePaymentsTable({
       ) : null}
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-4 sm:items-center"
-          role="presentation"
-          onClick={() => !busy && closeAdjustDialog()}
+        <OverlayDialog
+          open
+          onClose={() => {
+            if (!busy) closeAdjustDialog();
+          }}
+          layer={OVERLAY_Z.MODAL_ELEVATED}
+          shellClassName="w-full max-w-md rounded-2xl border border-white/10  p-5 shadow-2xl !max-w-md"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161c] p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-sm font-black uppercase text-white">
                 {dialog.mode === "cancel"
@@ -406,7 +406,7 @@ export function MuhasebePaymentsTable({
                 onChange={(e) => setReason(e.target.value)}
                 rows={3}
                 disabled={busy}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                className="mt-1 ui-input w-full rounded-xl px-3 py-2 text-sm"
               />
             </label>
             {dialog.mode === "correct" ? (
@@ -419,12 +419,12 @@ export function MuhasebePaymentsTable({
                   onChange={(e) => setNewAmount(e.target.value)}
                   disabled={busy}
                   placeholder="örn. 1.250,00"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                  className="mt-1 ui-input w-full rounded-xl px-3 py-2 text-sm"
                 />
               </label>
             ) : null}
             {localError ? <p className="mt-2 text-[11px] font-bold text-rose-300">{localError}</p> : null}
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <OverlayFooter>
               <button
                 type="button"
                 disabled={busy}
@@ -442,9 +442,8 @@ export function MuhasebePaymentsTable({
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                 Onayla
               </button>
-            </div>
-          </div>
-        </div>
+            </OverlayFooter>
+        </OverlayDialog>
       ) : null}
     </section>
   );

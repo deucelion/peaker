@@ -17,6 +17,10 @@ import { buildCsvFromRows } from "@/lib/export/csvStream";
 import { logger } from "@/lib/monitoring";
 import { chunkedInQuery } from "@/lib/db/chunkedIn";
 import {
+  planFieldTestCellWrites,
+  type FieldTestCellWriteSource,
+} from "@/lib/fieldTests/fieldTestCellWriteGuard";
+import {
   buildAthleticResultUpsertRow,
   resolveAthleticResultsWriteShape,
 } from "@/lib/fieldTests/athleticResultsWriteShape";
@@ -28,6 +32,7 @@ import {
 } from "@/lib/fieldTests/fieldTestSaveErrors";
 import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import { paginatePostgrestSelect } from "@/lib/db/paginatePostgrestRange";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -407,10 +412,12 @@ export type AthleticResultCell = {
   testId: string;
   valueNumber: number | null;
   valueText: string | null;
+  /** Monotonic per-cell edit generation for stale-write protection. */
+  editSeq?: number;
 };
 
 export type FieldTestSaveResult =
-  | { success: true }
+  | { success: true; skippedStaleCells?: number }
   | FieldTestSaveFailure;
 
 export async function saveAthleticFieldResults(input: {
@@ -418,6 +425,7 @@ export async function saveAthleticFieldResults(input: {
   selectedProfileIds: string[];
   cells: AthleticResultCell[];
   notes?: Array<{ profileId: string; note: string | null }>;
+  writeSource?: FieldTestCellWriteSource;
 }): Promise<FieldTestSaveResult> {
   return withServerActionGuard("fieldTest.saveAthleticFieldResults", async () => {
   const resolved = await resolveFieldTestActor();
@@ -464,6 +472,7 @@ export async function saveAthleticFieldResults(input: {
   }
 
   const orgId = resolved.organizationId;
+  let skippedStaleCells = 0;
 
   if (cells.length > 0) {
     const testIds = Array.from(new Set(cells.map((c) => c.testId)));
@@ -521,12 +530,60 @@ export async function saveAthleticFieldResults(input: {
         cellCount: cells.length,
         organizationId: orgId,
         writeShape,
+        writeSource: input.writeSource ?? "online",
       });
     }
 
-    for (const cell of cells) {
+    const writeSource: FieldTestCellWriteSource = input.writeSource ?? "online";
+    const storedRowsByKey = new Map<
+      string,
+      { value: number | null; value_text: string | null }
+    >();
+
+    if (cells.length > 0) {
+      const profileIds = Array.from(new Set(cells.map((c) => c.profileId)));
+      const testIds = Array.from(new Set(cells.map((c) => c.testId)));
+      const { data: existingRows, error: existingErr } = await resolved.adminClient
+        .from("athletic_results")
+        .select("profile_id, test_id, value, value_text")
+        .eq("organization_id", orgId)
+        .eq("test_date", testDate)
+        .in("profile_id", profileIds)
+        .in("test_id", testIds);
+
+      if (existingErr) {
+        return fieldTestSaveFailure("Mevcut saha testi kayitlari okunamadi.", {
+          rawMessage: existingErr.message,
+          pgCode: existingErr.code,
+        });
+      }
+
+      for (const row of existingRows ?? []) {
+        const key = `${row.profile_id}-${row.test_id}`;
+        storedRowsByKey.set(key, {
+          value: row.value as number | null,
+          value_text: (row.value_text as string | null) ?? null,
+        });
+      }
+    }
+
+    const writePlans = planFieldTestCellWrites({
+      cells,
+      valueTypeByTestId,
+      storedRowsByKey,
+      writeSource,
+    });
+
+    for (const plan of writePlans) {
+      if (!plan.apply) {
+        skippedStaleCells += 1;
+        continue;
+      }
+
+      const cell = plan.cell;
       const valueType = valueTypeByTestId.get(cell.testId) || "number";
       const normalizedText = cell.valueText?.trim() || null;
+      const editSeq = cell.editSeq ?? 0;
       if (valueType === "number") {
         if (cell.valueNumber === null || Number.isNaN(cell.valueNumber)) {
           const { error: delErr } = await resolved.adminClient
@@ -555,6 +612,7 @@ export async function saveAthleticFieldResults(input: {
           valueType: "number",
           valueNumber: v,
           valueText: null,
+          editSeq,
           shape: writeShape,
         });
         const { error: upErr } = await resolved.adminClient
@@ -598,6 +656,7 @@ export async function saveAthleticFieldResults(input: {
           valueType: "text",
           valueNumber: null,
           valueText: normalizedText,
+          editSeq,
           shape: writeShape,
         });
         const { error: upErr } = await resolved.adminClient
@@ -617,6 +676,13 @@ export async function saveAthleticFieldResults(input: {
           });
         }
       }
+    }
+
+    if (process.env.NODE_ENV !== "production" && skippedStaleCells > 0) {
+      logger.info("field_test.save.stale_skipped", "skipped stale cell writes", {
+        skippedStaleCells,
+        writeSource,
+      });
     }
   }
 
@@ -657,7 +723,7 @@ export async function saveAthleticFieldResults(input: {
   revalidatePath("/saha-testleri", "layout");
   revalidatePath("/saha-testleri/genel-rapor");
   revalidatePath("/sporcu");
-  return { success: true };
+  return skippedStaleCells > 0 ? { success: true, skippedStaleCells } : { success: true };
   });
 }
 
@@ -936,14 +1002,22 @@ export async function listFieldTestSessionSummariesForActor() {
     const admin = resolved.adminClient;
 
     const [resultsRes, notesRes] = await Promise.all([
-      admin
-        .from("athletic_results")
-        .select("test_date, profile_id, profiles!inner(organization_id)")
-        .eq("profiles.organization_id", orgId),
-      admin
-        .from("athletic_result_notes")
-        .select("test_date, profile_id, profiles!inner(organization_id)")
-        .eq("profiles.organization_id", orgId),
+      paginatePostgrestSelect(async (from, to) =>
+        admin
+          .from("athletic_results")
+          .select("test_date, profile_id, profiles!inner(organization_id)")
+          .eq("profiles.organization_id", orgId)
+          .order("test_date", { ascending: false })
+          .range(from, to)
+      ),
+      paginatePostgrestSelect(async (from, to) =>
+        admin
+          .from("athletic_result_notes")
+          .select("test_date, profile_id, profiles!inner(organization_id)")
+          .eq("profiles.organization_id", orgId)
+          .order("test_date", { ascending: false })
+          .range(from, to)
+      ),
     ]);
 
     if (resultsRes.error) {
@@ -956,7 +1030,7 @@ export async function listFieldTestSessionSummariesForActor() {
     type ResultRow = { test_date?: string | null; profile_id?: string | null };
     const byDate = new Map<string, { athletes: Set<string>; entries: number; hasNotes: boolean }>();
 
-    for (const row of (resultsRes.data || []) as ResultRow[]) {
+    for (const row of resultsRes.data as ResultRow[]) {
       const testDate = row.test_date?.trim();
       if (!testDate) continue;
       let slot = byDate.get(testDate);
@@ -968,7 +1042,7 @@ export async function listFieldTestSessionSummariesForActor() {
       slot.entries += 1;
     }
 
-    for (const row of (notesRes.data || []) as ResultRow[]) {
+    for (const row of notesRes.data as ResultRow[]) {
       const testDate = row.test_date?.trim();
       if (!testDate) continue;
       let slot = byDate.get(testDate);
@@ -1163,20 +1237,27 @@ export async function loadFieldTestTeamReportForActor() {
     return { error: `Kadro sayisi alinamadi: ${countErr.message}` as const };
   }
 
-  const { data, error } = await admin
-    .from("athletic_results")
-    .select(
-      `
+  const resultsRes = await paginatePostgrestSelect(async (from, to) =>
+    admin
+      .from("athletic_results")
+      .select(
+        `
       value,
       value_text,
+      test_date,
+      id,
       profiles!inner (full_name, organization_id),
       test_definitions (name, unit, value_type)
     `
-    )
-    .eq("profiles.organization_id", orgId);
+      )
+      .eq("profiles.organization_id", orgId)
+      .order("test_date", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to)
+  );
 
-  if (error) {
-    return { error: `Rapor verisi alinamadi: ${error.message}` as const };
+  if (resultsRes.error) {
+    return { error: `Rapor verisi alinamadi: ${resultsRes.error.message}` as const };
   }
 
   type Joined = {
@@ -1186,7 +1267,7 @@ export async function loadFieldTestTeamReportForActor() {
     test_definitions?: { name?: string | null; unit?: string | null; value_type?: string | null } | null;
   };
 
-  const chartRows: FieldTestTeamChartRow[] = ((data || []) as Joined[])
+  const chartRows: FieldTestTeamChartRow[] = (resultsRes.data as Joined[])
     .filter((item) => !isTextMetricValueType(item.test_definitions?.value_type))
     .map((item) => ({
       name: item.profiles?.full_name?.split(" ")[0] || "Sporcu",

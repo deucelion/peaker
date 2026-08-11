@@ -33,7 +33,8 @@ export const QUERY_TONE_CLASS: Record<QueryToneKey, string> = {
   amber: "border-amber-400/30 bg-amber-500/10 text-amber-100",
   red: "border-red-400/30 bg-red-500/10 text-red-100",
   gray: "border-white/10 bg-white/[0.04] text-gray-300",
-  purple: "border-[#7c3aed]/30 bg-[#7c3aed]/10 text-[#c4b5fd]",
+  purple:
+    "border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] bg-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_55%,#ffffff)]",
   emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
 };
 

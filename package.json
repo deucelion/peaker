@@ -8,7 +8,16 @@
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "test": "vitest run",
+    "test:branding-parity": "vitest run src/lib/organization/branding/runtime/killSwitch.test.ts src/lib/navigation/layoutThemeTokens.test.ts src/lib/ui/branding/contentThemeParity.test.ts src/lib/ui/branding/uiBrandingSelectors.test.ts src/lib/ui/branding/brandingProviderContract.test.ts src/lib/ui/branding/UI_CONTENT_THEME_VARS.contract.test.ts src/lib/ui/branding/BrandingUiProvider.test.ts src/lib/ui/branding/uiBrandingHelpers.test.ts src/lib/organization/branding/runtime/brandingMeAccessContract.test.ts src/lib/organization/branding/runtime/brandingMeAccessPayload.test.ts src/lib/organization/branding/runtime/getOrganizationBranding.test.ts",
+    "branding:parity": "vitest run scripts/branding-parity-check.test.ts",
+    "branding:parity:strict": "BRANDING_PARITY_STRICT=1 vitest run scripts/branding-parity-check.test.ts scripts/branding-wave14-validation.test.ts",
+    "branding:validate": "vitest run scripts/branding-wave14-validation.test.ts scripts/branding-lighthouse-gate.test.ts",
+    "branding:lighthouse": "tsx scripts/branding-lighthouse-gate.ts",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "test:e2e": "playwright test",
+    "test:e2e:branding": "playwright test e2e/branding/white-label.spec.ts e2e/branding/kill-switch.spec.ts",
+    "test:e2e:branding:visual": "playwright test e2e/branding/visual/catalog.spec.ts",
     "ci": "npm test && npm run lint && npm run build",
     "check:use-server": "node scripts/check-use-server-exports.mjs"
   },
@@ -30,6 +39,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/react": "^8.6.14",
+    "@storybook/react-vite": "^8.6.14",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -37,8 +49,10 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "storybook": "^8.6.14",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^6.2.0",
     "vitest": "^4.1.2"
   }
 }

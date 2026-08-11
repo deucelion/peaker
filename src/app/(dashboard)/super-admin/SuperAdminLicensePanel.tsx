@@ -92,8 +92,8 @@ export default function SuperAdminLicensePanel({
   }
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 space-y-4 sm:space-y-5 min-w-0 overflow-x-hidden">
-      <div className="rounded-xl border border-white/10 bg-black/20 p-3 sm:p-4 space-y-3 min-w-0">
+    <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 space-y-4 sm:space-y-5 min-w-0 overflow-x-hidden">
+      <div className="rounded-xl ui-card-inner p-3 sm:p-4 space-y-3 min-w-0">
         <p className="text-white text-xs font-black italic uppercase break-words">Organizasyon adi (marka / gorunen isim)</p>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch min-w-0">
           <input
@@ -101,7 +101,7 @@ export default function SuperAdminLicensePanel({
             onChange={(e) => setNameInput(e.target.value)}
             minLength={2}
             maxLength={120}
-            className="min-w-0 flex-1 min-h-11 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-base sm:text-sm text-white touch-manipulation"
+            className="min-w-0 flex-1 min-h-11 rounded-lg ui-input border px-3 py-2 text-base sm:text-sm text-white touch-manipulation"
           />
           <button
             type="button"
@@ -120,7 +120,7 @@ export default function SuperAdminLicensePanel({
                 setNamePending(false);
               })();
             }}
-            className="min-h-11 w-full shrink-0 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/20 px-4 py-2 text-[10px] font-black uppercase text-[#e9d5ff] disabled:opacity-40 touch-manipulation sm:w-auto sm:self-center"
+            className="min-h-11 w-full shrink-0 rounded-lg border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] ui-kpi-chip--brand px-4 py-2 text-[10px] font-black uppercase text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] disabled:opacity-40 touch-manipulation sm:w-auto sm:self-center"
           >
             {namePending ? "..." : "Adi kaydet"}
           </button>
@@ -170,7 +170,7 @@ export default function SuperAdminLicensePanel({
                 type="datetime-local"
                 value={startInput}
                 onChange={(e) => setStartInput(e.target.value)}
-                className="min-w-0 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-white touch-manipulation"
+                className="min-w-0 rounded-lg ui-input border px-3 py-2 text-white touch-manipulation"
               />
               <span className="text-[9px] text-gray-600 font-bold break-words">Bos birakirsaniz veritabaninda baslangic temizlenir.</span>
             </label>
@@ -180,7 +180,7 @@ export default function SuperAdminLicensePanel({
                 type="datetime-local"
                 value={endInput}
                 onChange={(e) => setEndInput(e.target.value)}
-                className="min-w-0 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-white touch-manipulation"
+                className="min-w-0 rounded-lg ui-input border px-3 py-2 text-white touch-manipulation"
               />
               <span className="text-[9px] text-gray-600 font-bold break-words">Bos = sinirsiz bitis. Gün sonunu kapsamak icin saati 23:59 secin.</span>
             </label>
@@ -205,7 +205,7 @@ export default function SuperAdminLicensePanel({
                 router.refresh();
               });
             }}
-            className="min-h-11 w-full sm:w-auto rounded-xl border border-[#7c3aed]/40 bg-[#7c3aed]/15 px-4 py-2.5 text-[10px] font-black uppercase text-[#e9d5ff] sm:hover:bg-[#7c3aed]/25 disabled:opacity-40 touch-manipulation"
+            className="min-h-11 w-full sm:w-auto rounded-xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] ui-kpi-chip--brand px-4 py-2.5 text-[10px] font-black uppercase text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] sm:hover:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)] disabled:opacity-40 touch-manipulation"
           >
             Lisans tarihlerini kaydet
           </button>
@@ -218,7 +218,7 @@ export default function SuperAdminLicensePanel({
                 <select
                   value={statusSelect}
                   onChange={(e) => setStatusSelect(e.target.value as OrganizationStatus)}
-                  className="min-h-11 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-base sm:text-xs text-white touch-manipulation"
+                  className="min-h-11 w-full rounded-lg ui-input border px-3 py-2 text-base sm:text-xs text-white touch-manipulation"
                 >
                   {ORGANIZATION_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -244,7 +244,7 @@ export default function SuperAdminLicensePanel({
                     router.refresh();
                   });
                 }}
-                className="min-h-11 w-full sm:w-auto shrink-0 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase text-white sm:hover:bg-white/10 disabled:opacity-40 touch-manipulation"
+                className="min-h-11 w-full sm:w-auto shrink-0 rounded-xl border border-white/5 ui-kpi-band px-4 py-2.5 text-[10px] font-black uppercase text-white sm:hover:bg-white/10 disabled:opacity-40 touch-manipulation"
               >
                 Statüyü kaydet
               </button>

@@ -4,7 +4,10 @@ import type { FormEvent } from "react";
 import Image from "next/image";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import type { AthleteInjuryNoteRecord } from "@/lib/types";
+
+const INPUT_CLASS = uiBrandingClasses.form.input;
 
 /**
  * Faz 7.7 — Sakatlık geçmişi bölümü.
@@ -38,13 +41,15 @@ export function AthleteInjurySection({
   return (
     <section
       id="sakatlik-gecmisi"
-      className="space-y-5 rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7 min-w-0"
+      className={`${uiBrandingClasses.card.base} min-w-0 space-y-5 rounded-2xl p-5 shadow-xl md:rounded-3xl md:p-7`}
     >
-      <div className="flex items-center justify-between gap-3 min-w-0">
-        <h2 className="text-base sm:text-lg font-black italic uppercase tracking-tight text-white break-words">
-          Sakatlık <span className="text-[#7c3aed]">geçmişi</span>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h2 className={`${uiBrandingClasses.typography.h2} break-words text-base sm:text-lg`}>
+          Sakatlık <span className="text-[color:var(--peaker-ui-PRIMARY)]">geçmişi</span>
         </h2>
-        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Kayıt yönetimi</span>
+        <span className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-bold uppercase tracking-widest`}>
+          Kayıt yönetimi
+        </span>
       </div>
 
       {injuryMessage ? (
@@ -58,34 +63,37 @@ export function AthleteInjurySection({
         />
       ) : null}
 
-      <form onSubmit={onCreate} className="grid grid-cols-1 gap-3 rounded-2xl border border-white/5 bg-black/30 p-4 sm:grid-cols-2">
+      <form
+        onSubmit={onCreate}
+        className={`${uiBrandingClasses.card.inner} grid grid-cols-1 gap-3 rounded-2xl p-4 sm:grid-cols-2`}
+      >
         <input
           value={injuryType}
           onChange={(e) => onInjuryTypeChange(e.target.value)}
           placeholder="Sakatlık türü (örn: Hamstring zorlanması)"
-          className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+          className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black sm:col-span-2`}
         />
         <textarea
           value={injuryNoteText}
           onChange={(e) => onInjuryNoteChange(e.target.value)}
           placeholder="Koç notu"
           rows={3}
-          className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-bold text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+          className={`${uiBrandingClasses.form.textarea} min-h-11 w-full min-w-0 px-4 py-3 text-xs font-bold sm:col-span-2`}
         />
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           onChange={(e) => onInjuryImagesChange(Array.from(e.target.files || []))}
-          className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[10px] font-bold text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[#7c3aed] file:px-3 file:py-1.5 file:text-[10px] file:font-black file:text-white sm:col-span-2"
+          className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-[10px] font-bold text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:px-3 file:py-1.5 file:text-[10px] file:font-black file:text-white sm:col-span-2 file:bg-[color:var(--peaker-ui-PRIMARY)]`}
         />
-        <p className="text-[9px] font-bold text-gray-600 uppercase tracking-wider sm:col-span-2">
+        <p className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-bold uppercase tracking-wider sm:col-span-2`}>
           En fazla 5 görsel, her biri max 6 MB (JPEG/PNG/WebP/GIF)
         </p>
         <button
           type="submit"
           disabled={injurySaving}
-          className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:w-fit"
+          className={`${uiBrandingClasses.button.primary} min-h-11 px-4 py-3 text-[10px] sm:w-fit`}
         >
           {injurySaving ? "Kaydediliyor..." : "Sakatlık Kaydı Ekle"}
         </button>
@@ -101,11 +109,13 @@ export function AthleteInjurySection({
       ) : (
         <div className="space-y-3">
           {injuryNotes.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-white/5 bg-black/25 p-4 sm:p-5">
+            <article key={item.id} className={`${uiBrandingClasses.kpi.band} rounded-2xl p-4 sm:p-5`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-xs font-black uppercase text-white break-words">{item.injuryType}</p>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+                  <p className={`${uiBrandingClasses.kpi.cardValue} break-words text-xs uppercase`}>
+                    {item.injuryType}
+                  </p>
+                  <p className={`${uiBrandingClasses.kpi.cardHint} mt-1 text-[10px] font-bold uppercase`}>
                     {new Date(item.createdAt).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
                     {item.createdByName}
                   </p>
@@ -114,12 +124,14 @@ export function AthleteInjurySection({
                   type="button"
                   disabled={deactivatingInjuryId === item.id}
                   onClick={() => onDeactivate(item.id)}
-                  className="min-h-11 rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-[10px] font-black uppercase text-red-300 disabled:opacity-40"
+                  className={`${uiBrandingClasses.button.danger} min-h-11 px-3 text-[10px] disabled:opacity-40`}
                 >
                   {deactivatingInjuryId === item.id ? "Pasife alınıyor..." : "Pasife al"}
                 </button>
               </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm font-bold text-gray-300">{item.note}</p>
+              <p className={`${uiBrandingClasses.typography.body} mt-3 whitespace-pre-wrap text-sm font-bold`}>
+                {item.note}
+              </p>
               {item.assets.length > 0 ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {item.assets.map((asset) => (
@@ -128,7 +140,7 @@ export function AthleteInjurySection({
                       href={asset.signedUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="group overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                      className={`${uiBrandingClasses.card.inner} group overflow-hidden`}
                     >
                       <Image
                         src={asset.signedUrl}

@@ -45,10 +45,10 @@ export function FieldTestSingleAthleteEntry({
   const canNext = athleteIndex < athleteTotal - 1;
 
   return (
-    <div className="min-w-0 space-y-4 rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5">
+    <div className="ui-card min-w-0 space-y-4 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[#7c3aed] text-sm font-black italic text-white">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[color:var(--peaker-ui-PRIMARY)] text-sm font-black italic text-white">
             {athlete.full_name.substring(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -65,7 +65,7 @@ export function FieldTestSingleAthleteEntry({
             type="button"
             disabled={!canPrev}
             onClick={onPrev}
-            className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-white/10 bg-black/30 px-3 text-[10px] font-black uppercase text-gray-300 disabled:opacity-40"
+            className="ui-btn-ghost inline-flex min-h-11 items-center gap-1 px-3 text-[10px] font-black uppercase text-gray-300 disabled:opacity-40"
           >
             <ChevronLeft size={16} aria-hidden /> Önceki
           </button>
@@ -73,13 +73,13 @@ export function FieldTestSingleAthleteEntry({
             type="button"
             disabled={!canNext}
             onClick={onNext}
-            className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-white/10 bg-black/30 px-3 text-[10px] font-black uppercase text-gray-300 disabled:opacity-40"
+            className="ui-btn-ghost inline-flex min-h-11 items-center gap-1 px-3 text-[10px] font-black uppercase text-gray-300 disabled:opacity-40"
           >
             Sonraki <ChevronRight size={16} aria-hidden />
           </button>
           <Link
             href={hrefAthleteDetail(athlete.id, "saha-testleri", "alan-testleri")}
-            className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-white/10 bg-black/30 px-3 text-[10px] font-black uppercase text-[#c4b5fd]"
+            className="ui-btn-ghost inline-flex min-h-11 items-center gap-1 px-3 text-[10px] font-black uppercase text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
           >
             Geçmiş <ExternalLink size={14} aria-hidden />
           </Link>
@@ -95,10 +95,10 @@ export function FieldTestSingleAthleteEntry({
             const isText = metricIsTextFn(metric);
             const previous = previousTestCells[key];
             return (
-              <label key={metric.id} className="flex min-w-0 flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-3">
+              <label key={metric.id} className="ui-card-inner flex min-w-0 flex-col gap-2 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-xs font-black uppercase tracking-tight text-white">{metric.name}</span>
-                  <span className="shrink-0 rounded-full bg-[#7c3aed]/15 px-2 py-0.5 text-[9px] font-black uppercase text-[#c4b5fd]">
+                  <span className="ui-kpi-chip--brand shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase">
                     {isText ? "Yazılı not" : metric.unit || "Sayı"}
                   </span>
                 </div>
@@ -131,7 +131,7 @@ export function FieldTestSingleAthleteEntry({
                     inputMode="decimal"
                     className="ui-input min-h-11 w-full text-center text-lg font-black"
                     placeholder="Değer"
-                    value={testValues[key] ?? ""}
+                    value={String(testValues[key] ?? "")}
                     onChange={(e) => onValueChange(metric.id, e.target.value)}
                     onBlur={onAutosaveBlur}
                     onKeyDown={(e) => {
@@ -147,7 +147,7 @@ export function FieldTestSingleAthleteEntry({
         </div>
       )}
 
-      <label className="flex min-w-0 flex-col gap-2 rounded-xl border border-white/10 bg-black/25 p-3">
+      <label className="ui-card-inner flex min-w-0 flex-col gap-2 p-3">
         <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Genel test notu</span>
         <span className="text-[10px] font-semibold text-gray-600">
           Bu alan metriklerden bağımsızdır; o günün genel gözlemini yazın.

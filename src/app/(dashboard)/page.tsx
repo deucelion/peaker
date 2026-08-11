@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Users, Calendar, CreditCard, AlertCircle, BarChart3, Target, Loader2, UserPlus2 } from "lucide-react";
 import Link from "next/link";
 import { PATHS } from "@/lib/navigation/routeRegistry";
@@ -15,7 +15,7 @@ import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
 import type { CoachPermissions } from "@/lib/types";
 import type { PrivateLessonSessionListItem } from "@/lib/types";
 import { listUpcomingPrivateLessonSessionsForCoach } from "@/lib/actions/privateLessonSessionActions";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { DASHBOARD_WIDGET_IDS } from "@/lib/organization/features/surfaces/widgetEntitlementMap";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import {
@@ -26,7 +26,7 @@ import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import { toDisplayName } from "@/lib/profile/displayName";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
 import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import OnboardingChecklist, {
   type OnboardingProgress,
 } from "@/components/onboarding/OnboardingChecklist";
@@ -157,27 +157,55 @@ export default function Dashboard() {
   } | null>(null);
   const [coachPrivateSessions, setCoachPrivateSessions] = useState<PrivateLessonSessionListItem[]>([]);
   const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | null>(null);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const fetchRunRef = useRef(0);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
   const router = useRouter();
 
-  const fetchDashboardData = useCallback(async (opts?: { soft?: boolean }) => {
+  const fetchDashboardData = useCallback(async (opts?: { soft?: boolean; retried?: boolean }) => {
+    const runId = ++fetchRunRef.current;
     const soft = Boolean(opts?.soft);
     if (!soft) setLoading(true);
     try {
-      const boot = await bootstrapTenantHomeDashboard();
+      let boot = await bootstrapTenantHomeDashboard();
+      if (runId !== fetchRunRef.current) return;
+      const sessionRetryErrors = new Set(["Gecersiz oturum.", "Organizasyon bilgisi yuklenemedi. Lutfen tekrar deneyin."]);
+      const bootLoadError = "loadError" in boot ? boot.loadError : null;
+      const snapshotError =
+        "snapshot" in boot &&
+        boot.snapshot &&
+        typeof boot.snapshot === "object" &&
+        "error" in boot.snapshot &&
+        typeof boot.snapshot.error === "string"
+          ? boot.snapshot.error
+          : null;
+      if (
+        !opts?.retried &&
+        ((bootLoadError && sessionRetryErrors.has(bootLoadError)) ||
+          (snapshotError && sessionRetryErrors.has(snapshotError)))
+      ) {
+        await new Promise((r) => setTimeout(r, 120));
+        boot = await bootstrapTenantHomeDashboard();
+        if (runId !== fetchRunRef.current) return;
+      }
+
       if ("redirectTo" in boot) {
         router.replace(boot.redirectTo);
         return;
       }
       if ("loadError" in boot) {
-        console.error("Dashboard Load Error:", boot.loadError);
+        if (runId !== fetchRunRef.current) return;
+        setLoadError(boot.loadError);
         return;
       }
       const snapshot = boot.snapshot;
       if ("error" in snapshot) {
-        console.error("Dashboard Load Error:", snapshot.error);
+        if (runId !== fetchRunRef.current) return;
+        setLoadError(snapshot.error ?? "Panel verileri yuklenemedi.");
         return;
       }
+      if (runId !== fetchRunRef.current) return;
+      setLoadError(null);
       setRole((snapshot.role || "sporcu") as "super_admin" | "admin" | "coach" | "sporcu");
       setOrgName(snapshot.orgName || "PEAKER LAB");
       setCurrentOrgId(snapshot.organizationId || null);
@@ -247,8 +275,10 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Dashboard Load Error:", err);
+      if (runId !== fetchRunRef.current) return;
+      setLoadError("Panel verileri yuklenemedi. Lutfen tekrar deneyin.");
     } finally {
-      if (!soft) setLoading(false);
+      if (!soft && runId === fetchRunRef.current) setLoading(false);
     }
   }, [router]);
 
@@ -277,18 +307,6 @@ export default function Dashboard() {
   useEffect(() => {
     void fetchDashboardData();
   }, [fetchDashboardData]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleCoachCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -347,12 +365,28 @@ export default function Dashboard() {
 
   if (loading) return (
     <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center space-y-6 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-      <Loader2 className="animate-spin text-[#7c3aed]" size={40} aria-hidden />
+      <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={40} aria-hidden />
       <span className="animate-pulse text-center text-[9px] font-black uppercase italic tracking-[0.5em] text-white">
         Veri İzolasyonu Sağlanıyor
       </span>
     </div>
   );
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 px-4 text-center">
+        <AlertCircle className="size-10 text-red-300" aria-hidden />
+        <p className="max-w-md text-sm font-semibold text-red-200">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => void fetchDashboardData()}
+          className="ui-btn-primary min-h-11 px-5 text-[10px] font-black uppercase tracking-widest"
+        >
+          Tekrar dene
+        </button>
+      </div>
+    );
+  }
 
   if (role === "super_admin") return null;
 
@@ -403,7 +437,7 @@ export default function Dashboard() {
         <header className="flex min-w-0 flex-col justify-between gap-6 border-b border-white/5 pb-6 md:flex-row md:items-end">
           <div className="min-w-0">
             <h1 className="ui-h1">
-              GÜNLÜK <span className="text-[#7c3aed]">OPERASYON</span>
+              GÜNLÜK <span className="text-[color:var(--peaker-ui-PRIMARY)]">OPERASYON</span>
             </h1>
             <p className="ui-lead break-words">
               {orgName} • Bugün ne yapmalıyım?
@@ -444,13 +478,13 @@ export default function Dashboard() {
             </Link>
             <Link
               href="/dersler"
-              className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+              className="rounded-xl border ui-kpi-chip--brand px-4 py-3 text-[10px] font-black uppercase ui-kpi-card__trend touch-manipulation"
             >
               {todayLessons.length > 0 ? "Bugünkü dersleri kontrol et" : "Bugün için ders planla"}
             </Link>
             <Link
               href="/bildirimler"
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+              className="rounded-xl ui-btn-ghost px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
             >
               Bildirimleri gözden geçir
             </Link>
@@ -461,7 +495,7 @@ export default function Dashboard() {
           <section className="ui-card min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="ui-h2-sm">Performans özeti</h3>
-              <Link href={PATHS.performans} className="text-[9px] font-black uppercase text-[#c4b5fd] hover:text-white">
+              <Link href={PATHS.performans} className="text-[9px] font-black uppercase ui-kpi-card__trend hover:text-white">
                 Performans merkezi →
               </Link>
             </div>
@@ -473,13 +507,13 @@ export default function Dashboard() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
             <h3 className="ui-h2-sm shrink-0">Bugünkü Derslerim</h3>
             {canCreateLessons && (
-              <Link href="/dersler" className="inline-flex justify-center px-3 py-2.5 sm:py-2 rounded-xl bg-[#7c3aed] sm:hover:bg-[#6d28d9] text-white text-[10px] font-black uppercase touch-manipulation shrink-0">
+              <Link href="/dersler" className="inline-flex justify-center px-3 py-2.5 sm:py-2 rounded-xl ui-btn-primary text-white text-[10px] font-black uppercase touch-manipulation shrink-0">
                 Ders Oluştur
               </Link>
             )}
           </div>
           {todayLessons.length === 0 ? (
-            <EmptyStateCard
+            <EmptyState
               title="Bugün planlı ders yok"
               description="Haftalık çizelgeden yeni ders ekleyebilir veya mevcut planı kontrol edebilirsiniz."
               primaryAction={canCreateLessons ? { label: "Ders oluştur", href: "/dersler" } : undefined}
@@ -559,7 +593,7 @@ export default function Dashboard() {
           ) : (
             <div className="grid gap-2">
               {upcomingLessons.map((lesson) => (
-                <div key={lesson.id} className="bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 min-w-0">
+                <div key={lesson.id} className="bg-white/[0.02] rounded-xl px-4 py-3 min-w-0">
                   <p className="text-white text-sm font-black italic uppercase break-words">{lesson.title}</p>
                   <p className="text-[10px] text-gray-500 font-bold italic break-words">
                     {new Date(lesson.start_time).toLocaleString("tr-TR")} • {lesson.location || "Ana Saha"}
@@ -576,7 +610,7 @@ export default function Dashboard() {
               <h3 className="ui-h2-sm shrink-0">Yaklaşan özel dersler</h3>
               <Link
                 href="/ozel-ders-paketleri"
-                className="text-[10px] font-black uppercase text-[#7c3aed] touch-manipulation shrink-0"
+                className="text-[10px] font-black uppercase text-[color:var(--peaker-ui-PRIMARY)] touch-manipulation shrink-0"
               >
                 Paketlere git
               </Link>
@@ -589,11 +623,11 @@ export default function Dashboard() {
                 <li key={s.id}>
                   <Link
                     href={`/ozel-ders-paketleri/${s.packageId}`}
-                    className="block rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/5 px-4 py-3 text-[11px] font-bold text-gray-300 touch-manipulation sm:hover:border-[#7c3aed]/40"
+                    className="block rounded-xl border ui-kpi-chip--brand px-4 py-3 text-[11px] font-bold text-gray-300 touch-manipulation sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)]"
                   >
                     <span className="text-white">{formatLessonDateTimeTr(s.startsAt)}</span>
                     <span className="mx-2 text-gray-600">·</span>
-                    <span className="text-[#c4b5fd]">{s.athleteName || "Sporcu"}</span>
+                    <span className="ui-kpi-card__trend">{s.athleteName || "Sporcu"}</span>
                     {s.packageName ? (
                       <>
                         <span className="mx-2 text-gray-600">·</span>
@@ -614,12 +648,12 @@ export default function Dashboard() {
           <section className="ui-card min-w-0">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
               <h3 className="ui-h2-sm shrink-0">Sporcu / Program Akisi</h3>
-              <Link href="/notlar-haftalik-program" className="inline-flex justify-center px-3 py-2.5 sm:py-2 rounded-xl bg-[#7c3aed] sm:hover:bg-[#6d28d9] text-white text-[10px] font-black uppercase touch-manipulation shrink-0">
+              <Link href="/notlar-haftalik-program" className="inline-flex justify-center px-3 py-2.5 sm:py-2 rounded-xl ui-btn-primary text-white text-[10px] font-black uppercase touch-manipulation shrink-0">
                 Yeni Program Yaz
               </Link>
             </div>
             {recentPrograms.length === 0 ? (
-              <EmptyStateCard
+              <EmptyState
                 title="Kayıt bulunamadı"
                 description="Son program akışında görüntülenecek kayıt yok."
                 reason="Henüz program/not oluşturulmamış olabilir."
@@ -631,7 +665,7 @@ export default function Dashboard() {
                 {recentPrograms.map((program) => {
                   const athlete = Array.isArray(program.athlete_profile) ? program.athlete_profile[0] : program.athlete_profile;
                   return (
-                    <div key={program.id} className="bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 min-w-0">
+                    <div key={program.id} className="bg-white/[0.02] rounded-xl px-4 py-3 min-w-0">
                       <p className="text-white text-sm font-black italic uppercase break-words">{program.title || "Program"}</p>
                       <p className="text-[10px] text-gray-500 font-bold italic break-words">
                         Sporcu: {toDisplayName(athlete?.full_name, undefined, "Sporcu")} • {new Date(program.created_at).toLocaleString("tr-TR")}
@@ -648,12 +682,12 @@ export default function Dashboard() {
           <section className="ui-card min-w-0">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
               <h3 className="ui-h2-sm shrink-0">Bildirimler</h3>
-              <Link href="/bildirimler" className="text-[#7c3aed] text-[10px] font-black uppercase py-2 sm:py-0 touch-manipulation shrink-0">
+              <Link href="/bildirimler" className="text-[color:var(--peaker-ui-PRIMARY)] text-[10px] font-black uppercase py-2 sm:py-0 touch-manipulation shrink-0">
                 TUMUNU GOR
               </Link>
             </div>
             {notificationPreview.length === 0 ? (
-              <EmptyStateCard
+              <EmptyState
                 title="Kayıt bulunamadı"
                 description="Bildirim akışında gösterilecek kayıt yok."
                 reason="Bu dönemde yeni sistem bildirimi oluşmamış olabilir."
@@ -663,7 +697,7 @@ export default function Dashboard() {
             ) : (
               <div className="grid gap-2">
                 {notificationPreview.map((n) => (
-                  <div key={n.id} className={`rounded-xl px-4 py-3 border min-w-0 ${n.read ? "bg-white/[0.02] border-white/5" : "bg-[#7c3aed]/10 border-[#7c3aed]/20"}`}>
+                  <div key={n.id} className={`rounded-xl px-4 py-3 border min-w-0 ${n.read ? "bg-white/[0.02] border-white/5" : "ui-kpi-chip--brand border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]"}`}>
                     <p className="text-white text-xs font-black italic break-words">{n.message}</p>
                     <p className="text-[10px] text-gray-500 font-bold italic">{new Date(n.created_at).toLocaleString("tr-TR")}</p>
                   </div>
@@ -682,7 +716,7 @@ export default function Dashboard() {
       <header className="flex min-w-0 flex-col justify-between gap-6 border-b border-white/5 pb-8 md:flex-row md:items-end">
         <div className="min-w-0">
           <h1 className="ui-h1">
-            AKADEMİ <span className="text-[#7c3aed]">PANELİ</span>
+            AKADEMİ <span className="text-[color:var(--peaker-ui-PRIMARY)]">PANELİ</span>
           </h1>
           <p className="ui-lead break-words">
             {orgName} • Performans Yönetim Merkezi
@@ -695,13 +729,13 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-4 bg-[#121215] border border-white/5 px-4 py-3 rounded-xl shadow-xl min-w-0 max-w-full">
-          <div className="w-10 h-10 shrink-0 bg-green-500/10 rounded-lg flex items-center justify-center text-green-500">
+        <div className="ui-kpi-chip flex min-w-0 max-w-full flex-row flex-wrap items-center gap-4 px-4 py-3 shadow-xl">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-500/10 text-green-500">
             <Target size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest leading-none mb-1">HEDEF</p>
-            <p className="text-base font-black italic text-white leading-none break-words">
+            <p className="ui-kpi-card__label mb-1 text-[8px] leading-none tracking-widest">HEDEF</p>
+            <p className="ui-kpi-card__value text-base italic leading-none break-words">
               {attendanceTarget === null ? "VERI YOK" : `%${attendanceTarget} KATILIM`}
             </p>
           </div>
@@ -723,13 +757,13 @@ export default function Dashboard() {
           </Link>
           <Link
             href="/dersler"
-            className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+            className="rounded-xl border ui-kpi-chip--brand px-4 py-3 text-[10px] font-black uppercase ui-kpi-card__trend touch-manipulation"
           >
             {stats.activeTrainings > 0 ? "Bugünkü dersleri yönet" : "Bugün için ders planla"}
           </Link>
           <Link
             href={`${PATHS.tahsilatMerkezi}?bolum=sporcular`}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+            className="rounded-xl ui-btn-ghost px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
           >
             Aidat bekleyenleri kontrol et
           </Link>
@@ -745,7 +779,7 @@ export default function Dashboard() {
               label="Toplam Sporcu" 
               value={stats.totalPlayers} 
               trend="ORGANIZASYON" 
-              color="from-[#7c3aed] to-[#4c1d95]" 
+              color="from-[color:var(--peaker-ui-PRIMARY)] to-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_55%,#000)]" 
               action="Sporcu listesini güncel tutun."
             />
             <StatCard 
@@ -785,7 +819,7 @@ export default function Dashboard() {
           <section className="ui-card min-w-0">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 min-w-0">
               <h3 className="ui-h2 min-w-0 break-words">Bugünkü Operasyon Özeti</h3>
-              <Link href="/dersler" className="text-[#7c3aed] text-[10px] font-black uppercase tracking-widest py-2 sm:py-0 touch-manipulation shrink-0">
+              <Link href="/dersler" className="text-[color:var(--peaker-ui-PRIMARY)] text-[10px] font-black uppercase tracking-widest py-2 sm:py-0 touch-manipulation shrink-0">
                 DERSLER
               </Link>
             </div>
@@ -796,7 +830,7 @@ export default function Dashboard() {
                   const pendingCount = (lesson.training_participants || []).filter((p) => (p.attendance_status || "registered") === "registered").length;
                   const totalParticipants = (lesson.training_participants || []).length;
                   return (
-                    <div key={lesson.id} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
+                    <div key={lesson.id} className="bg-white/[0.02] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
                       <div className="min-w-0 flex-1">
                         <p className="text-white font-black italic uppercase break-words">{lesson.title}</p>
                         <p className="text-[10px] text-gray-500 font-bold italic break-words">
@@ -804,11 +838,11 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
-                        <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300">{totalParticipants}/{lesson.capacity || 0}</span>
+                        <span className="px-3 py-1 rounded-xl bg-white/5 text-gray-300">{totalParticipants}/{lesson.capacity || 0}</span>
                         <span className={`px-3 py-1 rounded-xl border ${pendingCount > 0 ? "text-amber-300 border-amber-500/20 bg-amber-500/10" : "text-green-400 border-green-500/20 bg-green-500/10"}`}>
                           {pendingCount > 0 ? `${pendingCount} BEKLIYOR` : "TAMAMLANDI"}
                         </span>
-                        <Link href={`/antrenman-yonetimi?trainingId=${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-3 py-1 text-[#c4b5fd] touch-manipulation">YOKLAMA</Link>
+                        <Link href={`/antrenman-yonetimi?trainingId=${lesson.id}`} className="inline-flex min-h-10 items-center rounded-xl border ui-kpi-chip--brand px-3 py-1 ui-kpi-card__trend touch-manipulation">YOKLAMA</Link>
                       </div>
                     </div>
                   );
@@ -817,7 +851,7 @@ export default function Dashboard() {
             ) : (
               <div className="text-center py-10">
                 <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest italic">Bugün planlı ders yok.</p>
-                <Link href="/dersler" className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white touch-manipulation">İlk Dersi Oluştur</Link>
+                <Link href="/dersler" className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl ui-btn-primary px-4 py-2 text-[10px] font-black uppercase text-white touch-manipulation">İlk Dersi Oluştur</Link>
               </div>
             )}
           </section>
@@ -825,7 +859,7 @@ export default function Dashboard() {
 
           <section className="ui-card relative overflow-hidden min-w-0">
             <h3 className="ui-h2 flex flex-wrap items-center gap-3 mb-8 relative z-10 min-w-0">
-              <BarChart3 className="text-[#7c3aed] shrink-0" size={24} /> <span className="break-words">Coach / Ekip Durumu</span>
+              <BarChart3 className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" size={24} /> <span className="break-words">Coach / Ekip Durumu</span>
             </h3>
             <div className="space-y-6 relative z-10">
               {coaches.length > 0 ? (
@@ -848,7 +882,7 @@ export default function Dashboard() {
                         <p className="break-all text-[9px] font-bold uppercase italic tracking-widest text-gray-600 sm:break-normal sm:truncate">{coach.email || "E-POSTA YOK"}</p>
                       </div>
                       <div className="text-left sm:text-right shrink-0">
-                        <p className="text-[10px] font-black text-[#7c3aed] uppercase">{todayLoad} DERS</p>
+                        <p className="text-[10px] font-black text-[color:var(--peaker-ui-PRIMARY)] uppercase">{todayLoad} DERS</p>
                         <p className={`text-[9px] font-black uppercase ${pendingCount > 0 ? "text-amber-300" : "text-green-400"}`}>
                           {pendingCount > 0 ? `${pendingCount} BEKLEYEN` : "TEMIZ"}
                         </p>
@@ -858,7 +892,7 @@ export default function Dashboard() {
                   );
                 })
               ) : (
-                <EmptyStateCard
+                <EmptyState
                   title="Kayıt bulunamadı"
                   description="Koç listesinde görüntülenecek kayıt bulunamadı."
                   reason="Organizasyonda henüz aktif koç hesabı olmayabilir."
@@ -867,13 +901,13 @@ export default function Dashboard() {
                 />
               )}
             </div>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#7c3aed]/5 rounded-full blur-[100px]" />
+            <div className="absolute top-0 right-0 w-64 h-64 ui-kpi-band rounded-full blur-[100px]" />
           </section>
 
           {showAdminTeamPayments && teamPaymentRows.length > 0 ? (
             <section className="ui-card min-w-0">
               <h3 className="ui-h2 flex flex-wrap items-center gap-3 mb-6 min-w-0">
-                <CreditCard className="text-[#7c3aed] shrink-0" size={22} /> <span className="break-words">Takım tahsilat özeti</span>
+                <CreditCard className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" size={22} /> <span className="break-words">Takım tahsilat özeti</span>
               </h3>
               <div className="space-y-3">
                 {teamPaymentRows.slice(0, 5).map((row) => (
@@ -888,9 +922,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <p
-                      className={`text-[10px] font-black italic uppercase shrink-0 sm:text-right ${
-                        row.warning ? "text-red-400" : "text-green-400"
-                      }`}
+                      className={`text-[10px] font-black italic uppercase shrink-0 sm:text-right ${ row.warning ? "text-red-400" : "text-green-400" }`}
                     >
                       {row.paymentStatus}
                     </p>
@@ -904,7 +936,7 @@ export default function Dashboard() {
             <h3 className="ui-h2 mb-8 break-words">Son Hareketler</h3>
             <div className="grid gap-4">
               {recentActivities.length > 0 ? recentActivities.slice(0, 3).map((t, i) => (
-                <div key={t.id || i} className="p-4 rounded-[1.25rem] bg-white/[0.02] border border-white/5 min-w-0">
+                <div key={t.id || i} className="p-4 rounded-[1.25rem] bg-white/[0.02] min-w-0">
                   <p className="text-white font-black italic uppercase text-sm break-words">DERS: {t.title}</p>
                   <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest italic break-words">
                     {new Date(t.start_time).toLocaleDateString('tr-TR')} • {t.location || "Merkez"}
@@ -918,7 +950,7 @@ export default function Dashboard() {
                 const coach = Array.isArray(p.coach_profile) ? p.coach_profile[0] : p.coach_profile;
                 const athlete = Array.isArray(p.athlete_profile) ? p.athlete_profile[0] : p.athlete_profile;
                 return (
-                  <div key={p.id} className="p-4 rounded-[1.25rem] bg-white/[0.02] border border-white/5 min-w-0">
+                  <div key={p.id} className="p-4 rounded-[1.25rem] bg-white/[0.02] min-w-0">
                     <p className="text-white font-black italic uppercase text-sm break-words">PROGRAM: {p.title || "Program"}</p>
                     <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest italic break-words">
                       {toDisplayName(coach?.full_name, undefined, "Koç")} {"->"} {toDisplayName(athlete?.full_name, undefined, "Sporcu")} • {new Date(p.created_at).toLocaleDateString("tr-TR")}
@@ -930,7 +962,7 @@ export default function Dashboard() {
               {adminRecentAttendanceUpdates.slice(0, 2).map((item) => (
                 <div
                   key={`${item.training_id}-${item.marked_at ?? "x"}`}
-                  className="p-4 rounded-[1.25rem] bg-white/[0.02] border border-white/5 min-w-0"
+                  className="p-4 rounded-[1.25rem] bg-white/[0.02] min-w-0"
                 >
                   <p className="text-white font-black italic uppercase text-sm">YOKLAMA GÜNCELLENDİ</p>
                   <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest italic break-words">
@@ -946,7 +978,7 @@ export default function Dashboard() {
         {/* RIGHT COLUMN */}
         <div className="lg:col-span-4 space-y-6 min-w-0">
           {role === "admin" && currentOrgId && (
-            <div className="bg-[#121215] border border-white/10 p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
+            <div className="ui-card p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
               <h3 className="ui-h2 !text-lg mb-4">Organizasyon adi</h3>
               <p className="text-[10px] text-gray-500 font-bold mb-3 leading-relaxed">
                 Panel başlığında ve raporlarda görünen isim. Super admin de tüm organizasyonlar için adı değiştirebilir.
@@ -955,7 +987,7 @@ export default function Dashboard() {
                 <input
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  className="ui-input min-h-11 w-full min-w-0 touch-manipulation rounded-2xl px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] sm:text-xs"
                   minLength={2}
                   maxLength={120}
                   required
@@ -963,7 +995,7 @@ export default function Dashboard() {
                 <button
                   type="submit"
                   disabled={orgNameSaving}
-                  className="w-full min-h-11 bg-white/10 sm:hover:bg-white/15 border border-white/15 text-white py-2.5 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation"
+                  className="ui-btn-secondary w-full min-h-11 text-white py-2.5 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation"
                 >
                   {orgNameSaving ? "Kaydediliyor..." : "Adi kaydet"}
                 </button>
@@ -972,7 +1004,7 @@ export default function Dashboard() {
             </div>
           )}
           {role === "admin" && currentOrgId && (
-            <div className="bg-[#121215] border border-white/10 p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
+            <div className="ui-card p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
               <h3 className="ui-h2 !text-lg mb-4">Saat dilimi</h3>
               <p className="text-[10px] text-gray-500 font-bold mb-3 leading-relaxed">
                 Performans, finans ve takvim ekranlarındaki dönem hesapları bu saat dilimine göre yapılır.
@@ -982,7 +1014,7 @@ export default function Dashboard() {
                 <select
                   value={orgTimeZone}
                   onChange={(e) => setOrgTimeZone(e.target.value)}
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  className="ui-select min-h-11 w-full min-w-0 touch-manipulation rounded-2xl px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] sm:text-xs"
                   aria-label="Organizasyon saat dilimi"
                 >
                   {listSupportedTimeZones().map((tz) => (
@@ -994,7 +1026,7 @@ export default function Dashboard() {
                 <button
                   type="submit"
                   disabled={orgTimeZoneSaving}
-                  className="w-full min-h-11 bg-white/10 sm:hover:bg-white/15 border border-white/15 text-white py-2.5 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation"
+                  className="ui-btn-secondary w-full min-h-11 text-white py-2.5 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 touch-manipulation"
                 >
                   {orgTimeZoneSaving ? "Kaydediliyor..." : "Saat dilimini kaydet"}
                 </button>
@@ -1005,17 +1037,17 @@ export default function Dashboard() {
             </div>
           )}
           {role === "admin" && (
-            <div className="bg-[#121215] border border-white/10 p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
+            <div className="ui-card p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl min-w-0">
               <h3 className="ui-h2 !text-lg mb-5 flex flex-wrap items-center gap-3 min-w-0">
-                <UserPlus2 size={18} className="text-[#7c3aed] shrink-0" /> <span className="break-words">Koç Yönetimi</span>
+                <UserPlus2 size={18} className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" /> <span className="break-words">Koç Yönetimi</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 min-w-0">
-                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
+                <div className="bg-white/[0.02] rounded-xl p-3">
                   <p className="text-[9px] text-gray-600 font-black uppercase">TOPLAM KOÇ</p>
                   <p className="text-2xl text-white font-black italic">{coaches.length}</p>
                 </div>
-                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
+                <div className="bg-white/[0.02] rounded-xl p-3">
                   <p className="text-[9px] text-gray-600 font-black uppercase">BUGÜN AKTİF</p>
                   <p className="text-2xl text-white font-black italic">{activeCoachCountToday}</p>
                 </div>
@@ -1027,7 +1059,7 @@ export default function Dashboard() {
                   value={coachForm.fullName}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, fullName: e.target.value }))}
                   placeholder="AD SOYAD"
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold uppercase italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  className="ui-input min-h-11 w-full min-w-0 touch-manipulation rounded-2xl px-4 py-3 text-base font-bold uppercase italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] sm:text-xs"
                 />
                 <input
                   required
@@ -1037,7 +1069,7 @@ export default function Dashboard() {
                   value={coachForm.email}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, email: normalizeEmailInput(e.target.value) }))}
                   placeholder="E-POSTA"
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs"
+                  className="ui-input min-h-11 w-full min-w-0 touch-manipulation rounded-2xl px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] sm:text-xs"
                 />
                 <input
                   required
@@ -1047,14 +1079,14 @@ export default function Dashboard() {
                   value={coachForm.password}
                   onChange={(e) => setCoachForm((prev) => ({ ...prev, password: e.target.value }))}
                   placeholder="Geçici şifre (en az 6 karakter)"
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-[#1c1c21] px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed]/60 sm:text-xs normal-case"
+                  className="ui-input min-h-11 w-full min-w-0 touch-manipulation rounded-2xl px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] sm:text-xs normal-case"
                   {...PASSWORD_FIELD_PROPS}
                 />
 
                 <button
                   type="submit"
                   disabled={coachSubmitting}
-                  className="w-full min-h-11 bg-[#7c3aed] sm:hover:bg-[#6d28d9] disabled:opacity-60 text-white py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-[0.2em] transition-all touch-manipulation"
+                  className="w-full min-h-11 ui-btn-primary disabled:opacity-60 text-white py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-[0.2em] transition-all touch-manipulation"
                 >
                   {coachSubmitting ? "OLUSTURULUYOR..." : "YENI KOC EKLE"}
                 </button>
@@ -1064,15 +1096,15 @@ export default function Dashboard() {
                 <p className="mt-3 break-words text-[10px] font-bold uppercase italic tracking-wider text-gray-300">{coachFeedback}</p>
               )}
 
-              <div className="mt-5 pt-5 border-t border-white/10 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+              <div className="mt-5 pt-5 border-t space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
                 {coaches.length > 0 ? (
                   coaches.slice(0, 5).map((coach) => (
-                    <div key={coach.id} className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between min-w-0">
+                    <div key={coach.id} className="bg-white/[0.02] rounded-xl p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between min-w-0">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-black italic text-white uppercase break-words">{toDisplayName(coach.full_name, coach.email, "Koç")}</p>
                         <p className="text-[9px] font-bold text-gray-500 italic truncate">{coach.email}</p>
                       </div>
-                      <Link href={`/koclar/${coach.id}`} className="text-[9px] text-[#7c3aed] font-black uppercase shrink-0 touch-manipulation py-1">
+                      <Link href={`/koclar/${coach.id}`} className="text-[9px] text-[color:var(--peaker-ui-PRIMARY)] font-black uppercase shrink-0 touch-manipulation py-1">
                         DETAY
                       </Link>
                     </div>
@@ -1080,7 +1112,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="text-center py-3">
                     <p className="text-[10px] text-gray-500 font-bold italic uppercase">Henuz koc yok.</p>
-                    <Link href="/koclar" className="mt-2 inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-gray-300 touch-manipulation">
+                    <Link href="/koclar" className="mt-2 inline-flex min-h-11 items-center justify-center rounded-xl ui-btn-ghost px-3 py-2 text-[10px] font-black uppercase text-gray-300 touch-manipulation">
                       Koçlar Sayfası
                     </Link>
                   </div>
@@ -1089,7 +1121,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="bg-gradient-to-br from-[#1c1c21] to-[#121215] border border-white/10 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative group cursor-pointer overflow-hidden shadow-2xl min-w-0">
+          <div className="bg-gradient-to-br from-[color:color-mix(in_srgb,var(--peaker-ui-SURFACE)_85%,#000)] to-[color:var(--peaker-ui-SURFACE)] p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative group cursor-pointer overflow-hidden shadow-2xl min-w-0">
              <h3 className="ui-h2 mb-3 leading-none">Uyarı / Aksiyon</h3>
              <div className="space-y-2 text-[10px] font-bold italic uppercase tracking-wider">
                {adminPendingAttendance.length > 0 ? (
@@ -1102,13 +1134,13 @@ export default function Dashboard() {
                {adminTodayLessons.length === 0 && <p className="text-gray-400">Bugün ders planı yok.</p>}
              </div>
              <div className="mt-6 flex flex-wrap gap-2">
-               <Link href="/dersler" className="inline-flex min-h-10 items-center px-3 py-2 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase touch-manipulation">DERSLER</Link>
-              <Link href="/oyuncular" className="inline-flex min-h-10 items-center px-3 py-2 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase touch-manipulation">SPORCULAR</Link>
-               <Link href="/koclar" className="inline-flex min-h-10 items-center px-3 py-2 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase touch-manipulation">KOCLAR</Link>
+               <Link href="/dersler" className="ui-btn-secondary inline-flex min-h-10 items-center px-3 py-2 rounded-xl text-white text-[10px] font-black uppercase touch-manipulation">DERSLER</Link>
+              <Link href="/oyuncular" className="ui-btn-secondary inline-flex min-h-10 items-center px-3 py-2 rounded-xl text-white text-[10px] font-black uppercase touch-manipulation">SPORCULAR</Link>
+               <Link href="/koclar" className="ui-btn-secondary inline-flex min-h-10 items-center px-3 py-2 rounded-xl text-white text-[10px] font-black uppercase touch-manipulation">KOCLAR</Link>
              </div>
           </div>
 
-          <div className="group relative min-w-0 overflow-hidden rounded-[2rem] bg-[#7c3aed] p-5 shadow-2xl sm:rounded-[2.5rem] sm:p-8">
+          <div className="group relative min-w-0 overflow-hidden rounded-[2rem] bg-[color:var(--peaker-ui-PRIMARY)] p-5 shadow-2xl sm:rounded-[2.5rem] sm:p-8">
              <div className="absolute -bottom-4 -right-4 opacity-10 transition-transform sm:group-hover:scale-110">
                <AlertCircle size={120} aria-hidden />
              </div>
@@ -1116,7 +1148,7 @@ export default function Dashboard() {
              <p className="mb-8 break-words text-[9px] font-bold uppercase italic tracking-widest text-white/80">
                Verileriniz sadece size özel filtrelenir.
              </p>
-             <Link href="/performans/ayarlar" className="block w-full min-h-12 bg-white text-[#7c3aed] py-4 rounded-xl font-black italic text-[10px] uppercase tracking-widest sm:hover:brightness-90 transition-all shadow-xl text-center touch-manipulation">
+             <Link href="/performans/ayarlar" className="block w-full min-h-12 bg-white text-[color:var(--peaker-ui-PRIMARY)] py-4 rounded-xl font-black italic text-[10px] uppercase tracking-widest sm:hover:brightness-90 transition-all shadow-xl text-center touch-manipulation">
                GÜVENLİK
              </Link>
           </div>
@@ -1129,20 +1161,20 @@ export default function Dashboard() {
 // --- SUB-COMPONENTS - StatCard font text-5xl'den 4xl'e indirildi ---
 function StatCard({ icon, label, value, trend, color, action }: StatCardProps) {
   return (
-    <div className="ui-card !p-5 sm:!p-7 relative overflow-hidden group sm:hover:border-[#7c3aed]/30 transition-all min-w-0">
+    <div className="ui-card ui-kpi-card !p-5 sm:!p-7 relative overflow-hidden group sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] transition-all min-w-0">
       <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white mb-4 sm:mb-6 shadow-xl`}>
         {icon}
       </div>
-      <p className="ui-label text-gray-500 mb-1 leading-none break-words">{label}</p>
-      <h2 className="min-w-0 break-words text-3xl font-black italic leading-none tracking-tighter text-white transition-colors sm:group-hover:text-[#7c3aed] sm:text-4xl">
+      <p className="ui-kpi-card__label mb-1 leading-none break-words">{label}</p>
+      <h2 className="ui-kpi-card__value ui-kpi-card__value-hover min-w-0 break-words text-3xl italic leading-none tracking-tighter sm:text-4xl">
         {value}
       </h2>
       <div className="flex items-start gap-2 mt-4 sm:mt-5 min-w-0">
-        <div className="h-[1px] w-3 bg-[#7c3aed]/30 shrink-0 mt-1.5"></div>
-        <p className="text-[9px] font-black text-[#7c3aed] uppercase italic tracking-[0.2em] break-words">{trend}</p>
+        <div className="ui-kpi-card__trend-line"></div>
+        <p className="ui-kpi-card__trend">{trend}</p>
       </div>
       {action ? (
-        <p className="mt-3 text-[10px] font-bold text-gray-400">{action}</p>
+        <p className="ui-kpi-card__hint mt-3 font-bold">{action}</p>
       ) : null}
     </div>
   );

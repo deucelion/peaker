@@ -9,9 +9,10 @@ import { createPrivateLessonPackage, listPrivateLessonFormOptions, listPrivateLe
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import type { PrivateLessonPackage } from "@/lib/types";
 import { PackageCard } from "./_components/PackageCard";
+import { OverlayDialog, OVERLAY_Z } from "@/components/ui/overlay";
 
 const FORM_INPUT =
-  "min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20 sm:text-base";
+  "ui-input min-h-[3rem] w-full rounded-2xl px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] sm:text-base";
 
 export default function PrivateLessonPackagesPage() {
   const [loading, setLoading] = useState(true);
@@ -156,7 +157,7 @@ export default function PrivateLessonPackagesPage() {
   if (loading) {
     return (
       <div className="min-h-[50dvh] px-4 flex flex-col items-center justify-center gap-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-gray-500 font-black italic uppercase text-[10px] tracking-wide sm:tracking-widest break-words max-w-md">
           Özel paketler yükleniyor...
         </p>
@@ -170,7 +171,7 @@ export default function PrivateLessonPackagesPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="ui-h1 break-words">
-              ÖZEL DERSLER <span className="text-[#7c3aed]">· PAKET YÖNETİMİ</span>
+              ÖZEL DERSLER <span className="text-[color:var(--peaker-ui-PRIMARY)]">· PAKET YÖNETİMİ</span>
             </h1>
             <p className="ui-lead mt-2 break-words text-[9px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em]">
               Mevcut paketleri yönetin, geçmişi izleyin ve yeni paketi gerektiğinde ekleyin
@@ -179,7 +180,7 @@ export default function PrivateLessonPackagesPage() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[10px] font-black uppercase tracking-wider text-[#c4b5fd] touch-manipulation sm:hover:bg-[#7c3aed]/25"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border ui-kpi-chip--brand px-4 text-[10px] font-black uppercase tracking-wider ui-kpi-card__trend touch-manipulation sm:hover:ui-btn-primary/25"
           >
             <PlusCircle size={16} aria-hidden />
             Yeni Paket Oluştur
@@ -209,7 +210,7 @@ export default function PrivateLessonPackagesPage() {
             <div className="mt-2">
               <Link
                 href={`/antrenman-yonetimi?modul=ozel-dersler&view=paket-listesi&packageId=${lastCreatedPackageId}`}
-                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border ui-kpi-chip--brand px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
               >
                 Paketi Aç
               </Link>
@@ -238,32 +239,30 @@ export default function PrivateLessonPackagesPage() {
       />
 
       {createOpen ? (
-        <div
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/75 p-3 backdrop-blur-sm sm:items-center sm:p-6"
-          role="presentation"
-          onClick={() => !saving && setCreateOpen(false)}
+        <OverlayDialog
+          open
+          onClose={() => {
+            if (!saving) setCreateOpen(false);
+          }}
+          layer={OVERLAY_Z.PACKAGE}
+          strongBackdrop
+          titleId="create-package-title"
+          className="p-3 sm:p-6"
+          shellClassName="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[1.5rem] px-4 py-6 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.85)] sm:rounded-[2rem] sm:px-8 sm:py-8 !max-w-4xl !p-0"
         >
-          <section
-            id="paket-formu"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-package-title"
-            className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[1.5rem] border border-white/[0.08] bg-gradient-to-b from-[#16161c] via-[#131318] to-[#101014] px-4 py-6 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.85)] sm:rounded-[2rem] sm:px-8 sm:py-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c3aed]/40 to-transparent" aria-hidden />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] to-transparent" aria-hidden />
             <button
               type="button"
               onClick={() => !saving && setCreateOpen(false)}
               disabled={saving}
-              className="absolute right-4 top-4 inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300 touch-manipulation disabled:cursor-not-allowed disabled:opacity-40 sm:hover:text-white"
+              className="absolute right-4 top-4 inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl ui-btn-ghost text-gray-300 touch-manipulation disabled:cursor-not-allowed disabled:opacity-40 sm:hover:text-white"
               aria-label="Kapat"
             >
               <X size={18} aria-hidden />
             </button>
 
             <header className="mb-8 text-center sm:mb-10 sm:text-left">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.35em] text-[#c4b5fd]">Özel Dersler · Yeni Paket</p>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.35em] ui-kpi-card__trend">Özel Dersler · Yeni Paket</p>
               <h2 id="create-package-title" className="text-2xl font-black italic uppercase tracking-tight text-white sm:text-3xl">
                 Paket oluştur
               </h2>
@@ -275,11 +274,11 @@ export default function PrivateLessonPackagesPage() {
             <FormStepRail step1Done={step1Done} step2Done={step2Done} step3Done={step3Done} />
 
             <form onSubmit={onCreatePackage} className="mt-8 space-y-8 sm:mt-10 sm:space-y-10">
-          <fieldset className="space-y-5 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6">
+          <fieldset className="space-y-5 rounded-2xl ui-kpi-band p-5 sm:p-6">
             <legend className="sr-only">Sporcu ve koç</legend>
             <div className="flex flex-col gap-4 border-b border-white/5 pb-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#7c3aed]/20 text-[#c4b5fd] ring-1 ring-[#7c3aed]/30">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ui-kpi-chip--brand ui-kpi-card__trend ring-1 ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)]">
                   <UserRound size={22} aria-hidden />
                 </span>
                 <div className="min-w-0">
@@ -292,7 +291,7 @@ export default function PrivateLessonPackagesPage() {
               </span>
             </div>
 
-            <div className="rounded-2xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 p-4 ring-1 ring-[#7c3aed]/15 sm:p-5">
+            <div className="rounded-2xl border ui-kpi-chip--brand p-4 ring-1 ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] sm:p-5">
               <Field label="Sporcu seçimi" required hint="Listeyi daraltmak için arayın; paket bu sporcuya bağlanır.">
                 <input
                   type="search"
@@ -348,10 +347,10 @@ export default function PrivateLessonPackagesPage() {
             )}
           </fieldset>
 
-          <fieldset className="space-y-5 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6">
+          <fieldset className="space-y-5 rounded-2xl ui-kpi-band p-5 sm:p-6">
             <legend className="sr-only">Paket bilgisi</legend>
             <div className="flex items-center gap-3 border-b border-white/5 pb-5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 text-[#c4b5fd] ring-1 ring-white/10">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 ui-kpi-card__trend ring-1 ring-white/10">
                 <Package size={22} aria-hidden />
               </span>
               <div className="min-w-0">
@@ -403,7 +402,7 @@ export default function PrivateLessonPackagesPage() {
             </div>
           </fieldset>
 
-          <fieldset className="space-y-5 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6">
+          <fieldset className="space-y-5 rounded-2xl ui-kpi-band p-5 sm:p-6">
             <legend className="sr-only">Ödeme bilgisi</legend>
             <div className="flex items-center gap-3 border-b border-white/5 pb-5">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25">
@@ -474,11 +473,11 @@ export default function PrivateLessonPackagesPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-[#7c3aed]/35 bg-gradient-to-br from-[#7c3aed]/20 to-[#4c1d95]/10 p-4 sm:p-5">
+          <div className="rounded-2xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] bg-gradient-to-br ui-kpi-chip--brand p-4 sm:p-5">
             <button
               type="submit"
               disabled={saving || !isFormValid}
-              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#7c3aed] px-6 py-4 text-sm font-black uppercase tracking-[0.15em] text-white shadow-lg shadow-[#7c3aed]/25 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd] enabled:sm:hover:bg-[#6d28d9] disabled:cursor-not-allowed disabled:opacity-45"
+              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl ui-btn-primary px-6 py-4 text-sm font-black uppercase tracking-[0.15em] text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--peaker-ui-PRIMARY)] enabled:sm:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {saving ? (
                 <>
@@ -497,8 +496,7 @@ export default function PrivateLessonPackagesPage() {
             </p>
           </div>
             </form>
-          </section>
-        </div>
+        </OverlayDialog>
       ) : null}
     </div>
   );
@@ -519,9 +517,7 @@ function PackageList({
 }) {
   return (
     <section
-      className={`min-w-0 rounded-[1.5rem] border p-4 sm:rounded-[2rem] sm:p-6 ${
-        subdued ? "border-white/5 bg-[#121215]/70" : "border-white/10 bg-[#121215]"
-      }`}
+      className={`min-w-0 rounded-[1.5rem] border p-4 sm:rounded-[2rem] sm:p-6 ${ subdued ? "border-white/5 ui-card/70" : "ui-card" }`}
     >
       <h2 className="mb-4 break-words text-sm font-black italic uppercase tracking-tight text-white sm:mb-5 sm:text-base">
         {title}
@@ -577,11 +573,7 @@ function FormStepRail({
           <Fragment key={s.k}>
             <li className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center">
               <span
-                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-black transition sm:h-11 sm:w-11 ${
-                  s.d
-                    ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200"
-                    : "border-white/20 bg-black/50 text-gray-500"
-                }`}
+                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-black transition sm:h-11 sm:w-11 ${ s.d ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200" : "border-white/20 ui-kpi-band text-gray-500" }`}
               >
                 {s.d ? <Check size={18} strokeWidth={3} aria-hidden /> : s.k}
               </span>
@@ -621,12 +613,12 @@ function SelectPremium({
         value={value}
         onChange={onChange}
         required={required}
-        className="peer min-h-[3rem] w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-[#0d0d11] py-3 pl-4 pr-12 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20 sm:text-base"
+        className="peer min-h-[3rem] w-full cursor-pointer appearance-none rounded-2xl py-3 pl-4 pr-12 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] sm:text-base"
       >
         {children}
       </select>
       <ChevronDown
-        className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 peer-focus:text-[#c4b5fd]"
+        className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 peer-focus:ui-kpi-card__trend"
         aria-hidden
       />
     </div>

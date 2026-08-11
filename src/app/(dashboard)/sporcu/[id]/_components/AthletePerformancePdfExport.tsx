@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import type { TrainingLoadRow } from "@/types/performance";
 import { getLoadDate } from "@/lib/performance/loadSeries";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
@@ -9,6 +10,7 @@ import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRang
 import { prepareAthletePerformancePdf, hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
 import { PerformancePdfNoDataError } from "@/lib/pdf/performancePdf";
 import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { pdfTaskErrorMessage } from "@/lib/pdf/pdfActionErrorMessage";
 import { loadPdfBrandingPresentationFromMeAccess } from "@/lib/navigation/loadPdfBrandingPresentationFromMeAccess";
 
 type Props = {
@@ -25,6 +27,8 @@ function defaultRange(loads: TrainingLoadRow[]): { from: string; to: string } {
   const toKey = isoToZonedDateKey(sorted[sorted.length - 1]!.measurement_date || "") || new Date().toISOString().split("T")[0]!;
   return { from: addCalendarDaysToYyyyMmDd(toKey, -29), to: toKey };
 }
+
+const INPUT_CLASS = uiBrandingClasses.form.input;
 
 export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
   const initial = useMemo(() => defaultRange(loads), [loads]);
@@ -69,7 +73,7 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
       if (err instanceof PerformancePdfNoDataError) {
         setMessage(err.message);
       } else {
-        setMessage("PDF oluşturulamadı.");
+        setMessage(pdfTaskErrorMessage(err, "PDF oluşturulamadı."));
       }
     } finally {
       setBusy(false);
@@ -77,11 +81,13 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3 min-w-0">
+    <div className={`${uiBrandingClasses.kpi.band} min-w-0 space-y-3 rounded-2xl p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Performans PDF</p>
-          <p className="text-[9px] font-bold normal-case text-gray-600 mt-0.5">
+          <p className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-black uppercase tracking-widest`}>
+            Performans PDF
+          </p>
+          <p className={`${uiBrandingClasses.kpi.cardHint} mt-0.5 text-[9px] font-bold normal-case`}>
             ACWR, EWMA ve seçilen dönemin yük özeti
           </p>
         </div>
@@ -89,34 +95,34 @@ export function AthletePerformancePdfExport({ athleteName, loads }: Props) {
           type="button"
           disabled={busy || loads.length === 0}
           onClick={() => void handleExport()}
-          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-[#c4b5fd] hover:bg-[#7c3aed]/20 disabled:opacity-50 touch-manipulation"
+          className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-10 shrink-0 touch-manipulation items-center gap-2 px-4 py-2 text-[9px] tracking-widest disabled:opacity-50`}
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileText size={12} aria-hidden />}
           Analiz PDF
         </button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1 text-[9px] font-black uppercase text-gray-500">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className={`${uiBrandingClasses.form.field} text-[9px] font-black uppercase text-gray-500`}>
           Başlangıç
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="min-h-10 rounded-xl border border-white/10 bg-black px-3 text-xs font-bold text-white"
+            className={`${INPUT_CLASS} min-h-10 px-3 text-xs`}
           />
         </label>
-        <label className="flex flex-col gap-1 text-[9px] font-black uppercase text-gray-500">
+        <label className={`${uiBrandingClasses.form.field} text-[9px] font-black uppercase text-gray-500`}>
           Bitiş
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="min-h-10 rounded-xl border border-white/10 bg-black px-3 text-xs font-bold text-white"
+            className={`${INPUT_CLASS} min-h-10 px-3 text-xs`}
           />
         </label>
       </div>
       {message ? (
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#c4b5fd]" role="status">
+        <p className={`${uiBrandingClasses.kpi.cardTrend} text-[10px] font-black uppercase tracking-widest`} role="status">
           {message}
         </p>
       ) : null}

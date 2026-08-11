@@ -69,11 +69,11 @@ export default function UpdatePasswordPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] min-w-0 items-center justify-center overflow-x-hidden bg-[#09090b] px-4 py-6 pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
-      <div className="w-full max-w-md min-w-0 space-y-6 rounded-[2rem] border border-white/5 bg-[#121215] p-5 text-center shadow-2xl sm:space-y-8 sm:rounded-[3rem] sm:p-10">
+    <div className="flex min-h-[100dvh] min-w-0 items-center justify-center overflow-x-hidden ui-page px-4 py-6 pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+      <div className="w-full max-w-md min-w-0 space-y-6 rounded-[2rem] border border-white/5 ui-card p-5 text-center shadow-2xl sm:space-y-8 sm:rounded-[3rem] sm:p-10">
         {!success ? (
           <>
-            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#7c3aed] font-black text-2xl italic text-white shadow-lg shadow-[#7c3aed]/20 sm:mb-6 sm:h-16 sm:w-16 sm:text-3xl">
+            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl ui-btn-primary font-black text-2xl italic text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] sm:mb-6 sm:h-16 sm:w-16 sm:text-3xl">
               P
             </div>
             <h2 className="break-words text-xl font-black uppercase tracking-tighter text-white italic sm:text-3xl">
@@ -86,7 +86,7 @@ export default function UpdatePasswordPage() {
             <form onSubmit={handleUpdate} className="space-y-4 text-left sm:text-center">
               <div className="group relative min-w-0">
                 <Lock
-                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 group-focus-within:text-[#7c3aed] sm:left-5"
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 group-focus-within:text-[color:var(--peaker-ui-PRIMARY)] sm:left-5"
                   size={18}
                   aria-hidden
                 />
@@ -97,7 +97,7 @@ export default function UpdatePasswordPage() {
                   placeholder="YENİ ŞİFRE"
                   required
                   minLength={6}
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-black py-3.5 pl-12 pr-4 text-base font-bold uppercase italic text-white outline-none focus:border-[#7c3aed]/50 sm:py-5 sm:pl-14 sm:text-xs"
+                  className="ui-input min-h-11 w-full min-w-0 touch-manipulation"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
@@ -105,7 +105,7 @@ export default function UpdatePasswordPage() {
               <button
                 type="submit"
                 disabled={loading || checkingSession || !sessionReady}
-                className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-[2rem] bg-[#7c3aed] p-4 font-black uppercase italic tracking-widest text-white transition-all sm:hover:bg-[#6d28d9] disabled:opacity-60 sm:p-5"
+                className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-[2rem] ui-btn-primary p-4 font-black uppercase italic tracking-widest text-white transition-all sm:hover:bg-[color:var(--peaker-ui-PRIMARY)] disabled:opacity-60 sm:p-5"
               >
                 {loading ? <Loader2 className="animate-spin shrink-0" aria-hidden /> : "ŞİFREYİ GÜNCELLE"}
               </button>

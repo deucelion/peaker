@@ -29,4 +29,5 @@ export default defineConfig({
         timeout: 120_000,
       }
     : undefined,
+  snapshotPathTemplate: "{testDir}/branding/visual/baselines/{arg}{ext}",
 });

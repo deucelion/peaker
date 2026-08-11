@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -7,7 +8,7 @@ import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonStatGrid, SkeletonTable } from "@/components/ui/skeletons";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
@@ -179,7 +180,7 @@ export function MuhasebeFinansPanel({
   const [paymentModalBusy, setPaymentModalBusy] = useState(false);
 
   const [canOpenAthletePayments, setCanOpenAthletePayments] = useState(false);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
   const [refreshAck, setRefreshAck] = useState(false);
   const [financeLiveAt, setFinanceLiveAt] = useState<string | null>(null);
   const csvExport = useStreamingCsvDownload();
@@ -361,18 +362,6 @@ export function MuhasebeFinansPanel({
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const showPaymentsExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.paymentsStream, {
     roleAllowed: canOpenAthletePayments,
     permissionAllowed: true,
@@ -459,7 +448,7 @@ export function MuhasebeFinansPanel({
     return (
       <div className={embedded ? "space-y-5" : "ui-page-loose space-y-5"} role="status" aria-label="Muhasebe verileri yükleniyor">
         {!embedded ? (
-          <header className="rounded-xl border border-white/10 bg-[#121215] p-4">
+          <header className="ui-kpi-section rounded-xl p-4">
             <h1 className="ui-h1">
               Muhasebe & <span className="text-green-500">Finans</span>
             </h1>
@@ -475,7 +464,7 @@ export function MuhasebeFinansPanel({
   const kpis = snapshot?.kpis;
 
   const periodChip = (
-    <div className="inline-flex rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] font-semibold text-gray-300">
+    <div className="inline-flex rounded-lg ui-kpi-band border px-2.5 py-1.5 text-[11px] font-semibold text-gray-300">
       Dönem: <span className="ml-1 text-white">{periodLabel}</span>
     </div>
   );
@@ -530,7 +519,7 @@ export function MuhasebeFinansPanel({
           {refreshControls}
         </div>
       ) : (
-        <header className="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#121215] p-4 sm:flex-row sm:items-start sm:justify-between">
+        <header className="flex flex-col gap-3 ui-kpi-section rounded-xl p-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <h1 className="ui-h1">
               Muhasebe & <span className="text-green-500">Finans</span>
@@ -572,7 +561,7 @@ export function MuhasebeFinansPanel({
       )}
 
       {!hideViewTabs ? (
-      <section className="rounded-xl border border-white/10 bg-[#121215] p-3">
+      <section className="ui-kpi-section rounded-xl p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             <button
@@ -584,7 +573,7 @@ export function MuhasebeFinansPanel({
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
                 resolvedView === "genel"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                  : "border-white/10 bg-black/20 text-gray-400 hover:border-white/20 hover:text-gray-200"
+                  : "ui-tabs-nav__tab--inactive text-gray-400 hover:border-white/20 hover:text-gray-200"
               }`}
             >
               Genel
@@ -598,7 +587,7 @@ export function MuhasebeFinansPanel({
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
                 resolvedView === "alacak"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                  : "border-white/10 bg-black/20 text-gray-400 hover:border-white/20 hover:text-gray-200"
+                  : "ui-tabs-nav__tab--inactive text-gray-400 hover:border-white/20 hover:text-gray-200"
               }`}
             >
               Alacak takibi
@@ -612,7 +601,7 @@ export function MuhasebeFinansPanel({
               className={`rounded-xl border px-3 py-2 text-xs font-black uppercase transition-colors ${
                 resolvedView === "koclar"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
-                  : "border-white/10 bg-black/20 text-gray-400 hover:border-white/20 hover:text-gray-200"
+                  : "ui-tabs-nav__tab--inactive text-gray-400 hover:border-white/20 hover:text-gray-200"
               }`}
             >
               Koçlar

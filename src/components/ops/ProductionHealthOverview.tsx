@@ -39,7 +39,7 @@ export function ProductionHealthOverview({ snapshot }: { snapshot: SystemOperati
     scores.label === "healthy" ? "Sağlıklı" : scores.label === "degraded" ? "Dikkat" : "Kritik";
 
   return (
-    <section className="rounded-2xl border border-[#7c3aed]/20 bg-[#7c3aed]/5 p-4 space-y-4">
+    <section className="ui-kpi-chip--brand space-y-4 rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-black uppercase tracking-wide text-white">
@@ -49,9 +49,7 @@ export function ProductionHealthOverview({ snapshot }: { snapshot: SystemOperati
             Snapshot: {new Date(snapshot.generatedAt).toLocaleString("tr-TR")}
           </p>
         </div>
-        <div
-          className={`rounded-xl border px-4 py-2 text-center ${scoreTone(scores.overall)}`}
-        >
+        <div className={`rounded-xl border px-4 py-2 text-center ${scoreTone(scores.overall)}`}>
           <p className="text-[9px] font-black uppercase">Genel skor</p>
           <p className="text-2xl font-black tabular-nums">{scores.overall}</p>
           <p className="text-[9px] font-bold uppercase">{labelTr}</p>
@@ -72,8 +70,8 @@ export function ProductionHealthOverview({ snapshot }: { snapshot: SystemOperati
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-2">
+        <div className="ui-card-inner p-3">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-gray-500">
             Bu oturum — realtime (istemci)
           </p>
           <ul className="space-y-1 text-[10px] font-bold text-gray-400">
@@ -99,8 +97,8 @@ export function ProductionHealthOverview({ snapshot }: { snapshot: SystemOperati
           </ul>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-2">
+        <div className="ui-card-inner p-3">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-gray-500">
             Ortam doğrulama (sunucu)
           </p>
           {envReport.checks

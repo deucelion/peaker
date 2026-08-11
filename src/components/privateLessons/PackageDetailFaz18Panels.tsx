@@ -30,6 +30,8 @@ import {
   canResumePackage,
   type PackageLifecycleStatus,
 } from "@/lib/privateLessons/packageStatus";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
+import { DataTable, uiTableRowClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -123,7 +125,7 @@ export function PackageLifecycleActions({ pkg, canManage, onRefresh }: Omit<Prop
           type="button"
           disabled={Boolean(busy)}
           onClick={() => setConfirm("cancel")}
-          className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-300"
+          className="rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-300"
         >
           İptal
         </button>
@@ -139,20 +141,25 @@ export function PackageLifecycleActions({ pkg, canManage, onRefresh }: Omit<Prop
         </button>
       )}
 
-      {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-5">
+      {confirm ? (
+        <OverlayDialog
+          open
+          onClose={() => setConfirm(null)}
+          layer={OVERLAY_Z.DIALOG}
+          className="!items-center justify-center p-4"
+          shellClassName="w-full max-w-md rounded-2xl ui-card p-5 !max-w-md"
+        >
             <h3 className="text-sm font-black uppercase tracking-widest text-white">
               {confirm === "cancel" ? "Paketi iptal et" : "Paketi iade et"}
             </h3>
             <p className="mt-2 text-xs text-gray-400">Bu işlem geri alınamaz. Devam etmek istiyor musunuz?</p>
             <textarea
-              className="mt-3 min-h-[4rem] w-full rounded-xl border border-white/10 bg-[#0d0d11] p-3 text-sm text-white"
+              className="mt-3 min-h-[4rem] w-full rounded-xl p-3 text-sm text-white"
               placeholder="Not (isteğe bağlı)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
-            <div className="mt-4 flex justify-end gap-2">
+            <OverlayFooter>
               <button type="button" onClick={() => setConfirm(null)} className="px-3 py-2 text-xs text-gray-400">
                 Vazgeç
               </button>
@@ -172,10 +179,9 @@ export function PackageLifecycleActions({ pkg, canManage, onRefresh }: Omit<Prop
               >
                 Onayla
               </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </OverlayFooter>
+        </OverlayDialog>
+      ) : null}
     </div>
   );
 }
@@ -188,7 +194,7 @@ export function PackageFinanceCards({ pkg, snapshot }: Pick<Props, "pkg" | "snap
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="rounded-xl bg-white/[0.02] p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Finans özeti</p>
         <p className="mt-2 text-lg font-black text-white">{formatTry(f.totalPrice)}</p>
         <p className="text-xs text-gray-400">
@@ -208,13 +214,13 @@ export function PackageFinanceCards({ pkg, snapshot }: Pick<Props, "pkg" | "snap
         )}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="rounded-xl bg-white/[0.02] p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ders kullanımı</p>
         <p className="mt-2 text-lg font-black text-white">
           {pkg.usedLessons} / {pkg.totalLessons}
         </p>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full bg-[#7c3aed] transition-all" style={{ width: `${lessonPct}%` }} />
+          <div className="h-full bg-[color:var(--peaker-ui-PRIMARY)] transition-all" style={{ width: `${lessonPct}%` }} />
         </div>
         <span
           className={`mt-2 inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${PACKAGE_LIFECYCLE_TONE[pkg.lifecycleStatus]}`}
@@ -223,7 +229,7 @@ export function PackageFinanceCards({ pkg, snapshot }: Pick<Props, "pkg" | "snap
         </span>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="rounded-xl bg-white/[0.02] p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Taksit planı</p>
         {f.installmentCount ? (
           <p className="mt-2 text-sm font-bold text-white">
@@ -278,12 +284,12 @@ export function PackageEventTimelineCard({ snapshot, pkg }: TimelineCardProps) {
     return PACKAGE_EVENT_LABEL_TR[ev.eventType as PackageEventType] || ev.title;
   };
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="rounded-xl bg-white/[0.02] p-4">
       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Finansal hareketler</h3>
       {!rows.length ? (
         <p className="mt-4 text-sm text-gray-500">Henüz kayıt yok.</p>
       ) : (
-        <ul className="relative mt-4 border-l border-white/10 pl-4">
+        <ul className="relative mt-4 border-l pl-4">
           {rows.map((ev) => {
             const label = resolveLabel(ev);
             const titleDup =
@@ -293,14 +299,14 @@ export function PackageEventTimelineCard({ snapshot, pkg }: TimelineCardProps) {
             return (
               <li key={ev.id} className="relative pb-6 pl-1 last:pb-0">
                 <span
-                  className="absolute -left-[1.125rem] top-1 flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-[#0d0d11] text-gray-300 shadow-sm"
+                  className="absolute -left-[1.125rem] top-1 flex h-7 w-7 items-center justify-center rounded-md text-gray-300 shadow-sm"
                   aria-hidden
                 >
                   <EventIcon type={ev.eventType} />
                 </span>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black tabular-nums text-gray-500">{when}</p>
-                  <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-[#c4b5fd]">{label}</p>
+                  <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest ui-kpi-card__trend">{label}</p>
                   {!titleDup ? <p className="mt-1 text-xs font-semibold leading-snug text-white">{ev.title}</p> : null}
                   {ev.description ? (
                     <p className="mt-1 text-[11px] leading-relaxed text-gray-400">{ev.description}</p>
@@ -318,37 +324,39 @@ export function PackageEventTimelineCard({ snapshot, pkg }: TimelineCardProps) {
 export function PackageUsedLessonsCard({ snapshot }: Pick<Props, "snapshot">) {
   const rows = snapshot.usageLessonRows;
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="rounded-xl bg-white/[0.02] p-4">
       <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Kullanılan dersler</h3>
       {!rows.length ? (
         <p className="mt-4 text-sm text-gray-500">Henüz ders kullanımı yok.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-[11px]">
-            <thead>
-              <tr className="text-gray-500">
-                <th className="pb-2 font-black uppercase tracking-widest">Tarih</th>
-                <th className="pb-2">Sporcu</th>
-                <th className="pb-2">Koç</th>
-                <th className="pb-2">Ders</th>
-                <th className="pb-2">Hak</th>
-                <th className="pb-2">Katılım</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-white/5 text-gray-300">
-                  <td className="py-2">{new Date(r.usedAt).toLocaleString("tr-TR")}</td>
-                  <td className="py-2">{r.athleteName}</td>
-                  <td className="py-2">{r.coachName || "—"}</td>
-                  <td className="py-2">{r.lessonTitle}</td>
-                  <td className="py-2">{r.creditsUsed}</td>
-                  <td className="py-2">{r.attendanceStatus || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          bare
+          className="mt-4"
+          scrollClassName=""
+          tableClassName="w-full min-w-[520px] text-left text-[11px]"
+          headClassName="ui-table-head ui-table-head--divided"
+          head={
+            <tr>
+              <th className={`${uiTableThClass} pb-2 font-black uppercase tracking-widest`}>Tarih</th>
+              <th className={`${uiTableThClass} pb-2`}>Sporcu</th>
+              <th className={`${uiTableThClass} pb-2`}>Koç</th>
+              <th className={`${uiTableThClass} pb-2`}>Ders</th>
+              <th className={`${uiTableThClass} pb-2`}>Hak</th>
+              <th className={`${uiTableThClass} pb-2`}>Katılım</th>
+            </tr>
+          }
+        >
+          {rows.map((r) => (
+            <tr key={r.id} className={`${uiTableRowClass} text-gray-300`}>
+              <td className={`${uiTableTdClass} py-2`}>{new Date(r.usedAt).toLocaleString("tr-TR")}</td>
+              <td className={`${uiTableTdClass} py-2`}>{r.athleteName}</td>
+              <td className={`${uiTableTdClass} py-2`}>{r.coachName || "—"}</td>
+              <td className={`${uiTableTdClass} py-2`}>{r.lessonTitle}</td>
+              <td className={`${uiTableTdClass} py-2`}>{r.creditsUsed}</td>
+              <td className={`${uiTableTdClass} py-2`}>{r.attendanceStatus || "—"}</td>
+            </tr>
+          ))}
+        </DataTable>
       )}
     </div>
   );

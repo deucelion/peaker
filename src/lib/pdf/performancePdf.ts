@@ -16,6 +16,7 @@ import {
   PDF_RISK_RGB,
 } from "@/lib/pdf/pdfLayout";
 import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
+import type { PdfHeaderColorRgb } from "@/lib/pdf/pdfBrandingColors";
 import {
   applyFootersToAllPages,
   downsampleChartPoints,
@@ -71,9 +72,10 @@ function drawAcwrChartSection(
   acwrSeries: AcwrPoint[],
   chartImage: string | null | undefined,
   chartW: number,
-  ctx: PdfTextContext
+  ctx: PdfTextContext,
+  headerColorRgb: PdfHeaderColorRgb
 ): number {
-  y = drawSectionTitle(doc, y, "ACWR Trendi", ctx);
+  y = drawSectionTitle(doc, y, "ACWR Trendi", ctx, headerColorRgb);
   if (isValidPdfChartImage(chartImage)) {
     return drawEmbeddedChartImage(doc, 14, y, chartW, 50, chartImage!, ctx);
   }
@@ -101,9 +103,10 @@ function drawEwmaChartSection(
   ewmaSeries: EwmaPoint[],
   chartImage: string | null | undefined,
   chartW: number,
-  ctx: PdfTextContext
+  ctx: PdfTextContext,
+  headerColorRgb: PdfHeaderColorRgb
 ): number {
-  y = drawSectionTitle(doc, y, "EWMA Trendi", ctx);
+  y = drawSectionTitle(doc, y, "EWMA Trendi", ctx, headerColorRgb);
   if (isValidPdfChartImage(chartImage)) {
     return drawEmbeddedChartImage(doc, 14, y, chartW, 50, chartImage!, ctx);
   }
@@ -118,7 +121,7 @@ function drawEwmaChartSection(
       38,
       "Akut / Kronik yük (EWMA)",
       [
-        { label: "acute", color: [124, 58, 237], points: ewmaChart.map((p, i) => ({ x: i, y: p.acuteEwma })) },
+        { label: "acute", color: headerColorRgb, points: ewmaChart.map((p, i) => ({ x: i, y: p.acuteEwma })) },
         { label: "chronic", color: [55, 65, 81], points: ewmaChart.map((p, i) => ({ x: i, y: p.chronicEwma })) },
       ],
       ctx
@@ -202,11 +205,12 @@ export async function buildPerformanceAnalysisPdf(input: PerformancePdfInput): P
 
   y = drawHighlightCallout(doc, y, "Önerilen aksiyon", smart.recommendedAction, ctx);
 
+  const headerColorRgb = resolvedBranding.pdfBranding.headerColorRgb;
   const chartW = doc.internal.pageSize.getWidth() - 28;
-  y = drawAcwrChartSection(doc, y, input.acwrSeries, input.chartImages?.acwr, chartW, ctx);
-  y = drawEwmaChartSection(doc, y, input.ewmaSeries, input.chartImages?.ewma, chartW, ctx);
+  y = drawAcwrChartSection(doc, y, input.acwrSeries, input.chartImages?.acwr, chartW, ctx, headerColorRgb);
+  y = drawEwmaChartSection(doc, y, input.ewmaSeries, input.chartImages?.ewma, chartW, ctx, headerColorRgb);
 
-  y = drawSectionTitle(doc, y, "Detaylı Analiz", ctx);
+  y = drawSectionTitle(doc, y, "Detaylı Analiz", ctx, headerColorRgb);
   drawKeyValueRows(
     doc,
     y,

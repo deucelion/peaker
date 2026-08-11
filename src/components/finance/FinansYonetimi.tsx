@@ -1,4 +1,5 @@
 "use client";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, ChevronRight, Loader2, Clock3, CheckCircle2, AlertTriangle } from "lucide-react";
@@ -123,14 +124,14 @@ export function FinansYonetimi({ embedded = false }: FinansYonetimiProps = {}) {
           <FinanceScopeChip scope="all_time" />
           <div className="flex flex-wrap items-center gap-3">
             <div
-              className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right"
+              className="ui-card rounded-2xl px-4 py-3 text-right"
               title="Tüm zaman: bekleyen aidat satırları + paketlerdeki kalan bakiye"
             >
               <p className="text-[8px] font-black uppercase text-gray-500">Bekleyen toplam</p>
               <p className="text-xl font-black italic text-amber-300">₺{pendingAmountTotal.toLocaleString("tr-TR")}</p>
             </div>
             <div
-              className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right"
+              className="ui-card rounded-2xl px-4 py-3 text-right"
               title="Toplam tahsil edilen / (Tahsil edilen + Bekleyen)"
             >
               <p className="text-[8px] font-black uppercase text-gray-500">Tahsilat gücü</p>
@@ -158,11 +159,11 @@ export function FinansYonetimi({ embedded = false }: FinansYonetimiProps = {}) {
             ) : null}
           </div>
           <div className="flex gap-3">
-            <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
+            <div className="ui-card rounded-2xl px-4 py-3 text-right">
               <p className="text-[8px] font-black uppercase text-gray-500">Bekleyen toplam</p>
               <p className="text-xl font-black italic text-amber-300">₺{pendingAmountTotal.toLocaleString("tr-TR")}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3 text-right">
+            <div className="ui-card rounded-2xl px-4 py-3 text-right">
               <p className="text-[8px] font-black uppercase text-gray-500">Tahsilat gücü</p>
               <p className="text-xl font-black italic text-emerald-400">%{collectionPower}</p>
             </div>
@@ -218,7 +219,7 @@ export function FinansYonetimi({ embedded = false }: FinansYonetimiProps = {}) {
             <Link
               key={player.id}
               href={embedded ? `/finans/${player.id}?from=workspace` : `/finans/${player.id}`}
-              className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#121215] p-4 transition-colors sm:flex-row sm:items-center sm:justify-between sm:hover:border-green-500/40"
+              className="group flex flex-col gap-4 ui-card rounded-2xl p-4 transition-colors sm:flex-row sm:items-center sm:justify-between sm:hover:border-green-500/40"
             >
               <div className="min-w-0">
                 <p className="text-base font-black uppercase italic text-white">{player.full_name}</p>

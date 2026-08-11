@@ -3,6 +3,7 @@
 import { useState } from "react";
 import EmptyState from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/data-display";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 export type TimelineEvent = {
   id: string;
@@ -34,11 +35,13 @@ export function AthleteTimelineSection({
   return (
     <section
       id="operasyon-zaman-cizelgesi"
-      className="rounded-2xl border border-white/5 bg-[#121215] p-5 shadow-xl md:rounded-3xl md:p-7"
+      className={`${uiBrandingClasses.card.base} rounded-2xl p-5 shadow-xl md:rounded-3xl md:p-7`}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-wide text-white">Operasyon ve finans zaman çizelgesi</h2>
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">
+        <h2 className={`${uiBrandingClasses.typography.h2Sm} text-sm tracking-wide`}>
+          Operasyon ve finans zaman çizelgesi
+        </h2>
+        <span className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-black uppercase tracking-widest`}>
           Ders · Tahsilat · Paket olayları · Görüşme
         </span>
       </div>
@@ -56,13 +59,15 @@ export function AthleteTimelineSection({
           {visibleEvents.map((event) => (
             <li
               key={event.id}
-              className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[11px] font-bold"
+              className={`${uiBrandingClasses.card.inner} px-4 py-3 text-[11px] font-bold`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-white">{event.title}</p>
-                <span className="text-gray-500">{new Date(event.at).toLocaleString("tr-TR")}</span>
+                <p className={uiBrandingClasses.kpi.cardValue}>{event.title}</p>
+                <span className={uiBrandingClasses.kpi.cardHint}>
+                  {new Date(event.at).toLocaleString("tr-TR")}
+                </span>
               </div>
-              <p className="mt-1 text-gray-400">{event.detail}</p>
+              <p className={`${uiBrandingClasses.typography.body} mt-1 text-[11px]`}>{event.detail}</p>
             </li>
           ))}
         </ul>

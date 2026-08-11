@@ -1,10 +1,12 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MutableRefObject } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
+import { DataTable, uiTableRowClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import { FinanceExportMenu } from "@/components/finance/FinanceExportMenu";
 import { ReceivableAgingBuckets } from "@/components/finance/ReceivableAgingBuckets";
 import type { ReceivableDashboardFilters } from "@/lib/actions/receivableDashboardActions";
@@ -17,7 +19,7 @@ import {
 } from "@/lib/privateLessons/packageStatus";
 import { resolvePaymentsExportDateRange } from "@/lib/export/paymentsExportDateRange";
 import { useStreamingCsvDownload } from "@/lib/hooks/useStreamingCsvDownload";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
@@ -97,19 +99,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
   const [noteMethod, setNoteMethod] = useState<"phone" | "whatsapp" | "in_person" | "other">("phone");
   const [noteFollowUp, setNoteFollowUp] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
 
   const showReceivablesExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.receivablesStream, {
     roleAllowed: true,
@@ -299,7 +289,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             },
           ] as const
         ).map((card) => (
-          <div key={card.key} className="rounded-xl border border-white/10 bg-black/30 px-3 py-3">
+          <div key={card.key} className="rounded-xl ui-kpi-band border px-3 py-3">
             <p className="text-[8px] font-black uppercase tracking-widest text-gray-500">{card.label}</p>
             <p className={`mt-1 text-lg font-black tabular-nums leading-tight sm:text-xl ${card.tone}`}>
               {formatMoney(card.value)}
@@ -316,7 +306,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
         Yakın vadeli paket: <span className="text-gray-400">{k?.dueSoonPackageCount ?? 0}</span>
       </p>
 
-      <section className="rounded-xl border border-white/10 bg-[#121215] p-4 space-y-3">
+      <section className="ui-kpi-section rounded-xl p-4 space-y-3">
         <h3 className="text-xs font-black uppercase text-white">Filtreler</h3>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           <label className="text-[10px] font-bold text-gray-400">
@@ -325,7 +315,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               type="month"
               value={draft.month}
               onChange={(e) => setDraft((d) => ({ ...d, month: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
           </label>
           <label className="text-[10px] font-bold text-gray-400">
@@ -334,7 +324,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               type="date"
               value={draft.dateFrom}
               onChange={(e) => setDraft((d) => ({ ...d, dateFrom: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
           </label>
           <label className="text-[10px] font-bold text-gray-400">
@@ -343,7 +333,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               type="date"
               value={draft.dateTo}
               onChange={(e) => setDraft((d) => ({ ...d, dateTo: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
           </label>
           <label className="text-[10px] font-bold text-gray-400">
@@ -351,7 +341,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             <select
               value={draft.athleteId}
               onChange={(e) => setDraft((d) => ({ ...d, athleteId: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Tümü</option>
               {athletes.map((a) => (
@@ -368,7 +358,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               onChange={(e) => setDraft((d) => ({ ...d, team: e.target.value }))}
               placeholder="örn. U17"
               list="receivable-team-hints"
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
             <datalist id="receivable-team-hints">
               {(dash.snapshot?.options.teamHints || []).map((t) => (
@@ -381,7 +371,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             <select
               value={draft.packageLifecycle}
               onChange={(e) => setDraft((d) => ({ ...d, packageLifecycle: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               {LIFECYCLE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -395,7 +385,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             <select
               value={draft.pkgPaymentStatus}
               onChange={(e) => setDraft((d) => ({ ...d, pkgPaymentStatus: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               {PKG_PAY_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -409,7 +399,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             <select
               value={draft.receivableState}
               onChange={(e) => setDraft((d) => ({ ...d, receivableState: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               {RECV_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -451,7 +441,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
       <ReceivableAgingBuckets packageRows={dash.snapshot?.packageRows ?? []} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <section className="ui-kpi-section rounded-xl p-4">
           <h3 className="text-xs font-black uppercase text-white">Borçlu sporcular</h3>
           {!dash.snapshot?.athleteDebts.length ? (
             <p className="mt-3 text-sm text-gray-500">Kayıt yok.</p>
@@ -485,7 +475,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
                     <button
                       type="button"
                       onClick={() => presetNote(a.athleteId, null)}
-                      className="inline-flex min-h-9 items-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-2.5 text-[9px] font-black uppercase text-[#c4b5fd]"
+                      className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-9 items-center rounded-lg px-2.5 text-[9px] font-black uppercase`}
                     >
                       Not
                     </button>
@@ -496,7 +486,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
           )}
         </section>
 
-        <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <section className="ui-kpi-section rounded-xl p-4">
           <h3 className="text-xs font-black uppercase text-white">Vadesi yaklaşan paketler</h3>
           {!dueSoonPackages.length ? (
             <p className="mt-3 text-sm text-gray-500">Kayıt yok.</p>
@@ -508,7 +498,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
                   className="flex flex-col gap-2 border-b border-white/5 pb-3 last:border-0 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <Link href={`/ozel-ders-paketleri/${r.packageId}`} className="font-bold text-[#c4b5fd]">
+                    <Link href={`/ozel-ders-paketleri/${r.packageId}`} className="font-bold ui-kpi-card__trend">
                       {r.packageName}
                     </Link>
                     <p className="text-[10px] text-gray-500">
@@ -526,7 +516,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
                     </Link>
                     <Link
                       href={`/ozel-ders-paketleri/${r.packageId}`}
-                      className="inline-flex min-h-9 items-center rounded-lg border border-[#7c3aed]/35 px-2.5 text-[9px] font-black uppercase text-[#c4b5fd]"
+                      className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-9 items-center rounded-lg px-2.5 text-[9px] font-black uppercase`}
                     >
                       Paket
                     </Link>
@@ -545,74 +535,78 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
         </section>
       </div>
 
-      <section className="rounded-xl border border-white/10 bg-[#121215] p-4 overflow-x-auto">
+      <section className="ui-kpi-section rounded-xl p-4 overflow-x-auto">
         <h3 className="text-xs font-black uppercase text-white">Gecikmiş paketler</h3>
         {!overduePackages.length ? (
           <p className="mt-3 text-sm text-gray-500">Gecikmiş paket yok.</p>
         ) : (
-          <table className="mt-3 w-full min-w-[880px] text-left text-[11px]">
-            <thead className="text-gray-500">
+          <DataTable
+            bare
+            className="mt-3"
+            scrollClassName=""
+            tableClassName="w-full min-w-[880px] text-[11px]"
+            headClassName="ui-table-head ui-table-head--divided"
+            head={
               <tr>
-                <th className="pb-2">Paket</th>
-                <th className="pb-2">Sporcu</th>
-                <th className="pb-2">Kalan</th>
-                <th className="pb-2">Vade</th>
-                <th className="pb-2">Gün</th>
-                <th className="pb-2">Aksiyon</th>
+                <th className={`${uiTableThClass} pb-2`}>Paket</th>
+                <th className={`${uiTableThClass} pb-2`}>Sporcu</th>
+                <th className={`${uiTableThClass} pb-2`}>Kalan</th>
+                <th className={`${uiTableThClass} pb-2`}>Vade</th>
+                <th className={`${uiTableThClass} pb-2`}>Gün</th>
+                <th className={`${uiTableThClass} pb-2`}>Aksiyon</th>
               </tr>
-            </thead>
-            <tbody>
-              {overduePackages.map((r) => (
-                <tr key={r.packageId} className="border-t border-white/5 text-gray-200">
-                  <td className="py-2">
-                    <Link href={`/ozel-ders-paketleri/${r.packageId}`} className="text-[#c4b5fd] font-semibold">
-                      {r.packageName}
+            }
+          >
+            {overduePackages.map((r) => (
+              <tr key={r.packageId} className={`${uiTableRowClass} text-gray-200`}>
+                <td className={`${uiTableTdClass} py-2`}>
+                  <Link href={`/ozel-ders-paketleri/${r.packageId}`} className="ui-kpi-card__trend font-semibold">
+                    {r.packageName}
+                  </Link>
+                </td>
+                <td className={`${uiTableTdClass} py-2`}>{r.athleteName}</td>
+                <td className={`${uiTableTdClass} py-2 tabular-nums`}>{formatMoney(r.remainingBalance)}</td>
+                <td className={`${uiTableTdClass} py-2`}>
+                  {r.nextPaymentDueAt ? new Date(r.nextPaymentDueAt).toLocaleDateString("tr-TR") : "—"}
+                </td>
+                <td className={`${uiTableTdClass} py-2 text-rose-200 tabular-nums`}>{r.daysOverdue ?? "—"}</td>
+                <td className={`${uiTableTdClass} py-2`}>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Link
+                      href={`/sporcu/${r.athleteId}`}
+                      className="inline-flex min-h-8 items-center rounded-md border border-white/15 bg-white/5 px-2 text-[9px] font-black uppercase text-gray-200"
+                    >
+                      Sporcu
                     </Link>
-                  </td>
-                  <td className="py-2">{r.athleteName}</td>
-                  <td className="py-2 tabular-nums">{formatMoney(r.remainingBalance)}</td>
-                  <td className="py-2">
-                    {r.nextPaymentDueAt ? new Date(r.nextPaymentDueAt).toLocaleDateString("tr-TR") : "—"}
-                  </td>
-                  <td className="py-2 text-rose-200 tabular-nums">{r.daysOverdue ?? "—"}</td>
-                  <td className="py-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      <Link
-                        href={`/sporcu/${r.athleteId}`}
-                        className="inline-flex min-h-8 items-center rounded-md border border-white/15 bg-white/5 px-2 text-[9px] font-black uppercase text-gray-200"
-                      >
-                        Sporcu
-                      </Link>
-                      <Link
-                        href={`/ozel-ders-paketleri/${r.packageId}`}
-                        className="inline-flex min-h-8 items-center rounded-md border border-[#7c3aed]/35 px-2 text-[9px] font-black uppercase text-[#c4b5fd]"
-                      >
-                        Paket
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => presetNote(r.athleteId, r.packageId)}
-                        className="inline-flex min-h-8 items-center rounded-md border border-white/15 px-2 text-[9px] font-black uppercase text-gray-300"
-                      >
-                        Not
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <Link
+                      href={`/ozel-ders-paketleri/${r.packageId}`}
+                      className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-8 items-center rounded-md px-2 text-[9px] font-black uppercase`}
+                    >
+                      Paket
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => presetNote(r.athleteId, r.packageId)}
+                      className="inline-flex min-h-8 items-center rounded-md border border-white/15 px-2 text-[9px] font-black uppercase text-gray-300"
+                    >
+                      Not
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )}
       </section>
 
-      <section id="receivable-note-block" className="scroll-mt-24 rounded-xl border border-white/10 bg-[#121215] p-4">
+      <section id="receivable-note-block" className="scroll-mt-24 ui-kpi-section rounded-xl p-4">
         <h3 className="text-xs font-black uppercase text-white">Finans görüşme notu</h3>
         <p className="mt-1 text-[10px] text-gray-500">
           Zorunlu alanlar: sporcu ve not. Paket seçiliyse not kaydı pakete de bağlanır (liste üzerindeki &quot;Not&quot; ile
           ön doldurulur).
         </p>
         {notePackageId ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3 py-2 text-[10px] text-[#e9d5ff]">
+          <div className={`${uiBrandingClasses.kpi.chipBrand} mt-2 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-[10px]`}>
             <span className="font-bold">Paket:</span>
             <span className="font-semibold">{notePackageLabel}</span>
             <button
@@ -631,7 +625,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               value={noteAthleteId}
               onChange={(e) => setNoteAthleteId(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Seçin</option>
               {athletes.map((a) => (
@@ -649,7 +643,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               required
               minLength={2}
               rows={3}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
           </label>
           <label className="text-[10px] font-bold text-gray-400">
@@ -657,7 +651,7 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
             <select
               value={noteMethod}
               onChange={(e) => setNoteMethod(e.target.value as typeof noteMethod)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             >
               <option value="phone">Telefon</option>
               <option value="whatsapp">WhatsApp</option>
@@ -671,14 +665,14 @@ export function MuhasebeReceivablesSection({ readOrgFromUrl, liveRefreshRef }: P
               type="date"
               value={noteFollowUp}
               onChange={(e) => setNoteFollowUp(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full ui-input rounded-lg px-3 py-2 text-sm"
             />
           </label>
           <div className="md:col-span-2">
             <button
               type="submit"
               disabled={noteBusy}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#7c3aed] px-4 text-[10px] font-black uppercase text-white disabled:opacity-50"
+              className="ui-btn-primary inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-[10px] font-black uppercase text-white disabled:opacity-50"
             >
               {noteBusy ? <Loader2 className="size-4 animate-spin" /> : "Notu kaydet"}
             </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, Loader2, Plus } from "lucide-react";
@@ -113,19 +114,19 @@ export function MuhasebeOverviewSection({ orgId, onOpenTahsilat, onNavigateSecti
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <article className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <article className="ui-kpi-section rounded-xl p-4">
           <p className="text-[9px] font-black uppercase text-emerald-200/80">Bu ay tahsilat</p>
           <p className="mt-1 text-2xl font-black tabular-nums text-emerald-300">{formatMoney(collected)}</p>
         </article>
-        <article className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <article className="ui-kpi-section rounded-xl p-4">
           <p className="text-[9px] font-black uppercase text-amber-200/80">Dönem bekleyen</p>
           <p className="mt-1 text-2xl font-black tabular-nums text-amber-300">{formatMoney(pendingPeriod)}</p>
         </article>
-        <article className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <article className="ui-kpi-section rounded-xl p-4">
           <p className="text-[9px] font-black uppercase text-red-200/80">Gecikmiş alacak</p>
           <p className="mt-1 text-2xl font-black tabular-nums text-red-300">{formatMoney(overdueAmount)}</p>
         </article>
-        <article className="rounded-xl border border-white/10 bg-[#121215] p-4">
+        <article className="ui-kpi-section rounded-xl p-4">
           <p className="text-[9px] font-black uppercase text-gray-400">Bu ay ders</p>
           <p className="mt-1 text-2xl font-black tabular-nums text-gray-100">{totalLessons.toLocaleString("tr-TR")}</p>
         </article>
@@ -161,7 +162,7 @@ export function MuhasebeOverviewSection({ orgId, onOpenTahsilat, onNavigateSecti
         </div>
       )}
 
-      <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+      <section className="ui-kpi-section rounded-xl p-4">
         <p className="mb-3 text-[10px] font-black uppercase tracking-wide text-gray-500">Hızlı geçiş</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {quickLinks.map((item) => (
@@ -169,7 +170,7 @@ export function MuhasebeOverviewSection({ orgId, onOpenTahsilat, onNavigateSecti
               key={item.section}
               type="button"
               onClick={() => onNavigateSection(item.section)}
-              className="group flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-left hover:border-emerald-500/35 hover:bg-emerald-500/5"
+              className="group flex items-center justify-between rounded-xl ui-card-inner border px-4 py-3 text-left hover:border-emerald-500/35 hover:bg-emerald-500/5"
             >
               <div>
                 <p className="text-xs font-black uppercase text-white">{item.label}</p>

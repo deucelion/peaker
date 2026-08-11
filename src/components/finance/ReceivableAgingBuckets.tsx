@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { computeReceivableAgingBuckets } from "@/lib/finance/receivableAging";
 import type { ReceivablePackageRow } from "@/lib/actions/receivableDashboardActions";
 import { formatCurrencyTRY } from "@/lib/privateLessons/packageMath";
@@ -21,14 +22,14 @@ export function ReceivableAgingBuckets({ packageRows }: Props) {
   }
 
   return (
-    <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+    <section className="ui-kpi-section rounded-xl p-4">
       <p className="mb-3 text-[10px] font-black uppercase tracking-wide text-gray-500">Gecikmiş alacak yaşlandırma</p>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {buckets.map((bucket) => (
           <article
             key={bucket.key}
             className={`rounded-lg border px-3 py-2.5 ${
-              bucket.count > 0 ? "border-rose-500/25 bg-rose-500/5" : "border-white/10 bg-black/20 opacity-60"
+              bucket.count > 0 ? "border-rose-500/25 bg-rose-500/5" : `${uiBrandingClasses.card.inner} opacity-60`
             }`}
           >
             <p className="text-[9px] font-black uppercase text-gray-400">{bucket.label}</p>

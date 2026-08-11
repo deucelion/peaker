@@ -63,9 +63,9 @@ export function PwaInstallBanner() {
   if (!deferred && !iosHint) return null;
 
   return (
-    <div className="mb-3 rounded-xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3 py-2.5">
+    <div className="ui-kpi-chip--brand mb-3 rounded-xl px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-[11px] font-bold text-[#e9d5ff]">
+        <div className="min-w-0 text-[11px] font-bold text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">
           {iosHint ? (
             <>
               <p className="font-black uppercase tracking-wide text-white">Ana ekrana ekle</p>
@@ -83,7 +83,7 @@ export function PwaInstallBanner() {
         <button
           type="button"
           onClick={dismiss}
-          className="shrink-0 rounded-lg p-1 text-gray-500 touch-manipulation"
+          className="ui-btn-ghost shrink-0 rounded-lg p-1 text-gray-500 touch-manipulation"
           aria-label="Kapat"
         >
           <X size={16} aria-hidden />
@@ -93,7 +93,7 @@ export function PwaInstallBanner() {
         <button
           type="button"
           onClick={() => void deferred.prompt()}
-          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#7c3aed] px-3 text-[10px] font-black uppercase text-white touch-manipulation"
+          className="ui-btn-primary mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase text-white touch-manipulation"
         >
           <Download size={14} aria-hidden /> Yükle
         </button>

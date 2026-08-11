@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { invalidateMeAccessSession } from "@/lib/auth/useMeAccess";
+import { clearAllOfflineActions } from "@/lib/offline/offlineActionQueue";
 
 export default function KocHesapLogoutButton() {
   const router = useRouter();
@@ -10,9 +12,10 @@ export default function KocHesapLogoutButton() {
 
   async function handleLogout() {
     setBusy(true);
+    await clearAllOfflineActions();
+    invalidateMeAccessSession();
     await supabase.auth.signOut();
     router.push("/login");
-    router.refresh();
   }
 
   return (

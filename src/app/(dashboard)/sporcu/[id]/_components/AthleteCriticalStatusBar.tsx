@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { BarChart2, ClipboardList, CreditCard, FileText } from "lucide-react";
-import { QuickStat } from "./AthleteDetailPrimitives";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import type { WellnessReportRow } from "@/types/performance";
 import { hrefWellnessArchive } from "@/lib/navigation/wellnessArchiveLinks";
 
@@ -20,9 +20,11 @@ const TONE_CLASS: Record<CriticalSignalTone, string> = {
   red: "border-red-500/35 bg-red-500/15 text-red-200",
   amber: "border-amber-500/35 bg-amber-500/15 text-amber-200",
   emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
-  violet: "border-[#7c3aed]/35 bg-[#7c3aed]/15 text-[#c4b5fd]",
-  neutral: "border-white/10 bg-white/5 text-gray-300",
+  violet: `${uiBrandingClasses.kpi.chipBrand} text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_65%,var(--peaker-ui-TEXT_PRIMARY))]`,
+  neutral: uiBrandingClasses.badge.neutral,
 };
+
+const INLINE_LINK_CLASS = "ui-breadcrumb__link underline-offset-2 touch-manipulation";
 
 export function AthleteCriticalStatusBar({
   athleteId,
@@ -55,12 +57,13 @@ export function AthleteCriticalStatusBar({
   return (
     <section
       id="sporcu-ozet"
-      className="rounded-2xl md:rounded-3xl border border-white/5 bg-[#121215] p-5 md:p-7 shadow-xl min-w-0"
+      className={`${uiBrandingClasses.card.base} min-w-0 rounded-2xl p-5 shadow-xl md:rounded-3xl md:p-7`}
     >
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
-          <h2 className="text-sm font-black italic uppercase tracking-tight text-white md:text-base">
-            Sporcu <span className="text-[#7c3aed]">özeti</span>
+          <h2 className={`${uiBrandingClasses.typography.h2Sm} text-sm md:text-base`}>
+            Sporcu{" "}
+            <span className="text-[color:var(--peaker-ui-PRIMARY)]">özeti</span>
           </h2>
           <div
             className="flex flex-wrap items-center gap-1.5"
@@ -80,30 +83,21 @@ export function AthleteCriticalStatusBar({
             <p className={`text-[11px] font-bold leading-relaxed ${priorityCue.textClass}`}>{priorityCue.text}</p>
           </div>
           {athleteId ? (
-            <p className="text-[10px] font-bold text-gray-500">
+            <p className={`${uiBrandingClasses.kpi.cardHint} text-[10px] font-bold`}>
               Şimdi:{" "}
-              <Link
-                href={`/finans/${athleteId}`}
-                className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
-              >
+              <Link href={`/finans/${athleteId}`} className={INLINE_LINK_CLASS}>
                 Finansı
               </Link>
               ,{" "}
-              <a href="#sakatlik-gecmisi" className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]">
+              <a href="#sakatlik-gecmisi" className={INLINE_LINK_CLASS}>
                 sakatlığı
               </a>
               ,{" "}
-              <Link
-                href={wellnessArchiveHref}
-                className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
-              >
+              <Link href={wellnessArchiveHref} className={INLINE_LINK_CLASS}>
                 wellness arşivini
               </Link>{" "}
               ve{" "}
-              <Link
-                href="/notlar-haftalik-program"
-                className="text-[#c4b5fd] underline-offset-2 touch-manipulation sm:hover:text-[#e9d5ff]"
-              >
+              <Link href="/notlar-haftalik-program" className={INLINE_LINK_CLASS}>
                 program notlarını
               </Link>{" "}
               kontrol edin.
@@ -111,38 +105,44 @@ export function AthleteCriticalStatusBar({
           ) : null}
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-xl lg:shrink-0">
-          <QuickStat label="ACWR" value={String(acwrStatus.ratio)} sub={acwrStatus.label} />
-          <QuickStat label="Aktif sakatlık" value={activeInjuryCount} sub="kayıt" />
-          <QuickStat
+          <AthleteQuickStat label="ACWR" value={String(acwrStatus.ratio)} sub={acwrStatus.label} />
+          <AthleteQuickStat label="Aktif sakatlık" value={activeInjuryCount} sub="kayıt" />
+          <AthleteQuickStat
             label="Son wellness"
             value={latestWellness ? new Date(latestWellness.report_date).toLocaleDateString("tr-TR") : "—"}
             sub={latestWellness ? "Tarih" : "Kayıt yok"}
           />
-          <QuickStat label="Yük kaydı" value={trainingLoadsCount} sub="satır" />
+          <AthleteQuickStat label="Yük kaydı" value={trainingLoadsCount} sub="satır" />
         </div>
       </div>
 
-      <div className="mt-5 grid gap-2 rounded-2xl border border-white/10 bg-black/25 p-4 text-[11px] font-bold sm:grid-cols-4">
+      <div
+        className={`${uiBrandingClasses.kpi.band} mt-5 grid gap-2 text-[11px] font-bold sm:grid-cols-4`}
+      >
         <div>
-          <p className="text-gray-500">Aktif paket</p>
-          <p className="mt-1 text-white">{financePackage?.activePackageName || "Yok"}</p>
+          <p className={uiBrandingClasses.kpi.cardHint}>Aktif paket</p>
+          <p className={`${uiBrandingClasses.kpi.cardValue} mt-1 text-sm`}>
+            {financePackage?.activePackageName || "Yok"}
+          </p>
         </div>
         <div>
-          <p className="text-gray-500">Kalan ders</p>
-          <p className="mt-1 text-white tabular-nums">{financePackage?.remainingLessons ?? "—"}</p>
+          <p className={uiBrandingClasses.kpi.cardHint}>Kalan ders</p>
+          <p className={`${uiBrandingClasses.kpi.cardValue} mt-1 tabular-nums text-sm`}>
+            {financePackage?.remainingLessons ?? "—"}
+          </p>
         </div>
         <div>
-          <p className="text-gray-500">Ödeme durumu</p>
-          <p className="mt-1 text-white">{localizedPaymentStatus}</p>
+          <p className={uiBrandingClasses.kpi.cardHint}>Ödeme durumu</p>
+          <p className={`${uiBrandingClasses.kpi.cardValue} mt-1 text-sm`}>{localizedPaymentStatus}</p>
         </div>
         <div>
-          <p className="text-gray-500">Finans & Paket</p>
+          <p className={uiBrandingClasses.kpi.cardHint}>Finans & Paket</p>
           {athleteId ? (
-            <Link href={`/finans/${athleteId}`} className="mt-1 inline-block text-[#c4b5fd] sm:hover:text-[#e9d5ff]">
+            <Link href={`/finans/${athleteId}`} className={`${INLINE_LINK_CLASS} mt-1 inline-block`}>
               Detaya git →
             </Link>
           ) : (
-            <p className="mt-1 text-white">—</p>
+            <p className={`${uiBrandingClasses.kpi.cardValue} mt-1 text-sm`}>—</p>
           )}
         </div>
       </div>
@@ -151,25 +151,25 @@ export function AthleteCriticalStatusBar({
         <div className="mt-5 flex flex-wrap gap-2 border-t border-white/5 pt-5">
           <Link
             href={`/finans/${athleteId}`}
-            className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation sm:hover:border-[#7c3aed]/50"
+            className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-11 min-w-[140px] flex-1 touch-manipulation items-center justify-center gap-2 px-3 text-[10px]`}
           >
             <CreditCard size={14} aria-hidden /> Finans
           </Link>
           <a
             href="#sakatlik-gecmisi"
-            className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            className={`${uiBrandingClasses.button.ghost} inline-flex min-h-11 min-w-[140px] flex-1 touch-manipulation items-center justify-center gap-2 px-3 text-[10px] text-gray-300`}
           >
             <ClipboardList size={14} aria-hidden /> Sakatlık
           </a>
           <Link
             href={wellnessArchiveHref}
-            className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            className={`${uiBrandingClasses.button.ghost} inline-flex min-h-11 min-w-[140px] flex-1 touch-manipulation items-center justify-center gap-2 px-3 text-[10px] text-gray-300`}
           >
             <BarChart2 size={14} aria-hidden /> Wellness
           </Link>
           <Link
             href="/notlar-haftalik-program"
-            className="inline-flex min-h-11 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation sm:hover:bg-white/10"
+            className={`${uiBrandingClasses.button.ghost} inline-flex min-h-11 min-w-[140px] flex-1 touch-manipulation items-center justify-center gap-2 px-3 text-[10px] text-gray-300`}
           >
             <FileText size={14} aria-hidden /> Program
           </Link>
@@ -180,3 +180,21 @@ export function AthleteCriticalStatusBar({
 }
 
 export default AthleteCriticalStatusBar;
+
+function AthleteQuickStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+}) {
+  return (
+    <div className={uiBrandingClasses.kpi.card}>
+      <p className={`${uiBrandingClasses.kpi.cardLabel} text-[8px] tracking-wider`}>{label}</p>
+      <p className={`${uiBrandingClasses.kpi.cardValue} mt-1 text-sm`}>{value}</p>
+      <p className={`${uiBrandingClasses.kpi.cardHint} text-[8px] font-bold uppercase`}>{sub}</p>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import Notification from "@/components/Notification";
+import { OverlayDialog, OVERLAY_Z } from "@/components/ui/overlay";
 import type { PrivateLessonPackage } from "@/lib/types";
 
 export type GroupForm = {
@@ -111,17 +112,14 @@ export function QuickCreateLessonModal(props: {
   const selectedPackage = quickPackages.find((p) => p.id === privateForm.packageId) || null;
 
   return (
-    <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
-      onClick={onClose}
+    <OverlayDialog
+      open
+      onClose={onClose}
+      layer={OVERLAY_Z.MODAL_ELEVATED}
+      strongBackdrop
+      shellClassName="w-full max-w-lg rounded-2xl ui-card p-6 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)] !max-w-lg sm:!p-6"
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#17171d] p-6 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c4b5fd]">Hızlı planlama</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] ui-kpi-card__trend">Hızlı planlama</p>
         <h3 className="mt-2 text-xl font-black uppercase tracking-tight text-white">Takvimden ders oluştur</h3>
         <p className="mt-2 text-sm font-bold text-gray-400">
           Seçilen zaman: <span className="text-white">{quickCreateDateLabel}</span> ·{" "}
@@ -131,22 +129,14 @@ export function QuickCreateLessonModal(props: {
           <button
             type="button"
             onClick={() => onChangeMode("group")}
-            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${
-              quickMode === "group"
-                ? "border-indigo-400/40 bg-indigo-500/20 text-indigo-100"
-                : "border-white/15 bg-white/5 text-gray-300"
-            }`}
+            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${ quickMode === "group" ? "border-indigo-400/40 bg-indigo-500/20 text-indigo-100" : "ui-btn-ghost text-gray-300" }`}
           >
             Grup Dersi
           </button>
           <button
             type="button"
             onClick={() => onChangeMode("private")}
-            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${
-              quickMode === "private"
-                ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-100"
-                : "border-white/15 bg-white/5 text-gray-300"
-            }`}
+            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${ quickMode === "private" ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-100" : "ui-btn-ghost text-gray-300" }`}
           >
             Özel Ders
           </button>
@@ -157,12 +147,12 @@ export function QuickCreateLessonModal(props: {
           </div>
         ) : null}
         {quickInfo ? (
-          <p className="mt-3 rounded-lg border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3 py-2 text-[11px] font-semibold text-[#ddd6fe]">
+          <p className="mt-3 rounded-lg border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)] ui-kpi-band px-3 py-2 text-[11px] font-semibold ui-kpi-card__trend">
             {quickInfo}
           </p>
         ) : null}
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c4b5fd]">⚡ Hızlı Oluştur</p>
+        <div className="mt-4 rounded-xl ui-kpi-band p-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] ui-kpi-card__trend">⚡ Hızlı Oluştur</p>
           {quickMode === "group" ? (
             <div className="mt-2 space-y-2">
               <input
@@ -207,7 +197,7 @@ export function QuickCreateLessonModal(props: {
             </p>
           )}
         </div>
-        <div className="mt-4 border-t border-white/10" />
+        <div className="mt-4 border-t border-[color:color-mix(in_srgb,var(--peaker-ui-TEXT_SECONDARY,#6b7280)_15%,transparent)]" />
         {quickBusy ? (
           <p className="mt-3 text-[11px] font-semibold text-gray-400">İşlem hazırlanıyor…</p>
         ) : quickMode === "group" ? (
@@ -312,7 +302,7 @@ export function QuickCreateLessonModal(props: {
               </label>
             </div>
             {inlineTimePreview ? (
-              <p className="rounded-lg border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3 py-2 text-[11px] font-semibold text-[#ddd6fe]">
+              <p className="rounded-lg border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)] ui-kpi-band px-3 py-2 text-[11px] font-semibold ui-kpi-card__trend">
                 {inlineTimePreview}
               </p>
             ) : null}
@@ -474,8 +464,8 @@ export function QuickCreateLessonModal(props: {
             )}
           </div>
         )}
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c4b5fd]">Lokasyon ekle</p>
+        <div className="mt-4 rounded-xl ui-kpi-band p-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] ui-kpi-card__trend">Lokasyon ekle</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px_auto]">
             <input
               value={newLocationName}
@@ -504,8 +494,7 @@ export function QuickCreateLessonModal(props: {
             Kapat
           </button>
         </div>
-      </section>
-    </div>
+    </OverlayDialog>
   );
 }
 

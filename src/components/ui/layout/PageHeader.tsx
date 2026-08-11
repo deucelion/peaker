@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { UiTabsNav, type UiTabItem } from "@/components/ui/navigation/UiTabsNav";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 /**
  * Faz 6.2 — Shared UI primitive: PageHeader.
@@ -32,11 +33,15 @@ export function PageHeader({
   return (
     <header className={`flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0 ${className}`}>
       <div className="min-w-0 space-y-2">
-        <h1 className="ui-h1 break-words">
+        <h1 className={`${uiBrandingClasses.typography.h1} break-words`}>
           {title}
-          {highlight ? <span className="text-[#7c3aed]"> {highlight}</span> : null}
+          {highlight ? (
+            <span className="text-[color:var(--peaker-ui-PRIMARY)]"> {highlight}</span>
+          ) : null}
         </h1>
-        {description ? <p className="ui-lead break-words text-gray-400">{description}</p> : null}
+        {description ? (
+          <p className={`${uiBrandingClasses.typography.lead} break-words text-gray-400`}>{description}</p>
+        ) : null}
         {subDescription ? subDescription : null}
         {subnav ? <div className="pt-1">{subnav}</div> : null}
       </div>
@@ -64,27 +69,14 @@ export function PageSubnav({
   className?: string;
   ariaLabel?: string;
 }) {
-  return (
-    <nav className={`flex flex-wrap gap-2 ${className}`} aria-label={ariaLabel}>
-      {tabs.map((tab) => {
-        const isActive = tab.href === activeHref;
-        return (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`inline-flex min-h-10 items-center rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-              isActive
-                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                : "border-white/10 bg-white/[0.03] text-gray-300 hover:text-white"
-            }`}
-            aria-current={isActive ? "page" : undefined}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  const items: UiTabItem[] = tabs.map((tab) => ({
+    key: tab.key,
+    label: tab.label,
+    href: tab.href,
+    active: tab.href === activeHref,
+  }));
+
+  return <UiTabsNav tabs={items} ariaLabel={ariaLabel} className={className} />;
 }
 
 export default PageHeader;

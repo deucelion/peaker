@@ -37,21 +37,35 @@ import {
 import { useUnsavedChangesGuard } from "@/lib/hooks/useUnsavedChangesGuard";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 import { useOnlineStatus } from "@/lib/hooks/useOnlineStatus";
 import { buildOfflineScopeKey } from "@/lib/offline/scope";
-import { fieldTestDraftKey, fieldTestIdempotencyKey } from "@/lib/offline/draftKeys";
-import { enqueueOfflineAction } from "@/lib/offline/offlineActionQueue";
+import { fieldTestDraftKey, fieldTestSessionQueueIdempotencyKey } from "@/lib/offline/draftKeys";
+import { enqueueOfflineAction, listOfflineActions } from "@/lib/offline/offlineActionQueue";
 import {
   clearScopedFormDraft,
   loadScopedFormDraft,
   saveScopedFormDraft,
 } from "@/lib/offline/scopedFormDrafts";
 import { hrefFieldTestSession } from "@/lib/fieldTests/fieldTestSessionRoutes";
-import { shouldSkipFieldTestAutosave } from "@/lib/fieldTests/fieldTestAutosave";
+import {
+  hasFieldTestPendingSave,
+  shouldDeferFieldTestAutosave,
+  shouldFlushFieldTestAfterSave,
+  shouldPreserveLocalFieldTestValuesOnFetch,
+  shouldSkipFieldTestAutosave,
+} from "@/lib/fieldTests/fieldTestAutosave";
+import {
+  clearSavedFieldTestDirtyKeysIfUnchanged,
+  incrementFieldTestDirtyGeneration,
+  mergeFieldTestValuesForSave,
+  reconcileFieldTestOfflineQueueCompletion,
+  snapshotFieldTestDirtyGenerations,
+  type FieldTestOfflineQueuedBatch,
+} from "@/lib/fieldTests/fieldTestSaveSnapshot";
 import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
 import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
 import { PerformanceExportHint } from "@/components/performance/PerformanceExportHint";
@@ -75,17 +89,21 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     correlationId?: string;
   } | null>(null);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
-  const [saveFeedback, setSaveFeedback] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  const [saveFeedback, setSaveFeedback] = useState<
+    "idle" | "dirty" | "saving" | "saved" | "queued" | "error"
+  >("idle");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
   const [contextPulse, setContextPulse] = useState(false);
   
   const [metrics, setMetrics] = useState<TestDefinitionRow[]>([]); 
   const [players, setPlayers] = useState<ProfileBasic[]>([]); 
   const [testValues, setTestValues] = useState<Record<string, string | number>>({});
+  const testValuesRef = useRef<Record<string, string | number>>({});
   const [previousTestCells, setPreviousTestCells] = useState<Record<string, FieldTestPreviousCell>>({});
   const [generalNotes, setGeneralNotes] = useState<Record<string, string>>({});
+  const generalNotesRef = useRef<Record<string, string>>({});
   const [activeAthleteId, setActiveAthleteId] = useState<string | null>(null);
   const online = useOnlineStatus();
   const [scopeKey, setScopeKey] = useState("");
@@ -96,12 +114,19 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
   const saveFeedbackRef = useRef(saveFeedback);
   const dirtyCellKeysRef = useRef<Set<string>>(new Set());
   const dirtyNoteProfileIdsRef = useRef<Set<string>>(new Set());
+  const dirtyCellGenerationRef = useRef<Map<string, number>>(new Map());
+  const dirtyNoteGenerationRef = useRef<Map<string, number>>(new Map());
   const saveInFlightRef = useRef(false);
+  const pendingFlushAfterSaveRef = useRef(false);
+  const offlineQueuedBatchesRef = useRef<FieldTestOfflineQueuedBatch[]>([]);
   const flushAutosaveRef = useRef<() => Promise<void>>(async () => {});
 
   const clearDirtyFieldTestState = useCallback(() => {
     dirtyCellKeysRef.current.clear();
     dirtyNoteProfileIdsRef.current.clear();
+    dirtyCellGenerationRef.current.clear();
+    dirtyNoteGenerationRef.current.clear();
+    offlineQueuedBatchesRef.current = [];
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -192,9 +217,11 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         metricUnitByTestId
       );
       setPreviousTestCells(previousMap);
-      if (saveFeedbackRef.current !== "dirty") {
+      if (!shouldPreserveLocalFieldTestValuesOnFetch(saveFeedbackRef.current)) {
         setTestValues(resultsMap);
+        testValuesRef.current = resultsMap;
         setGeneralNotes(existingNotes);
+        generalNotesRef.current = existingNotes;
         setSaveFeedback("idle");
         clearDirtyFieldTestState();
       }
@@ -212,24 +239,47 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
   }, [fetchData]);
 
   useEffect(() => {
+    if (!scopeKey) return;
+
+    const reconcileOfflineQueue = () => {
+      const activeQueueItemIds = new Set(listOfflineActions(scopeKey).map((item) => item.id));
+      offlineQueuedBatchesRef.current = reconcileFieldTestOfflineQueueCompletion(
+        offlineQueuedBatchesRef.current,
+        activeQueueItemIds,
+        dirtyCellKeysRef.current,
+        dirtyNoteProfileIdsRef.current,
+        dirtyCellGenerationRef.current,
+        dirtyNoteGenerationRef.current
+      );
+
+      const stillDirty = hasFieldTestPendingSave(
+        dirtyCellKeysRef.current,
+        dirtyNoteProfileIdsRef.current
+      );
+      const hasQueued = offlineQueuedBatchesRef.current.length > 0;
+
+      if (!stillDirty && !hasQueued && saveFeedbackRef.current === "queued") {
+        setSaveFeedback("saved");
+        setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+        void fetchData();
+      } else if (stillDirty && hasQueued) {
+        setSaveFeedback("queued");
+      } else if (stillDirty) {
+        setSaveFeedback("dirty");
+      }
+    };
+
+    window.addEventListener("peaker-offline-queue-changed", reconcileOfflineQueue);
+    return () => window.removeEventListener("peaker-offline-queue-changed", reconcileOfflineQueue);
+  }, [scopeKey, fetchData]);
+
+  useEffect(() => {
     void (async () => {
       const me = await fetchMeRoleClient();
       if (!me.ok) return;
       setActorUserId(me.userId);
       setScopeKey(buildOfflineScopeKey(me.organizationId, me.userId));
     })();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const showFieldTestExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.fieldTestResultsCsv, {
@@ -271,14 +321,18 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     if (ids?.length) setActiveAthleteId(ids[0] ?? null);
     if (values) {
       setTestValues(values);
+      testValuesRef.current = values;
       for (const key of Object.keys(values)) {
         dirtyCellKeysRef.current.add(key);
+        incrementFieldTestDirtyGeneration(dirtyCellGenerationRef.current, key);
       }
     }
     if (notes) {
       setGeneralNotes(notes);
+      generalNotesRef.current = notes;
       for (const profileId of Object.keys(notes)) {
         dirtyNoteProfileIdsRef.current.add(profileId);
+        incrementFieldTestDirtyGeneration(dirtyNoteGenerationRef.current, profileId);
       }
     }
     setFieldDraftRestored(true);
@@ -342,7 +396,11 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     async (athleteId: string) => {
       if (athleteId === activeAthleteId) return;
       await flushAutosaveRef.current();
-      if (saveFeedbackRef.current === "dirty" || saveFeedbackRef.current === "error") {
+      if (
+        saveFeedbackRef.current === "dirty" ||
+        saveFeedbackRef.current === "queued" ||
+        saveFeedbackRef.current === "error"
+      ) {
         const ok = window.confirm("Kaydedilmemiş değişiklikler var. Sporcu değiştirilsin mi?");
         if (!ok) return;
       }
@@ -364,16 +422,23 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
   const handleValueChange = (playerId: string, metricId: string, val: string) => {
     const key = fieldTestCellKey(playerId, metricId);
     dirtyCellKeysRef.current.add(key);
-    setTestValues((prev) => ({
-      ...prev,
-      [key]: val,
-    }));
+    incrementFieldTestDirtyGeneration(dirtyCellGenerationRef.current, key);
+    setTestValues((prev) => {
+      const next = { ...prev, [key]: val };
+      testValuesRef.current = next;
+      return next;
+    });
     setSaveFeedback("dirty");
   };
 
   const handleGeneralNoteChange = (playerId: string, val: string) => {
     dirtyNoteProfileIdsRef.current.add(playerId);
-    setGeneralNotes((prev) => ({ ...prev, [playerId]: val }));
+    incrementFieldTestDirtyGeneration(dirtyNoteGenerationRef.current, playerId);
+    setGeneralNotes((prev) => {
+      const next = { ...prev, [playerId]: val };
+      generalNotesRef.current = next;
+      return next;
+    });
     setSaveFeedback("dirty");
   };
 
@@ -417,7 +482,10 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
   };
 
   const saveDirtyChanges = async (options?: { silent?: boolean }) => {
-    if (saveInFlightRef.current) return;
+    if (saveInFlightRef.current) {
+      pendingFlushAfterSaveRef.current = true;
+      return;
+    }
 
     const dirtyCellKeys = new Set(dirtyCellKeysRef.current);
     const dirtyNoteIds = [...dirtyNoteProfileIdsRef.current];
@@ -429,6 +497,15 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
       }
       return;
     }
+
+    const cellGenerationsAtSave = snapshotFieldTestDirtyGenerations(
+      dirtyCellKeys,
+      dirtyCellGenerationRef.current
+    );
+    const noteGenerationsAtSave = snapshotFieldTestDirtyGenerations(
+      dirtyNoteIds,
+      dirtyNoteGenerationRef.current
+    );
 
     saveInFlightRef.current = true;
     setSaveLoading(true);
@@ -445,14 +522,23 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         ])
       );
 
+      const valuesForSave = mergeFieldTestValuesForSave(testValues, testValuesRef.current);
+      const notesForSave = { ...generalNotes, ...generalNotesRef.current };
+
+      const cellEditSeqs = new Map<string, number>();
+      for (const key of dirtyCellKeys) {
+        cellEditSeqs.set(key, dirtyCellGenerationRef.current.get(key) ?? 0);
+      }
+
       const built = buildFieldTestCells({
         selectedProfileIds: saveProfileIds,
         metrics: metrics.map((m) => ({
           id: m.id,
           valueType: metricValueKindFromRow(m),
         })),
-        testValues,
+        testValues: valuesForSave,
         onlyCellKeys: dirtyCellKeys,
+        cellEditSeqs,
       });
       if (built.error) {
         setSaveMessage(built.error);
@@ -467,7 +553,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
 
       const notesPayload = dirtyNoteIds.map((profileId) => ({
         profileId,
-        note: generalNotes[profileId]?.trim() || null,
+        note: notesForSave[profileId]?.trim() || null,
       }));
 
       if (!online) {
@@ -484,7 +570,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           kind: "field_test_draft",
           scopeKey,
           draftId,
-          idempotencyKey: fieldTestIdempotencyKey(sessionDate, draftId),
+          idempotencyKey: fieldTestSessionQueueIdempotencyKey(scopeKey, sessionDate),
           payload: {
             testDate: sessionDate,
             selectedProfileIds: saveProfileIds,
@@ -498,6 +584,26 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           setSaveMessage(queued.error);
           setSaveFeedback("error");
         } else {
+          const batchPayload = {
+            queueItemId: queued.id,
+            cellKeys: dirtyCellKeys,
+            noteProfileIds: dirtyNoteIds,
+            cellGenerationsAtQueue: cellGenerationsAtSave,
+            noteGenerationsAtQueue: noteGenerationsAtSave,
+          };
+          const existingBatchIdx = offlineQueuedBatchesRef.current.findIndex(
+            (batch) => batch.queueItemId === queued.id
+          );
+          if (existingBatchIdx >= 0) {
+            const prev = offlineQueuedBatchesRef.current[existingBatchIdx]!;
+            offlineQueuedBatchesRef.current[existingBatchIdx] = {
+              ...batchPayload,
+              cellKeys: new Set([...prev.cellKeys, ...dirtyCellKeys]),
+              noteProfileIds: Array.from(new Set([...prev.noteProfileIds, ...dirtyNoteIds])),
+            };
+          } else {
+            offlineQueuedBatchesRef.current.push(batchPayload);
+          }
           if (!options?.silent) {
             setSaveMessage(
               "Saha testi kuyruğa alındı. Senkron merkezinden onaylayarak gönderebilirsiniz."
@@ -505,8 +611,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           } else {
             setSaveMessage(null);
           }
-          setSaveFeedback("saved");
-          setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+          setSaveFeedback("queued");
         }
         return;
       }
@@ -516,6 +621,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         selectedProfileIds: saveProfileIds,
         cells,
         notes: notesPayload,
+        writeSource: "online",
       });
 
       if ("error" in result && result.error) {
@@ -534,15 +640,30 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           clearScopedFormDraft(scopeKey, fieldDraftStorageKey);
           setFieldDraftRestored(false);
         }
-        clearDirtyFieldTestState();
+        clearSavedFieldTestDirtyKeysIfUnchanged(
+          dirtyCellKeysRef.current,
+          dirtyNoteProfileIdsRef.current,
+          dirtyCellKeys,
+          dirtyNoteIds,
+          cellGenerationsAtSave,
+          noteGenerationsAtSave,
+          dirtyCellGenerationRef.current,
+          dirtyNoteGenerationRef.current
+        );
+        const stillDirty = hasFieldTestPendingSave(
+          dirtyCellKeysRef.current,
+          dirtyNoteProfileIdsRef.current
+        );
         if (!options?.silent) {
-          setSaveMessage("Sonuçlar başarıyla kaydedildi.");
+          setSaveMessage(stillDirty ? null : "Sonuçlar başarıyla kaydedildi.");
         } else {
           setSaveMessage(null);
         }
-        setSaveFeedback("saved");
-        setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
-        if (!options?.silent) {
+        setSaveFeedback(stillDirty ? "dirty" : "saved");
+        if (!stillDirty) {
+          setLastSavedAt(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+        }
+        if (!options?.silent && !stillDirty) {
           void fetchData();
         }
       }
@@ -553,10 +674,29 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     } finally {
       setSaveLoading(false);
       saveInFlightRef.current = false;
+      const shouldFlush = shouldFlushFieldTestAfterSave({
+        pendingFlushRequested: pendingFlushAfterSaveRef.current,
+        dirtyCellKeys: dirtyCellKeysRef.current,
+        dirtyNoteProfileIds: dirtyNoteProfileIdsRef.current,
+      });
+      pendingFlushAfterSaveRef.current = false;
+      if (shouldFlush) {
+        void saveDirtyChanges({ silent: true });
+      }
     }
   };
 
   flushAutosaveRef.current = async () => {
+    if (
+      shouldDeferFieldTestAutosave({
+        saveInFlight: saveInFlightRef.current,
+        dirtyCellKeys: dirtyCellKeysRef.current,
+        dirtyNoteProfileIds: dirtyNoteProfileIdsRef.current,
+      })
+    ) {
+      pendingFlushAfterSaveRef.current = true;
+      return;
+    }
     if (
       shouldSkipFieldTestAutosave({
         saveInFlight: saveInFlightRef.current,
@@ -580,14 +720,24 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         tone: "text-emerald-200 border-emerald-500/30 bg-emerald-500/10",
         dot: "bg-emerald-400",
       };
+    if (saveFeedback === "queued")
+      return {
+        label: "Senkronizasyon bekliyor",
+        tone: "text-sky-200 border-sky-500/30 bg-sky-500/10",
+        dot: "bg-sky-400",
+      };
     if (saveFeedback === "error") return { label: "Kaydedilemedi", tone: "text-rose-200 border-rose-500/30 bg-rose-500/10", dot: "bg-rose-400" };
     if (saveFeedback === "dirty") return { label: "Kaydedilmemiş değişiklik var", tone: "text-amber-200 border-amber-500/30 bg-amber-500/10", dot: "bg-amber-400" };
-    if (!activeAthleteId) return { label: "Sporcu seçimi bekleniyor", tone: "text-gray-300 border-white/15 bg-white/5", dot: "bg-gray-500" };
-    return { label: "Değişiklik yok", tone: "text-gray-300 border-white/15 bg-white/5", dot: "bg-gray-500" };
+    if (!activeAthleteId) return { label: "Sporcu seçimi bekleniyor", tone: "text-gray-300 ui-kpi-band", dot: "bg-gray-500" };
+    return { label: "Değişiklik yok", tone: "text-gray-300 ui-kpi-band", dot: "bg-gray-500" };
   })();
 
-  const hasUnsavedChanges = saveFeedback === "dirty";
-  const canSave = hasUnsavedChanges && !saveLoading;
+  const hasUnsavedChanges =
+    saveFeedback === "dirty" ||
+    saveFeedback === "queued" ||
+    saveFeedback === "error" ||
+    hasFieldTestPendingSave(dirtyCellKeysRef.current, dirtyNoteProfileIdsRef.current);
+  const canSave = (saveFeedback === "dirty" || saveFeedback === "queued") && !saveLoading;
   useUnsavedChangesGuard({ enabled: hasUnsavedChanges });
 
   useEffect(() => {
@@ -600,7 +750,11 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
     if (nextDate === sessionDate) return;
     void (async () => {
       await flushAutosaveRef.current();
-      if (saveFeedbackRef.current === "dirty" || saveFeedbackRef.current === "error") {
+      if (
+        saveFeedbackRef.current === "dirty" ||
+        saveFeedbackRef.current === "queued" ||
+        saveFeedbackRef.current === "error"
+      ) {
         const ok = window.confirm("Kayıt edilmemiş değişiklikler var, devam etmek istiyor musunuz?");
         if (!ok) return;
       }
@@ -611,9 +765,9 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
 
 
   if (loading && players.length === 0) return (
-    <div className="min-h-[50dvh] px-4 flex flex-col items-center justify-center bg-black gap-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
-      <Loader2 className="w-10 h-10 text-[#7c3aed] animate-spin" aria-hidden />
-      <p className="text-[10px] font-black uppercase italic tracking-wide sm:tracking-widest text-gray-500 break-words max-w-md">
+    <div className="ui-loading-panel min-h-[50dvh] px-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
+      <Loader2 className="ui-loading-panel__spinner w-10 h-10 animate-spin" aria-hidden />
+      <p className="ui-loading-panel__label italic tracking-wide sm:tracking-widest break-words max-w-md">
         Saha testleri hazırlanıyor...
       </p>
     </div>
@@ -627,13 +781,13 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
         <div className="space-y-2 min-w-0">
           <Link
             href="/saha-testleri"
-            className="inline-flex min-h-10 items-center gap-2 text-[10px] font-black uppercase tracking-wider text-gray-500 transition sm:hover:text-[#c4b5fd]"
+            className="inline-flex min-h-10 items-center gap-2 text-[10px] font-black uppercase tracking-wider text-gray-500 transition sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
           >
             <ChevronLeft size={14} aria-hidden />
             Oturum listesi
           </Link>
           <h1 className="ui-h1 break-words">
-            SAHA <span className="text-[#7c3aed]">TEST OTURUMU</span>
+            SAHA <span className="text-[color:var(--peaker-ui-PRIMARY)]">TEST OTURUMU</span>
           </h1>
           <p className="text-[11px] font-bold text-gray-500">
             Sporcu seçin, metrikleri doldurun, sonraki sporcuya geçin. Alan dışına çıkınca değişiklikler otomatik kaydedilir.
@@ -688,7 +842,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
                 setExportBusy(false);
               }
             }}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
+            className="ui-btn-ghost inline-flex min-h-11 items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
             aria-label="Saha testi sonuçlarını CSV olarak indir"
           >
             {exportBusy ? (
@@ -708,18 +862,18 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
 
         <FieldTestSessionSubNav />
 
-        <div className="grid gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+        <div className="ui-card grid gap-2 p-2.5 sm:grid-cols-4">
+          <div className="ui-kpi-card px-3 py-2">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Oturum tarihi</p>
             <p className={`mt-1 text-xs font-black text-white transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>{new Date(`${sessionDate}T00:00:00`).toLocaleDateString("tr-TR")}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 sm:col-span-2">
+          <div className="ui-kpi-card px-3 py-2 sm:col-span-2">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Aktif sporcu</p>
             <p className={`mt-1 truncate text-xs font-black text-white transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>
               {activeAthlete?.full_name ?? "—"}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <div className="ui-kpi-card px-3 py-2">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Tamamlanan</p>
             <p className={`mt-1 text-xs font-black text-white tabular-nums transition ${contextPulse ? "scale-[1.02]" : "scale-100"}`}>
               {completedAthleteIds.size}/{players.length}
@@ -735,9 +889,9 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-[#121215] p-2.5 sm:flex-row sm:items-end">
-          <div className="flex-1 md:flex-none flex items-center gap-3 bg-black/20 border border-white/10 px-4 py-2 rounded-xl min-h-11 min-w-0">
-            <Calendar size={16} className="text-[#7c3aed] shrink-0" aria-hidden />
+        <div className="ui-card flex flex-col gap-2 p-2.5 sm:flex-row sm:items-end">
+          <div className="ui-card-inner flex min-h-11 min-w-0 flex-1 items-center gap-3 px-4 py-2 md:flex-none">
+            <Calendar size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
             <div className="min-w-0">
               <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Tarih</p>
               <input
@@ -754,14 +908,14 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
           <Link
             href="/saha-testleri/genel-rapor"
             title="Takım analiz raporunu aç"
-            className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]"
+            className="ui-btn-ghost inline-flex min-h-11 items-center justify-center gap-2 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
           >
-            <Trophy size={14} className="text-[#7c3aed] shrink-0" aria-hidden /> Takım analiz raporu
+            <Trophy size={14} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> Takım analiz raporu
           </Link>
           <Link
             href="/saha-testleri/metrikler"
             title="Metrik ayarlarını aç"
-            className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]"
+            className="ui-btn-ghost inline-flex min-h-11 items-center justify-center gap-2 px-4 text-[10px] font-black uppercase tracking-wide text-gray-300 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
           >
             <Settings2 size={14} className="shrink-0" aria-hidden /> Metrikler
           </Link>
@@ -769,11 +923,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
             type="button"
             onClick={() => void saveSelectedResults()}
             disabled={!canSave}
-            className={`min-h-11 flex-1 sm:flex-none px-5 py-3 rounded-xl font-black text-[10px] uppercase inline-flex items-center justify-center gap-2 transition-all shadow-xl touch-manipulation ${
-              canSave
-                ? "bg-[#7c3aed] sm:hover:bg-[#6d28d9] shadow-[#7c3aed]/20"
-                : "bg-white/10 text-gray-500 shadow-none cursor-not-allowed"
-            }`}
+            className={`ui-btn-primary min-h-11 flex-1 touch-manipulation sm:flex-none ${canSave ? "" : "cursor-not-allowed opacity-40 shadow-none"}`}
           >
             {saveLoading ? (
               <Loader2 className="animate-spin" size={18} aria-hidden />
@@ -790,10 +940,10 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
       {/* TEK SPORCU OTURUMU */}
       <div className="min-w-0 space-y-4">
         {metrics.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#121215] px-4 py-3">
+          <div className="ui-card px-4 py-3">
             <p className="text-[11px] font-bold text-gray-300">
               Önce{" "}
-              <Link href="/saha-testleri/metrikler" className="text-[#c4b5fd] underline underline-offset-2">
+              <Link href="/saha-testleri/metrikler" className="text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] underline underline-offset-2">
                 metrik tanımlayın
               </Link>
               , ardından veri girişi yapabilirsiniz.
@@ -840,7 +990,7 @@ export function FieldTestSessionEntry({ sessionDate }: { sessionDate: string }) 
                 }}
               />
             ) : (
-              <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-center">
+              <div className="ui-card p-8 text-center">
                 <p className="text-sm font-semibold text-gray-500">Soldan bir sporcu seçin.</p>
               </div>
             )}

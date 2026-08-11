@@ -12,6 +12,7 @@ export function buildFieldTestCells(params: {
   testValues: Record<string, string | number>;
   /** Verilirse yalnızca bu hücre anahtarları kayda dahil edilir (dokunulmayan boş hücreler silinmez). */
   onlyCellKeys?: ReadonlySet<string>;
+  cellEditSeqs?: ReadonlyMap<string, number>;
 }): { cells: AthleticResultCell[]; error?: string } {
   const cells: AthleticResultCell[] = [];
   const metricById = new Map(params.metrics.map((m) => [m.id, m]));
@@ -51,6 +52,7 @@ export function buildFieldTestCells(params: {
           testId: metric.id,
           valueNumber: null,
           valueText: str === "" ? null : str,
+          editSeq: params.cellEditSeqs?.get(key),
         });
         continue;
       }
@@ -66,6 +68,7 @@ export function buildFieldTestCells(params: {
         testId: metric.id,
         valueNumber: numeric,
         valueText: null,
+        editSeq: params.cellEditSeqs?.get(key),
       });
   }
 

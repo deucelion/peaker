@@ -21,7 +21,7 @@ type Props = {
 export default function SuperAdminOrgUsersPasswordPanel({ profiles }: Props) {
   if (profiles.length === 0) {
     return (
-      <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+      <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
         <p className="text-white text-sm font-black italic uppercase mb-2">Kullanıcı şifreleri</p>
         <p className="text-[10px] text-gray-500 font-bold uppercase">Bu organizasyonda profil yok.</p>
       </section>
@@ -29,10 +29,10 @@ export default function SuperAdminOrgUsersPasswordPanel({ profiles }: Props) {
   }
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 space-y-4">
+    <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 space-y-4">
       <div>
         <p className="text-white text-sm font-black italic uppercase mb-2">Kullanıcı şifreleri</p>
-        <p className="text-[10px] text-[#c4b5fd] font-bold uppercase mb-1 break-words">
+        <p className="text-[10px] text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] font-bold uppercase mb-1 break-words">
           Bu organizasyondaki her kullanıcı için doğrudan yeni şifre atayın.
         </p>
         <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 break-words">

@@ -33,6 +33,7 @@ import {
   type PrivateLessonSlotOverlapConfirmState,
 } from "@/lib/privateLessons/privateLessonSlotOverlapConfirmFlow";
 import PrivateLessonSlotOverlapConfirmModal from "@/components/privateLessons/PrivateLessonSlotOverlapConfirmModal";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 import type {
   PrivateLessonPackage,
   PrivateLessonPackageDetailSnapshot,
@@ -58,7 +59,7 @@ import {
 import { hrefTahsilatMerkezi } from "@/lib/finance/tahsilatMerkeziLinks";
 
 const INPUT =
-  "min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20";
+  "ui-input min-h-[3rem] w-full rounded-2xl px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]";
 
 const formatTry = formatCurrencyTRY;
 
@@ -347,7 +348,7 @@ export default function PrivateLessonPackageDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="max-w-md break-words text-[10px] font-black uppercase italic tracking-wide text-gray-500 sm:tracking-widest">
           Paket yükleniyor…
         </p>
@@ -360,7 +361,7 @@ export default function PrivateLessonPackageDetailPage() {
       <div className="min-w-0 space-y-4">
         <Link
           href={backHref}
-          className="inline-flex min-h-11 items-center gap-2 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd] touch-manipulation sm:hover:text-[#e9d5ff]"
+          className="inline-flex min-h-11 items-center gap-2 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend touch-manipulation sm:hover:ui-kpi-card__trend"
         >
           <ChevronLeft size={16} aria-hidden />
           {backLabel}
@@ -456,7 +457,7 @@ export default function PrivateLessonPackageDetailPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href={backHref}
-          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 touch-manipulation sm:hover:border-[#7c3aed]/30 sm:hover:text-white"
+          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl ui-btn-ghost px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-300 touch-manipulation sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] sm:hover:text-white"
         >
           <ChevronLeft size={16} aria-hidden />
           Listeye dön
@@ -478,11 +479,11 @@ export default function PrivateLessonPackageDetailPage() {
         />
       ) : null}
 
-      <header className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-[#18181f] via-[#131318] to-[#101014] p-6 shadow-xl sm:rounded-[2rem] sm:p-8">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c3aed]/40 to-transparent" aria-hidden />
+      <header className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br ui-card p-6 shadow-xl sm:rounded-[2rem] sm:p-8">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] to-transparent" aria-hidden />
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#c4b5fd]">Paket özeti</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] ui-kpi-card__trend">Paket özeti</p>
             <h1 className="break-words text-2xl font-black italic uppercase tracking-tight text-white sm:text-3xl lg:text-4xl">
               {pkg.packageName}
             </h1>
@@ -500,7 +501,7 @@ export default function PrivateLessonPackageDetailPage() {
               <button
                 type="button"
                 onClick={() => setEditModalOpen(true)}
-                className="rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-[#7c3aed]/40"
+                className="rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)]"
               >
                 Paketi düzenle
               </button>
@@ -520,14 +521,14 @@ export default function PrivateLessonPackageDetailPage() {
         </div>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-4 py-4">
-            <p className="text-[9px] font-black uppercase tracking-wider text-[#c4b5fd]">Kalan ders</p>
+          <div className="rounded-2xl border ui-kpi-chip--brand px-4 py-4">
+            <p className="text-[9px] font-black uppercase tracking-wider ui-kpi-card__trend">Kalan ders</p>
             <p className="mt-1 text-2xl font-black tabular-nums text-white">{pkg.remainingLessons}</p>
             <p className="mt-1 text-[10px] font-bold text-gray-500">
               Toplam {pkg.totalLessons} · Yapılan {pkg.usedLessons}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+          <div className="rounded-2xl ui-kpi-band px-4 py-4">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Toplam ücret</p>
             <p className="mt-1 text-xl font-black tabular-nums text-white">{formatTry(pkg.totalPrice)}</p>
           </div>
@@ -542,7 +543,7 @@ export default function PrivateLessonPackageDetailPage() {
         </div>
 
         <div className="mt-6 grid gap-3 border-t border-white/5 pt-6 sm:grid-cols-2">
-          <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3">
+          <div className="flex items-start gap-3 rounded-xl ui-card-inner px-4 py-3">
             <CalendarClock className="mt-0.5 shrink-0 text-gray-500" size={18} aria-hidden />
             <div>
               <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Son kullanım</p>
@@ -551,7 +552,7 @@ export default function PrivateLessonPackageDetailPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3">
+          <div className="flex items-start gap-3 rounded-xl ui-card-inner px-4 py-3">
             <Wallet className="mt-0.5 shrink-0 text-gray-500" size={18} aria-hidden />
             <div>
               <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Son ödeme</p>
@@ -588,11 +589,7 @@ export default function PrivateLessonPackageDetailPage() {
                   setUsageNote("");
                   setUsageModalOpen(true);
                 }}
-                className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border px-4 text-[11px] font-black uppercase tracking-wide transition disabled:cursor-not-allowed ${
-                  manualUnplannedUsageBlocked
-                    ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 opacity-40"
-                    : "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 enabled:sm:hover:bg-emerald-500/20"
-                }`}
+                className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border px-4 text-[11px] font-black uppercase tracking-wide transition disabled:cursor-not-allowed ${ manualUnplannedUsageBlocked ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 opacity-40" : "border-emerald-500/35 bg-emerald-500/10 text-emerald-200 enabled:sm:hover:bg-emerald-500/20" }`}
               >
                 <PlusCircle size={18} aria-hidden />
                 Plansız / geçmiş ders kaydı ekle
@@ -607,7 +604,7 @@ export default function PrivateLessonPackageDetailPage() {
                     setPaymentNote("");
                     setPaymentModalOpen(true);
                   }}
-                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition disabled:cursor-not-allowed disabled:opacity-40 sm:hover:bg-[#7c3aed]/25"
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border ui-kpi-chip--brand px-4 text-[11px] font-black uppercase tracking-wide ui-kpi-card__trend transition disabled:cursor-not-allowed disabled:opacity-40 sm:hover:ui-btn-primary/25"
                 >
                   <CircleDollarSign size={18} aria-hidden />
                   Tahsilat kaydı ekle
@@ -620,7 +617,7 @@ export default function PrivateLessonPackageDetailPage() {
                     paymentKind: "private_lesson_package",
                     organizationId: pkg.organizationId,
                   })}
-                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 text-[11px] font-black uppercase tracking-wide text-[#c4b5fd] transition sm:hover:bg-[#7c3aed]/25"
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border ui-kpi-chip--brand px-4 text-[11px] font-black uppercase tracking-wide ui-kpi-card__trend transition sm:hover:ui-btn-primary/25"
                 >
                   <CircleDollarSign size={18} aria-hidden />
                   Tahsilat Merkezinde aç
@@ -661,11 +658,7 @@ export default function PrivateLessonPackageDetailPage() {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`min-h-11 touch-manipulation rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider transition ${
-              tab === t.id
-                ? "bg-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/20"
-                : "text-gray-500 sm:hover:bg-white/5 sm:hover:text-gray-300"
-            }`}
+            className={`min-h-11 touch-manipulation rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider transition ${ tab === t.id ? "ui-btn-primary text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]" : "text-gray-500 sm:hover:bg-white/5 sm:hover:text-gray-300" }`}
           >
             {t.label}
           </button>
@@ -673,7 +666,7 @@ export default function PrivateLessonPackageDetailPage() {
       </div>
 
       {tab === "overview" && (
-        <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+        <section className="rounded-2xl ui-card p-5 sm:p-7">
           <h2 className="text-sm font-black italic uppercase text-white">Özet bilgi</h2>
           <ul className="mt-4 space-y-3 text-sm font-bold text-gray-400">
             <li className="flex flex-wrap gap-2">
@@ -692,8 +685,8 @@ export default function PrivateLessonPackageDetailPage() {
             </li>
           </ul>
           <p className="mt-6 text-[11px] font-bold text-gray-600">
-            Ayrıntılı listeler için <span className="text-[#c4b5fd]">Ders kayıtları</span> ve{" "}
-            <span className="text-[#c4b5fd]">Tahsilatlar</span> sekmelerini kullanın. Planlı derslerde düşüm “Takvim”
+            Ayrıntılı listeler için <span className="ui-kpi-card__trend">Ders kayıtları</span> ve{" "}
+            <span className="ui-kpi-card__trend">Tahsilatlar</span> sekmelerini kullanın. Planlı derslerde düşüm “Takvim”
             sekmesinden tamamlanır.
           </p>
         </section>
@@ -701,7 +694,7 @@ export default function PrivateLessonPackageDetailPage() {
 
       {tab === "plan" && (
         <div className="space-y-6">
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+          <section className="rounded-2xl ui-card p-5 sm:p-7">
             <h2 className="text-sm font-black italic uppercase text-white">Takvim ve planlama</h2>
             <p className="mt-2 text-[11px] font-bold text-gray-500">
               Grup derslerinden bağımsızdır. Tamamlanan plan paketten 1 ders düşürür; iptal düşürmez. Bu sekmede “Ders
@@ -722,7 +715,7 @@ export default function PrivateLessonPackageDetailPage() {
             {!planBlocked ? (
               <form onSubmit={(e) => void submitPlan(e)} className="mt-6 grid gap-4 border-t border-white/5 pt-6 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#c4b5fd]">Bir sonraki dersi planla</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest ui-kpi-card__trend">Bir sonraki dersi planla</p>
                 </div>
                 <label className="block space-y-1">
                   <span className="text-[9px] font-black uppercase text-gray-500">Tarih</span>
@@ -801,7 +794,7 @@ export default function PrivateLessonPackageDetailPage() {
                   <button
                     type="submit"
                     disabled={planSaving}
-                    className="min-h-12 w-full rounded-2xl bg-[#7c3aed] px-4 text-[11px] font-black uppercase text-white shadow-lg disabled:opacity-50 sm:w-auto sm:min-w-[12rem] touch-manipulation sm:hover:bg-[#6d28d9]"
+                    className="min-h-12 w-full rounded-2xl ui-btn-primary px-4 text-[11px] font-black uppercase text-white shadow-lg disabled:opacity-50 sm:w-auto sm:min-w-[12rem] touch-manipulation sm:hover:opacity-90"
                   >
                     {planSaving ? "Kaydediliyor…" : "Dersi planla"}
                   </button>
@@ -810,10 +803,10 @@ export default function PrivateLessonPackageDetailPage() {
             ) : null}
           </section>
 
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+          <section className="rounded-2xl ui-card p-5 sm:p-7">
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="text-xs font-black uppercase tracking-wide text-white">Yaklaşan planlı oturumlar</h3>
-              {sessionsLoading ? <Loader2 className="size-5 animate-spin text-[#7c3aed]" aria-hidden /> : null}
+              {sessionsLoading ? <Loader2 className="size-5 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> : null}
             </div>
             {upcomingPlannedSessions.length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Açık plan yok.</p>
@@ -825,7 +818,7 @@ export default function PrivateLessonPackageDetailPage() {
                     return (
                       <li
                         key={s.id}
-                        className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[11px] font-bold text-gray-300"
+                        className="rounded-xl ui-card-inner px-4 py-3 text-[11px] font-bold text-gray-300"
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-200">
@@ -866,7 +859,7 @@ export default function PrivateLessonPackageDetailPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+          <section className="rounded-2xl ui-card p-5 sm:p-7">
             <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Tamamlanmayı bekleyen geçmiş planlı dersler</h3>
             {awaitingCompletionSessions.length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Tamamlanmayı bekleyen geçmiş plan bulunmuyor.</p>
@@ -918,7 +911,7 @@ export default function PrivateLessonPackageDetailPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+          <section className="rounded-2xl ui-card p-5 sm:p-7">
             <h3 className="mb-4 text-xs font-black uppercase tracking-wide text-white">Tamamlanan ve iptal edilen dersler</h3>
             {sessions.filter((s) => s.status !== "planned").length === 0 ? (
               <p className="text-[11px] font-bold text-gray-500">Tamamlanan veya iptal edilen plan yok.</p>
@@ -930,7 +923,7 @@ export default function PrivateLessonPackageDetailPage() {
                   .map((s) => (
                     <li
                       key={s.id}
-                      className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-[11px] text-gray-400"
+                      className="rounded-xl ui-card-inner px-4 py-2 text-[11px] text-gray-400"
                     >
                       <span
                         className={
@@ -954,9 +947,9 @@ export default function PrivateLessonPackageDetailPage() {
       )}
 
       {tab === "usage" && (
-        <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+        <section className="rounded-2xl ui-card p-5 sm:p-7">
           <div className="mb-4 flex items-center gap-2">
-            <History className="text-[#7c3aed]" size={20} aria-hidden />
+            <History className="text-[color:var(--peaker-ui-PRIMARY)]" size={20} aria-hidden />
             <h2 className="text-sm font-black italic uppercase text-white">Ders kayıtları</h2>
           </div>
           {snapshot.usageRows.length === 0 ? (
@@ -966,7 +959,7 @@ export default function PrivateLessonPackageDetailPage() {
               {snapshot.usageRows.map((row) => (
                 <li
                   key={row.id}
-                  className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[11px] font-bold text-gray-300"
+                  className="rounded-xl ui-card-inner px-4 py-3 text-[11px] font-bold text-gray-300"
                 >
                   <span className="text-white">{new Date(row.usedAt).toLocaleString("tr-TR")}</span>
                   {row.note ? <span className="mt-1 block text-gray-500">{row.note}</span> : null}
@@ -978,9 +971,9 @@ export default function PrivateLessonPackageDetailPage() {
       )}
 
       {tab === "payments" && (
-        <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-7">
+        <section className="rounded-2xl ui-card p-5 sm:p-7">
           <div className="mb-4 flex items-center gap-2">
-            <ClipboardList className="text-[#7c3aed]" size={20} aria-hidden />
+            <ClipboardList className="text-[color:var(--peaker-ui-PRIMARY)]" size={20} aria-hidden />
             <h2 className="text-sm font-black italic uppercase text-white">Tahsilat geçmişi</h2>
           </div>
           {snapshot.paymentRows.length === 0 ? (
@@ -990,7 +983,7 @@ export default function PrivateLessonPackageDetailPage() {
               {snapshot.paymentRows.map((row) => (
                 <li
                   key={row.id}
-                  className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-[11px] font-bold text-gray-300"
+                  className="rounded-xl ui-card-inner px-4 py-3 text-[11px] font-bold text-gray-300"
                 >
                   <span className="text-emerald-200">{formatTry(row.amount)}</span>
                   <span className="mx-2 text-gray-600">·</span>
@@ -1004,18 +997,16 @@ export default function PrivateLessonPackageDetailPage() {
       )}
 
       {usageModalOpen ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
-          role="presentation"
-          onClick={() => !usageSaving && setUsageModalOpen(false)}
+        <OverlayDialog
+          open
+          onClose={() => {
+            if (!usageSaving) setUsageModalOpen(false);
+          }}
+          layer={OVERLAY_Z.LAYOUT_BACKDROP}
+          strongBackdrop
+          titleId="usage-dialog-title"
+          shellClassName="w-full max-w-md rounded-2xl  p-6 shadow-2xl !max-w-md sm:!p-6"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="usage-dialog-title"
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161c] p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-start justify-between gap-3">
               <h3 id="usage-dialog-title" className="text-lg font-black italic uppercase text-white">
                 Plansız / geçmiş ders kaydı
@@ -1024,7 +1015,7 @@ export default function PrivateLessonPackageDetailPage() {
                 type="button"
                 disabled={usageSaving}
                 onClick={() => setUsageModalOpen(false)}
-                className="rounded-lg border border-white/10 p-2 text-gray-400 touch-manipulation sm:hover:bg-white/5"
+                className="rounded-lg p-2 text-gray-400 touch-manipulation sm:hover:bg-white/5"
                 aria-label="Kapat"
               >
                 <X size={18} aria-hidden />
@@ -1060,7 +1051,7 @@ export default function PrivateLessonPackageDetailPage() {
                 Bu pakette açık planlı ders var. Manuel kullanım eklerseniz paket hakkı ayrıca düşer.
               </p>
             ) : null}
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <OverlayFooter>
               <button
                 type="button"
                 disabled={usageSaving}
@@ -1077,24 +1068,21 @@ export default function PrivateLessonPackageDetailPage() {
               >
                 {usageSaving ? "Kaydediliyor…" : "Kaydı ekle"}
               </button>
-            </div>
-          </div>
-        </div>
+            </OverlayFooter>
+        </OverlayDialog>
       ) : null}
 
       {paymentModalOpen && viewerIsCoach ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
-          role="presentation"
-          onClick={() => !paymentSaving && setPaymentModalOpen(false)}
+        <OverlayDialog
+          open
+          onClose={() => {
+            if (!paymentSaving) setPaymentModalOpen(false);
+          }}
+          layer={OVERLAY_Z.LAYOUT_BACKDROP}
+          strongBackdrop
+          titleId="payment-dialog-title"
+          shellClassName="w-full max-w-md rounded-2xl  p-6 shadow-2xl !max-w-md sm:!p-6"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payment-dialog-title"
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161c] p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-start justify-between gap-3">
               <h3 id="payment-dialog-title" className="text-lg font-black italic uppercase text-white">
                 Tahsilat kaydı
@@ -1103,7 +1091,7 @@ export default function PrivateLessonPackageDetailPage() {
                 type="button"
                 disabled={paymentSaving}
                 onClick={() => setPaymentModalOpen(false)}
-                className="rounded-lg border border-white/10 p-2 text-gray-400 touch-manipulation sm:hover:bg-white/5"
+                className="rounded-lg p-2 text-gray-400 touch-manipulation sm:hover:bg-white/5"
                 aria-label="Kapat"
               >
                 <X size={18} aria-hidden />
@@ -1114,7 +1102,7 @@ export default function PrivateLessonPackageDetailPage() {
               disabled={paymentSaving}
               className="mt-4 min-w-0 border-0 p-0 disabled:pointer-events-none disabled:opacity-55"
             >
-            <div className="grid gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-[11px] font-bold">
+            <div className="grid gap-2 rounded-xl ui-kpi-band p-4 text-[11px] font-bold">
               <div className="flex justify-between gap-4 text-gray-500">
                 <span>Toplam ücret</span>
                 <span className="tabular-nums text-white">{formatTry(pkg.totalPrice)}</span>
@@ -1168,7 +1156,7 @@ export default function PrivateLessonPackageDetailPage() {
             </label>
             </fieldset>
 
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <OverlayFooter>
               <button
                 type="button"
                 disabled={paymentSaving}
@@ -1182,13 +1170,12 @@ export default function PrivateLessonPackageDetailPage() {
                 disabled={paymentSaving || !paymentAmountValid}
                 onClick={() => void submitPayment()}
                 aria-busy={paymentSaving}
-                className="min-h-12 rounded-2xl bg-[#7c3aed] px-5 text-[11px] font-black uppercase text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-45 sm:hover:bg-[#6d28d9]"
+                className="min-h-12 rounded-2xl ui-btn-primary px-5 text-[11px] font-black uppercase text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-45 sm:hover:opacity-90"
               >
                 {paymentSaving ? "Kaydediliyor..." : "Tahsilat kaydı ekle"}
               </button>
-            </div>
-          </div>
-        </div>
+            </OverlayFooter>
+        </OverlayDialog>
       ) : null}
 
       {snapshot && snapshot.viewerRole !== "sporcu" && editModalOpen ? (

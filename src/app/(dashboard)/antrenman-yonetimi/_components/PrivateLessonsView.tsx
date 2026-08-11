@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import Notification from "@/components/Notification";
 import { listPrivateLessonPackagesForManagement } from "@/lib/actions/privateLessonPackageActions";
 import type { PrivateLessonPackage } from "@/lib/types";
@@ -74,8 +74,8 @@ export function PrivateLessonsView({
 
   if (loading) {
     return (
-      <div className="rounded-[1.75rem] border border-white/10 bg-[#121215] px-6 py-16 text-center sm:rounded-[2rem]">
-        <Loader2 className="mx-auto mb-4 size-10 animate-spin text-[#7c3aed]" aria-hidden />
+      <div className="rounded-[1.75rem] ui-card px-6 py-16 text-center sm:rounded-[2rem]">
+        <Loader2 className="mx-auto mb-4 size-10 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
         <p className="text-sm font-bold text-gray-400">Özel ders çalışma alanı yükleniyor…</p>
       </div>
     );
@@ -83,7 +83,7 @@ export function PrivateLessonsView({
 
   if (error) {
     return (
-      <div className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem]">
+      <div className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem]">
         <Notification message={error} variant="error" />
       </div>
     );
@@ -98,11 +98,11 @@ export function PrivateLessonsView({
       view || "paket-listesi"
     )}`;
     return (
-      <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+      <section className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem] sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href={returnHref}
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border ui-btn-ghost px-3 text-[10px] font-black uppercase tracking-wide text-gray-300"
           >
             <ArrowLeft size={14} aria-hidden />
             Listeye dön
@@ -113,26 +113,26 @@ export function PrivateLessonsView({
                 ? `&tab=plan&lessonDate=${encodeURIComponent(planDate)}&startClock=${encodeURIComponent(planTime)}`
                 : ""
             }`}
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border ui-kpi-chip--brand px-3 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
           >
             Paket Detayına Git
           </Link>
         </div>
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
+        <div className="mt-4 rounded-xl ui-card-inner p-4 sm:p-5">
           <p className="text-lg font-black uppercase text-white">{selectedPackage.athleteName}</p>
           <p className="mt-1 text-[11px] font-semibold text-gray-300">{selectedPackage.packageName}</p>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kalan Ders</p>
               <p className="mt-1 text-[11px] font-semibold text-white">{selectedPackage.remainingLessons}</p>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kullanılan / Toplam</p>
               <p className="mt-1 text-[11px] font-semibold text-white">
                 {selectedPackage.usedLessons} / {selectedPackage.totalLessons}
               </p>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Koç</p>
               <p className="mt-1 text-[11px] font-semibold text-white">
                 {selectedPackage.coachName || "Koç atanmadı"}
@@ -156,7 +156,7 @@ export function PrivateLessonsView({
 
   if (view === "planlama") {
     return (
-      <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+      <section className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem] sm:p-6">
         <h2 className="text-sm font-black uppercase text-white">Planlama</h2>
         <p className="mt-1 text-[11px] font-semibold text-gray-500">
           Planlama için önce aktif paketi seçin, ardından paket detayından oturumu başlatın.
@@ -169,7 +169,7 @@ export function PrivateLessonsView({
         ) : null}
         <div className="mt-4 grid gap-3">
           {activeRows.length === 0 ? (
-            <EmptyStateCard
+            <EmptyState
               title="Kayıt bulunamadı"
               description="Planlama için aktif özel ders paketi bulunamadı."
               reason="Henüz paket oluşturulmamış veya tüm paketler tamamlanmış olabilir."
@@ -184,7 +184,7 @@ export function PrivateLessonsView({
             activeRows.map((pkg) => (
               <div
                 key={pkg.id}
-                className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300"
+                className="rounded-xl ui-card-inner p-3 text-[11px] font-bold text-gray-300"
               >
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">
@@ -195,7 +195,7 @@ export function PrivateLessonsView({
                 </p>
                 <Link
                   href={detailHrefFor(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                  className="mt-2 inline-flex rounded-lg border ui-kpi-chip--brand px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
                 >
                   Paket Detayına Git
                 </Link>
@@ -209,14 +209,14 @@ export function PrivateLessonsView({
 
   if (view === "kullanim") {
     return (
-      <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+      <section className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem] sm:p-6">
         <h2 className="text-sm font-black uppercase text-white">Kullanım</h2>
         <p className="mt-1 text-[11px] font-semibold text-gray-500">
           Paket kullanım yoğunluğunu ve kalan ders dengesini izleyin.
         </p>
         <div className="mt-4 grid gap-3">
           {usageRows.length === 0 ? (
-            <EmptyStateCard
+            <EmptyState
               title="Kayıt bulunamadı"
               description="Kullanım görünümünde listelenecek paket verisi bulunamadı."
               reason="Özel ders paketi olmadığı için kullanım kaydı oluşmamış olabilir."
@@ -231,7 +231,7 @@ export function PrivateLessonsView({
             usageRows.map((pkg) => (
               <div
                 key={pkg.id}
-                className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300"
+                className="rounded-xl ui-card-inner p-3 text-[11px] font-bold text-gray-300"
               >
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">
@@ -242,7 +242,7 @@ export function PrivateLessonsView({
                 </p>
                 <Link
                   href={detailHrefFor(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                  className="mt-2 inline-flex rounded-lg border ui-kpi-chip--brand px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
                 >
                   Paket Detayına Git
                 </Link>
@@ -256,14 +256,14 @@ export function PrivateLessonsView({
 
   if (view === "tahsilat") {
     return (
-      <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+      <section className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem] sm:p-6">
         <h2 className="text-sm font-black uppercase text-white">Tahsilat</h2>
         <p className="mt-1 text-[11px] font-semibold text-gray-500">
           Paket bazlı tahsilat durumunu ve kalan bakiyeyi takip edin.
         </p>
         <div className="mt-4 grid gap-3">
           {paymentRows.length === 0 ? (
-            <EmptyStateCard
+            <EmptyState
               title="Kayıt bulunamadı"
               description="Tahsilat görünümünde listelenecek paket kaydı bulunamadı."
               reason="Özel ders paketi olmadığı için tahsilat verisi oluşmamış olabilir."
@@ -278,7 +278,7 @@ export function PrivateLessonsView({
             paymentRows.map((pkg) => (
               <div
                 key={pkg.id}
-                className="rounded-xl border border-white/10 bg-black/20 p-3 text-[11px] font-bold text-gray-300"
+                className="rounded-xl ui-card-inner p-3 text-[11px] font-bold text-gray-300"
               >
                 <p className="text-white">{pkg.packageName}</p>
                 <p className="mt-1 text-gray-500">
@@ -289,7 +289,7 @@ export function PrivateLessonsView({
                 </p>
                 <Link
                   href={detailHrefFor(pkg.id)}
-                  className="mt-2 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                  className="mt-2 inline-flex rounded-lg border ui-kpi-chip--brand px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
                 >
                   Paket Detayına Git
                 </Link>
@@ -302,7 +302,7 @@ export function PrivateLessonsView({
   }
 
   return (
-    <section className="rounded-[1.75rem] border border-white/10 bg-[#121215] p-5 sm:rounded-[2rem] sm:p-6">
+    <section className="rounded-[1.75rem] ui-card p-5 sm:rounded-[2rem] sm:p-6">
       {schemaWarnings.length > 0 ? (
         <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[10px] font-semibold text-amber-100">
           <p className="font-black uppercase tracking-wide text-amber-200">Şema uyumluluk modu</p>
@@ -321,7 +321,7 @@ export function PrivateLessonsView({
         Özel ders operasyonu için önce paketi seçin, sonra detaydan işlem yapın.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+        <div className="rounded-lg ui-card-inner px-3 py-2">
           <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Toplam Paket</p>
           <p className="mt-1 text-lg font-black text-white">{rows.length}</p>
         </div>
@@ -333,21 +333,21 @@ export function PrivateLessonsView({
           <p className="text-[9px] font-black uppercase tracking-wide text-amber-200">Tahsilat Bekleyen</p>
           <p className="mt-1 text-lg font-black text-white">{overdueLikeRows}</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+        <div className="rounded-lg ui-card-inner px-3 py-2">
           <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Tamamlanan</p>
           <p className="mt-1 text-lg font-black text-white">{doneRows.length}</p>
         </div>
       </div>
       <div className="mt-4 grid gap-3">
         {activeRows.length === 0 && doneRows.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center">
+          <div className="rounded-xl border border-dashed ui-card-inner px-4 py-8 text-center">
             <p className="text-[12px] font-bold text-gray-400">Aktif özel ders paketi bulunmuyor.</p>
             <p className="mt-1 text-[11px] font-semibold text-gray-500">
               Operasyona başlamak için önce bir paket oluşturun.
             </p>
             <Link
               href="/ozel-ders-paketleri"
-              className="mt-3 inline-flex rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+              className="mt-3 inline-flex rounded-lg border ui-kpi-chip--brand px-3 py-2 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
             >
               Yeni Paket Oluştur
             </Link>
@@ -356,7 +356,7 @@ export function PrivateLessonsView({
           [...activeRows, ...doneRows].map((pkg) => (
             <div
               key={pkg.id}
-              className="rounded-xl border border-white/10 bg-black/20 p-4 text-[11px] font-bold text-gray-300 transition hover:border-[#7c3aed]/35 hover:bg-[#7c3aed]/10"
+              className="rounded-xl ui-card-inner p-4 text-[11px] font-bold text-gray-300 transition hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] hover:ui-kpi-chip--brand"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -367,11 +367,7 @@ export function PrivateLessonsView({
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <span
-                    className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${
-                      pkg.isActive
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                        : "border-white/15 bg-white/5 text-gray-300"
-                    }`}
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${ pkg.isActive ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "ui-btn-ghost text-gray-300" }`}
                   >
                     {pkg.isActive ? "Aktif" : "Tamamlandı"}
                   </span>
@@ -390,7 +386,7 @@ export function PrivateLessonsView({
                 </p>
               </div>
 
-              <div className="mt-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+              <div className="mt-2 rounded-lg ui-kpi-band px-3 py-2">
                 <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Operasyon Özeti</p>
                 <div className="mt-1 grid gap-1 text-[11px] font-semibold text-gray-300 sm:grid-cols-2">
                   <p>
@@ -402,13 +398,7 @@ export function PrivateLessonsView({
                   <p>
                     Ödeme:{" "}
                     <span
-                      className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase ${
-                        pkg.paymentStatus === "paid"
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                          : pkg.paymentStatus === "partial"
-                            ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                            : "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                      }`}
+                      className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase ${ pkg.paymentStatus === "paid" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : pkg.paymentStatus === "partial" ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-rose-500/40 bg-rose-500/10 text-rose-200" }`}
                     >
                       {pkg.paymentStatus === "paid"
                         ? "Ödeme Tamamlandı"
@@ -433,7 +423,7 @@ export function PrivateLessonsView({
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href={detailHrefFor(pkg.id)}
-                  className="rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                  className="rounded-lg border ui-kpi-chip--brand px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
                 >
                   Paket Detayına Git
                 </Link>

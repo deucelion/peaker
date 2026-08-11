@@ -32,11 +32,11 @@ function statusBadgeClass(s: OrganizationStatus): string {
     case "suspended":
       return "text-amber-300 border-amber-500/25 bg-amber-500/10";
     case "archived":
-      return "text-gray-400 border-white/10 bg-white/5";
+      return "text-gray-400 border-white/5 ui-kpi-band";
     case "expired":
       return "text-red-300 border-red-500/25 bg-red-500/10";
     default:
-      return "text-gray-300 border-white/10 bg-white/5";
+      return "text-gray-300 border-white/5 ui-kpi-band";
   }
 }
 
@@ -76,7 +76,7 @@ export default function SuperAdminOrgLifecyclePanel({
   const archiveOk = archiveConfirm.trim().toUpperCase() === archivePhrase;
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 space-y-4 min-w-0 overflow-x-hidden">
+    <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 space-y-4 min-w-0 overflow-x-hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between min-w-0">
         <div className="min-w-0 flex-1">
           <p className="text-white text-sm font-black italic uppercase">Organizasyon durumu</p>
@@ -154,7 +154,7 @@ export default function SuperAdminOrgLifecyclePanel({
       </div>
 
       {lifecycleColumnsPresent && archiveOpen ? (
-        <div className="rounded-xl border border-red-500/25 bg-black/30 p-3 sm:p-4 space-y-3 min-w-0">
+        <div className="rounded-xl border border-red-500/25 ui-card-inner p-3 sm:p-4 space-y-3 min-w-0">
           <p className="text-[11px] font-bold text-gray-300 leading-relaxed break-words">
             Arşivlenen organizasyonda ürün erişimi kapanır. Kurtarmak için &quot;Yeniden aktifleştir&quot; kullanılır (hard delete yok).
           </p>
@@ -164,7 +164,7 @@ export default function SuperAdminOrgLifecyclePanel({
           <input
             value={archiveConfirm}
             onChange={(e) => setArchiveConfirm(e.target.value)}
-            className="w-full min-w-0 min-h-11 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-base sm:text-xs text-white placeholder:text-gray-600 touch-manipulation"
+            className="w-full min-w-0 min-h-11 rounded-lg ui-input border px-3 py-2 text-base sm:text-xs text-white placeholder:text-gray-600 touch-manipulation"
             placeholder={archivePhrase}
             autoComplete="off"
           />
@@ -183,7 +183,7 @@ export default function SuperAdminOrgLifecyclePanel({
               type="button"
               disabled={pending}
               onClick={() => setArchiveOpen(false)}
-              className="min-h-11 w-full sm:w-auto rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+              className="min-h-11 w-full sm:w-auto rounded-lg border border-white/5 ui-kpi-band px-4 py-2 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
             >
               Vazgeç
             </button>

@@ -71,7 +71,7 @@ export function NotificationPreferencesPanel() {
   }
 
   return (
-    <section className="rounded-[1.5rem] border border-white/10 bg-[#121215] p-4">
+    <section className="rounded-[1.5rem] ui-card p-4">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -79,7 +79,7 @@ export function NotificationPreferencesPanel() {
         aria-expanded={open}
       >
         <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide text-white">
-          <Settings2 className="size-4 text-[#7c3aed]" aria-hidden />
+          <Settings2 className="size-4 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
           Bildirim Tercihleri
         </span>
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase text-gray-400">
@@ -95,10 +95,10 @@ export function NotificationPreferencesPanel() {
       ) : null}
 
       {open ? (
-        <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+        <div className="mt-4 space-y-3 border-t pt-4">
           {loading ? (
             <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-400">
-              <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-hidden />
+              <Loader2 className="size-4 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               Tercihler yükleniyor...
             </div>
           ) : null}
@@ -117,7 +117,7 @@ export function NotificationPreferencesPanel() {
                   return (
                     <li
                       key={cat}
-                      className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-3"
+                      className="flex items-start justify-between gap-3 rounded-xl ui-card-inner px-3 py-3"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-black uppercase tracking-wide text-white">{meta.title}</p>
@@ -153,7 +153,7 @@ export function NotificationPreferencesPanel() {
                   type="button"
                   onClick={() => void handleSave()}
                   disabled={saving}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 text-[11px] font-black uppercase tracking-wide text-white hover:bg-[#6d28d9] disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl ui-btn-primary px-4 text-[11px] font-black uppercase tracking-wide text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
                   Tercihleri kaydet

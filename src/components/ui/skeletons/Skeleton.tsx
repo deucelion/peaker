@@ -7,7 +7,7 @@
  *   - Sayfa yüklenirken Loader2 spinner yerine layout uyumlu placeholder göster.
  *   - Ani layout jump'ı engelle.
  *   - Mobile + desktop'ta sabit yükseklik koru (özellikle chart için).
- *   - Tasarım dili: dashboard'un mevcut bg-[#121215] / border-white/10 paleti.
+ *   - Tasarım dili: token-bound ui-skeleton-* / ui-kpi-card shells (Wave 13).
  *
  * Kullanım:
  *   <SkeletonStat />              // KPI kartı
@@ -16,9 +16,6 @@
  *   <SkeletonTable rows={5} cols={6} /> // Tablo
  *   <SkeletonChart height={280} variant="bar"|"line"|"radar" />
  */
-
-const PULSE_BG = "animate-pulse bg-white/[0.04]";
-const PULSE_LINE = "animate-pulse bg-white/[0.06]";
 
 export function SkeletonLine({
   width = "100%",
@@ -32,7 +29,7 @@ export function SkeletonLine({
   return (
     <span
       aria-hidden
-      className={`inline-block rounded-full ${PULSE_LINE} ${className}`}
+      className={`ui-skeleton-line ${className}`}
       style={{ width, height }}
     />
   );
@@ -40,7 +37,7 @@ export function SkeletonLine({
 
 export function SkeletonStat() {
   return (
-    <article className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5" aria-hidden>
+    <article className="ui-skeleton-stat" aria-hidden>
       <SkeletonLine width="35%" height="0.55rem" />
       <div className="mt-1.5">
         <SkeletonLine width="55%" height="1.1rem" />
@@ -59,10 +56,10 @@ export function SkeletonStatGrid({
   count?: number;
   className?: string;
 }) {
-  const cols = count >= 5 ? "lg:grid-cols-5" : count >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3";
+  const cols = count >= 5 ? "ui-kpi-grid--5" : "";
   return (
     <div
-      className={`grid gap-3 sm:grid-cols-2 ${cols} ${className}`}
+      className={`ui-kpi-grid ${cols} ${className}`}
       role="status"
       aria-label="Yükleniyor"
     >
@@ -84,7 +81,7 @@ export function SkeletonCard({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-white/10 bg-[#121215] p-4 ${className}`}
+      className={`ui-skeleton-shell p-4 ${className}`}
       role="status"
       aria-label="Yükleniyor"
     >
@@ -113,7 +110,7 @@ export function SkeletonTable({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-white/10 bg-[#121215] ${className}`}
+      className={`ui-skeleton-shell overflow-hidden ${className}`}
       role="status"
       aria-label="Tablo yükleniyor"
     >
@@ -151,7 +148,7 @@ export function SkeletonChart({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-white/10 bg-[#121215] p-4 ${className}`}
+      className={`ui-skeleton-shell p-4 ${className}`}
       role="status"
       aria-label="Grafik yükleniyor"
     >
@@ -160,7 +157,7 @@ export function SkeletonChart({
         {withLegend ? <SkeletonLine width="20%" height="0.55rem" /> : null}
       </div>
       <div
-        className={`relative w-full overflow-hidden rounded-xl border border-white/5 bg-black/20 ${PULSE_BG}`}
+        className="ui-skeleton-pulse relative w-full overflow-hidden rounded-xl border border-white/5"
         style={{ height }}
         aria-hidden
       >

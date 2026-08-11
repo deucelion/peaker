@@ -1,8 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Activity, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import type { OverallPerformanceDecision } from "@/lib/performance/performanceDecision";
+import { ChartNoData } from "@/components/ui/data-display/ChartNoData";
+import {
+  chartTooltipContentStyle,
+  chartTooltipItemStyle,
+} from "@/lib/ui/branding/chartSelectors";
 
 /**
  * Faz 5.1 (kısmî) — Performans Merkezi presentational parçaları.
@@ -34,7 +39,7 @@ export function OverallStatusBar({ decision }: { decision: OverallPerformanceDec
     ok: "border-emerald-500/30 bg-emerald-500/[0.06]",
     watch: "border-amber-400/35 bg-amber-500/[0.07]",
     risk: "border-red-500/35 bg-red-500/[0.07]",
-    nodata: "border-white/10 bg-white/[0.03]",
+    nodata: "ui-kpi-band",
   };
   const emoji: Record<OverallPerformanceDecision["level"], string> = {
     ok: "🟢",
@@ -67,8 +72,10 @@ export function AcwrChartTooltip({
   const ratioRaw = payload.find((p) => p.dataKey === "ratio")?.value;
   const ratio = typeof ratioRaw === "number" ? ratioRaw : Number(ratioRaw);
   const zone = Number.isFinite(ratio) ? bandLabelForRatio(ratio) : "—";
+  const tooltipShell = chartTooltipContentStyle();
+  const tooltipAccent = chartTooltipItemStyle();
   return (
-    <div className="max-w-[220px] rounded-xl border border-white/10 bg-[#1c1c21] px-3 py-2.5 text-[10px] shadow-xl">
+    <div style={tooltipShell} className="max-w-[220px] px-3 py-2.5 text-[10px] shadow-xl">
       {label != null && String(label) !== "" && (
         <p className="mb-1 font-black uppercase tracking-widest text-gray-500">{String(label)}</p>
       )}
@@ -78,7 +85,7 @@ export function AcwrChartTooltip({
           {p.value}
         </p>
       ))}
-      <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[9px] font-black uppercase tracking-wide text-[#c4b5fd]">
+      <p style={tooltipAccent} className="mt-1.5 border-t pt-1.5 text-[9px] font-black uppercase tracking-wide">
         ACWR → {zone}
       </p>
     </div>
@@ -98,8 +105,10 @@ export function EwmaChartTooltip({
   const rRaw = payload.find((p) => p.dataKey === "ewmaRatio")?.value;
   const r = typeof rRaw === "number" ? rRaw : Number(rRaw);
   const zone = Number.isFinite(r) ? bandLabelForRatio(r) : "—";
+  const tooltipShell = chartTooltipContentStyle();
+  const tooltipAccent = chartTooltipItemStyle();
   return (
-    <div className="max-w-[220px] rounded-xl border border-white/10 bg-[#1c1c21] px-3 py-2.5 text-[10px] shadow-xl">
+    <div style={tooltipShell} className="max-w-[220px] px-3 py-2.5 text-[10px] shadow-xl">
       {label != null && String(label) !== "" && (
         <p className="mb-1 font-black uppercase tracking-widest text-gray-500">{String(label)}</p>
       )}
@@ -109,7 +118,7 @@ export function EwmaChartTooltip({
           {p.value}
         </p>
       ))}
-      <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[9px] font-black uppercase tracking-wide text-[#c4b5fd]">
+      <p style={tooltipAccent} className="mt-1.5 border-t pt-1.5 text-[9px] font-black uppercase tracking-wide">
         EWMA oran → {zone}
       </p>
     </div>
@@ -117,12 +126,7 @@ export function EwmaChartTooltip({
 }
 
 export function ChartEmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex h-full min-h-[100px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/10 px-3 py-4 text-center">
-      <Activity className="text-gray-600" size={18} aria-hidden />
-      <p className="text-[8px] font-bold uppercase tracking-wide text-gray-600 leading-relaxed max-w-sm">{message}</p>
-    </div>
-  );
+  return <ChartNoData label={message} />;
 }
 
 export type CompactKpiTone = "red" | "green" | "purple" | "neutral" | "amber";
@@ -149,8 +153,9 @@ export function CompactKpi({
   const ring: Record<CompactKpiTone, string> = {
     red: "border-red-500/30 bg-red-500/[0.05]",
     green: "border-emerald-500/30 bg-emerald-500/[0.05]",
-    purple: "border-[#7c3aed]/28 bg-[#7c3aed]/[0.06]",
-    neutral: "border-white/10 bg-white/[0.02]",
+    purple:
+      "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_28%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_6%,transparent)]",
+    neutral: "ui-card-inner",
     amber: "border-amber-400/30 bg-amber-500/[0.06]",
   };
   return (
@@ -163,7 +168,7 @@ export function CompactKpi({
           {metricTooltip ? (
             <span
               title={metricTooltip}
-              className="text-gray-500 hover:text-[#c4b5fd] cursor-help touch-manipulation p-0.5"
+              className="text-gray-500 hover:ui-kpi-card__trend cursor-help touch-manipulation p-0.5"
             >
               <Info size={13} aria-hidden />
             </span>

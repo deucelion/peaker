@@ -92,7 +92,7 @@ export function actionTone(action: string): "destructive" | "mutation" | "creati
 
 const TONE_STYLES: Record<ReturnType<typeof actionTone>, string> = {
   destructive: "border-red-500/30 bg-red-500/10 text-red-200",
-  mutation: "border-[#7c3aed]/30 bg-[#7c3aed]/10 text-[#c4b5fd]",
+  mutation: "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10,transparent)] text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]",
   creation: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
   permission: "border-amber-500/30 bg-amber-500/10 text-amber-200",
 };

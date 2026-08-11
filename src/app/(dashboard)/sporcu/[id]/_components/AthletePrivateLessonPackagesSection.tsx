@@ -6,6 +6,7 @@ import { Loader2, Package, Pencil, PlusCircle } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { PrivateLessonPackageFormModal } from "@/components/privateLessons/PrivateLessonPackageFormModal";
 import { PrivateLessonPackageEditModal } from "@/components/privateLessons/PrivateLessonPackageEditModal";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import {
   listPrivateLessonFormOptions,
   listPrivateLessonPackagesForAthleteId,
@@ -64,18 +65,20 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
   }, [load]);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5 space-y-4">
+    <section className={`${uiBrandingClasses.card.base} space-y-4 rounded-2xl !p-4 sm:!p-5`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-black uppercase tracking-widest text-white">Özel ders paketleri</h2>
-          <p className="mt-1 text-[10px] font-semibold text-gray-500">
+          <h2 className={`${uiBrandingClasses.typography.h2Sm} text-sm tracking-widest`}>
+            Özel ders paketleri
+          </h2>
+          <p className={`${uiBrandingClasses.kpi.cardHint} mt-1 text-[10px] font-semibold`}>
             Bu sporcuya tanımlı paketler ve tahsilat özeti
           </p>
         </div>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-widest text-white"
+          className={`${uiBrandingClasses.button.primary} inline-flex min-h-10 items-center justify-center gap-2 px-4 text-[10px] tracking-widest`}
         >
           <PlusCircle size={14} aria-hidden />
           Yeni özel ders paketi
@@ -83,8 +86,11 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-8 text-[10px] font-black uppercase text-gray-500">
-          <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-hidden />
+        <div className={`${uiBrandingClasses.loading.inline} py-8`}>
+          <Loader2
+            className={`${uiBrandingClasses.loading.inlineSpinner} size-4 animate-spin text-[color:var(--peaker-ui-PRIMARY)]`}
+            aria-hidden
+          />
           Yükleniyor…
         </div>
       ) : error ? (
@@ -98,19 +104,22 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
           primaryAction={{ label: "Paket tanımla", onClick: () => setModalOpen(true) }}
         />
       ) : (
-        <ul className="divide-y divide-white/5 rounded-xl border border-white/8 overflow-hidden">
+        <ul className={`${uiBrandingClasses.data.tableShell} divide-y divide-white/5 overflow-hidden rounded-xl`}>
           {packages.map((pkg) => {
             const lifecycle = pkg.lifecycleStatus ?? resolvePackageLifecycleStatus(pkg);
             return (
-              <li key={pkg.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <li
+                key={pkg.id}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div className="min-w-0">
-                  <p className="text-sm font-black text-white truncate">{pkg.packageName}</p>
-                  <p className="text-[10px] font-semibold text-gray-500">
+                  <p className={`${uiBrandingClasses.kpi.cardValue} truncate text-sm`}>{pkg.packageName}</p>
+                  <p className={`${uiBrandingClasses.kpi.cardHint} text-[10px] font-semibold`}>
                     {pkg.remainingLessons}/{pkg.totalLessons} ders · {formatCurrencyTRY(pkg.amountPaid)} /{" "}
                     {formatCurrencyTRY(pkg.totalPrice)}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PACKAGE_LIFECYCLE_TONE[lifecycle]}`}
                   >
@@ -120,7 +129,7 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
                     <button
                       type="button"
                       onClick={() => setEditPkg(pkg)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[9px] font-black uppercase text-gray-300 hover:border-[#7c3aed]/40 hover:text-white"
+                      className={`${uiBrandingClasses.button.ghost} inline-flex min-h-9 items-center gap-1 px-2 py-1 text-[9px] text-gray-300 sm:hover:border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:hover:text-white`}
                     >
                       <Pencil size={10} aria-hidden />
                       Düzenle
@@ -128,7 +137,7 @@ export function AthletePrivateLessonPackagesSection({ athleteId, athleteName }: 
                   ) : null}
                   <Link
                     href={`/ozel-ders-paketleri/${pkg.id}`}
-                    className="rounded-lg border border-white/10 px-2 py-1 text-[9px] font-black uppercase text-[#c4b5fd]"
+                    className={`ui-breadcrumb__link rounded-lg border border-white/5 px-2 py-1 text-[9px] font-black uppercase`}
                   >
                     Detay
                   </Link>

@@ -77,7 +77,7 @@ export default function TeamDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[40dvh] min-w-0 flex-col items-center justify-center gap-3">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={38} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={38} aria-hidden />
         <p className="text-[10px] font-black uppercase italic tracking-widest text-gray-500">Takım detayı yükleniyor...</p>
       </div>
     );
@@ -87,7 +87,7 @@ export default function TeamDetailPage() {
     <div className="ui-page min-w-0 overflow-x-hidden pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
       <Link
         href="/takimlar"
-        className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-[10px] font-black uppercase text-gray-300 sm:hover:border-[#7c3aed]/40"
+        className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase text-gray-300 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)]"
       >
           <ChevronLeft size={14} aria-hidden /> Takımlar
       </Link>
@@ -99,34 +99,34 @@ export default function TeamDetailPage() {
           {message ? <Notification message={message} variant={message.toLowerCase().includes("edilemedi") ? "error" : "success"} /> : null}
           <header className="min-w-0 border-b border-white/5 pb-6">
             <h1 className="ui-h1 break-words">
-              {detail.team.name} <span className="text-[#7c3aed]">DETAYI</span>
+              {detail.team.name} <span className="text-[color:var(--peaker-ui-PRIMARY)]">DETAYI</span>
             </h1>
             <p className="ui-lead">Takımdaki sporcular ve dağılım özeti.</p>
           </header>
 
           <section className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.25rem] border border-white/5 bg-[#121215] p-4 text-center">
+            <div className="rounded-[1.25rem] ui-card p-4 text-center">
               <p className="text-[9px] font-black uppercase text-gray-500">Toplam Sporcu</p>
               <p className="mt-2 text-2xl font-black italic text-white">{detail.summary.total}</p>
             </div>
-            <div className="rounded-[1.25rem] border border-emerald-500/20 bg-[#121215] p-4 text-center">
+            <div className="rounded-[1.25rem] border border-emerald-500/20 ui-card p-4 text-center">
               <p className="text-[9px] font-black uppercase text-gray-500">Aktif</p>
               <p className="mt-2 text-2xl font-black italic text-emerald-400">{detail.summary.activeCount}</p>
             </div>
-            <div className="rounded-[1.25rem] border border-amber-500/20 bg-[#121215] p-4 text-center">
+            <div className="rounded-[1.25rem] border border-amber-500/20 ui-card p-4 text-center">
               <p className="text-[9px] font-black uppercase text-gray-500">Pasif</p>
               <p className="mt-2 text-2xl font-black italic text-amber-400">{detail.summary.inactiveCount}</p>
             </div>
           </section>
 
-          <section className="mt-6 rounded-[1.5rem] border border-white/5 bg-[#121215] p-5">
+          <section className="mt-6 rounded-[1.5rem] ui-card p-5">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Pozisyon Dağılımı</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {positionRows.length === 0 ? (
                 <span className="text-[10px] font-black uppercase text-gray-600">Kayit yok</span>
               ) : (
                 positionRows.map(([position, count]) => (
-                  <span key={position} className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[10px] font-black uppercase text-gray-300">
+                  <span key={position} className="rounded-lg px-3 py-2 text-[10px] font-black uppercase text-gray-300">
                     {position}: {count}
                   </span>
                 ))
@@ -134,17 +134,17 @@ export default function TeamDetailPage() {
             </div>
           </section>
 
-          <section className="mt-6 rounded-[1.5rem] border border-white/5 bg-[#121215] p-5">
+          <section className="mt-6 rounded-[1.5rem] ui-card p-5">
             <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Takım Sporcuları</p>
             {detail.athletes.length === 0 ? (
-              <div className="rounded-xl border border-white/5 bg-black/20 p-6 text-center">
+              <div className="rounded-xl ui-card-inner p-6 text-center">
                 <Users size={28} className="mx-auto mb-3 text-gray-700" aria-hidden />
                 <p className="text-[10px] font-black uppercase text-gray-500">Bu takimda sporcu yok.</p>
               </div>
             ) : (
               <div className="grid gap-2">
                 {detail.athletes.map((athlete) => (
-                  <div key={athlete.id} className="flex min-w-0 items-center justify-between rounded-xl border border-white/5 bg-black/20 px-4 py-3">
+                  <div key={athlete.id} className="flex min-w-0 items-center justify-between rounded-xl ui-card-inner px-4 py-3">
                     <div className="min-w-0">
                       <p className="break-words text-sm font-black italic text-white">{athlete.fullName}</p>
                       <p className="text-[10px] font-black uppercase text-gray-500">
@@ -180,7 +180,7 @@ export default function TeamDetailPage() {
             )}
           </section>
           {detail.canManageTeamMembers ? (
-            <section className="mt-6 rounded-[1.5rem] border border-white/5 bg-[#121215] p-5">
+            <section className="mt-6 rounded-[1.5rem] ui-card p-5">
               <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Takıma Sporcu Ekle</p>
               {detail.availableAthletes.length === 0 ? (
                 <p className="text-[10px] font-black uppercase text-gray-500">Eklenebilecek sporcu yok.</p>

@@ -13,6 +13,8 @@ import {
   type WellnessRadarRow,
 } from "@/lib/actions/wellnessFormActions";
 import { HardNavLink } from "@/components/navigation/HardNavLink";
+import { ChartNoData } from "@/components/ui/charts";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 export default function PerformanceRadar() {
   const [reports, setReports] = useState<WellnessRadarRow[]>([]);
@@ -82,22 +84,22 @@ export default function PerformanceRadar() {
 
   if (loading) {
     return (
-      <div className="h-[180px] w-full min-w-0 animate-pulse rounded-xl border border-white/5 bg-[#121215]" />
+      <div
+        className={`${uiBrandingClasses.chart.shell} ${uiBrandingClasses.skeleton.pulse} h-[180px] w-full min-w-0 rounded-xl border border-white/5`}
+      />
     );
   }
 
   if (!hasData) {
     return (
-      <div className="flex h-[180px] w-full min-w-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 px-4 text-center">
-        <TrendingUp className="mb-3 text-[#7c3aed]/40" size={28} aria-hidden />
-        <p className="text-xs font-black uppercase italic text-gray-300">Henüz yeterli veri yok</p>
-        <p className="mt-2 max-w-xs text-[11px] font-bold text-gray-500">
+      <div
+        className={`${uiBrandingClasses.chart.shell} flex h-[180px] w-full min-w-0 flex-col items-center justify-center gap-2 px-4`}
+      >
+        <ChartNoData label="Henüz yeterli veri yok" />
+        <p className="ui-empty-state__description max-w-xs text-center text-[11px] font-bold">
           İyi oluş raporu girdikçe beceri radarı ve performans analizi oluşur.
         </p>
-        <HardNavLink
-          href="/sporcu/sabah-raporu"
-          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
-        >
+        <HardNavLink href="/sporcu/sabah-raporu" className="ui-empty-state__action">
           Sabah raporu gir
         </HardNavLink>
       </div>
@@ -105,32 +107,34 @@ export default function PerformanceRadar() {
   }
 
   return (
-    <div className="w-full min-w-0 rounded-xl border border-white/5 bg-[#121215] p-3 sm:p-4">
+    <div className={`${uiBrandingClasses.chart.shell} w-full min-w-0 rounded-xl border border-white/5 p-3 sm:p-4`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-sm font-black uppercase italic tracking-tight text-white">
             Performans Analizi
           </h3>
-          <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#7c3aed]">
-            Son 14 gün iyi oluş verisi
-          </p>
+          <p className={uiBrandingClasses.kpi.cardTrend}>Son 14 gün iyi oluş verisi</p>
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#7c3aed]/20 bg-[#7c3aed]/10 text-[#7c3aed]">
+        <div
+          className={`${uiBrandingClasses.kpi.chipBrand} flex h-9 w-9 shrink-0 items-center justify-center !min-h-0 !p-0 text-[color:var(--peaker-ui-PRIMARY)]`}
+        >
           <TrendingUp size={18} aria-hidden />
         </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {data.map((item) => (
-          <div key={item.subject} className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-center">
-            <dt className="text-[8px] font-black uppercase tracking-wide text-gray-500">{item.subject}</dt>
-            <dd className="text-lg font-black tabular-nums text-white">{item.A}</dd>
+          <div key={item.subject} className={uiBrandingClasses.kpi.card}>
+            <dt className={`${uiBrandingClasses.kpi.cardLabel} text-[8px] tracking-wide`}>{item.subject}</dt>
+            <dd className={`${uiBrandingClasses.kpi.cardValue} text-lg`}>{item.A}</dd>
           </div>
         ))}
       </dl>
 
       {showChart ? (
-        <div className="ui-chart-shell ui-chart-shell--passive mt-3 h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]">
+        <div
+          className={`${uiBrandingClasses.chart.shell} ${uiBrandingClasses.chart.shellPassive} mt-3 h-[min(38vw,9rem)] min-h-[120px] w-full sm:h-[140px]`}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
               <PolarGrid stroke="#ffffff10" strokeDasharray="3 3" />
@@ -146,9 +150,9 @@ export default function PerformanceRadar() {
               <Radar
                 name="Sporcu"
                 dataKey="A"
-                stroke="#7c3aed"
+                stroke="var(--peaker-ui-PRIMARY)"
                 strokeWidth={2}
-                fill="#7c3aed"
+                fill="var(--peaker-ui-PRIMARY)"
                 fillOpacity={0.28}
                 animationBegin={120}
                 animationDuration={900}
@@ -157,11 +161,7 @@ export default function PerformanceRadar() {
           </ResponsiveContainer>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => setShowChart(true)}
-          className="mt-3 min-h-10 w-full touch-manipulation rounded-xl border border-white/10 bg-white/[0.03] px-4 text-[10px] font-black uppercase text-gray-400"
-        >
+        <button type="button" onClick={() => setShowChart(true)} className="ui-btn-ghost mt-3 min-h-10 w-full">
           Radar grafiğini göster
         </button>
       )}

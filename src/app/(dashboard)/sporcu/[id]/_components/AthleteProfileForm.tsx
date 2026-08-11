@@ -1,10 +1,12 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Droplets, Heart, ShieldCheck, Target } from "lucide-react";
 import Notification from "@/components/Notification";
-import { MetricBadge } from "./AthleteDetailPrimitives";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import type { ProfileBasic } from "@/types/domain";
+
+const INPUT_CLASS = uiBrandingClasses.form.input;
 
 /**
  * Faz 7.7 — Sporcu profili (kimlik kartı + edit formu).
@@ -46,47 +48,60 @@ export function AthleteProfileForm({
   return (
     <section
       id="sporcu-profil"
-      className="bg-[#121215] border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl relative overflow-hidden group min-w-0"
+      className={`${uiBrandingClasses.card.base} group relative min-w-0 overflow-hidden rounded-2xl p-5 shadow-xl md:rounded-3xl md:p-7`}
     >
-      <div className="flex flex-col xl:flex-row gap-6 md:gap-8 items-center relative z-10">
-        <div className="flex h-24 w-24 shrink-0 transform items-center justify-center rounded-2xl border-2 border-white/10 bg-gradient-to-br from-[#7c3aed] to-[#2e1065] text-3xl font-black italic text-white shadow-lg shadow-[#7c3aed]/15 transition-transform duration-500 sm:h-28 sm:w-28 sm:text-4xl md:rounded-3xl sm:group-hover:rotate-2">
+      <div className="relative z-10 flex flex-col items-center gap-6 md:gap-8 xl:flex-row">
+        <div
+          className="flex h-24 w-24 shrink-0 transform items-center justify-center rounded-2xl border-2 border-white/5 bg-gradient-to-br from-[color:var(--peaker-ui-PRIMARY)] to-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,#000)] text-3xl font-black italic text-white shadow-lg transition-transform duration-500 sm:h-28 sm:w-28 sm:text-4xl md:rounded-3xl sm:group-hover:rotate-2"
+          style={{
+            boxShadow:
+              "0 10px 15px -3px color-mix(in srgb, var(--peaker-ui-PRIMARY) 15%, transparent)",
+          }}
+        >
           {player.full_name?.substring(0, 1).toUpperCase()}
         </div>
 
-        <div className="flex-1 space-y-4 text-center xl:text-left min-w-0">
+        <div className="min-w-0 flex-1 space-y-4 text-center xl:text-left">
           <div>
-            <div className="flex flex-wrap justify-center xl:justify-start items-center gap-2 mb-2">
+            <div className="mb-2 flex flex-wrap items-center justify-center gap-2 xl:justify-start">
               <span
-                className={`rounded-full border px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest italic ${
+                className={`rounded-full border px-2.5 py-0.5 text-[8px] font-black uppercase italic tracking-widest ${
                   player.team?.trim()
-                    ? "border-white/10 bg-white/10 text-white"
-                    : "border-amber-500/35 bg-amber-500/15 text-amber-200"
+                    ? `${uiBrandingClasses.badge.neutral} border-white/10`
+                    : `${uiBrandingClasses.badge.warning} border-amber-500/35`
                 }`}
               >
                 {player.team?.trim() ? player.team : "Takım belirtilmedi"}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black italic text-white uppercase tracking-tight leading-tight break-words">
-              <span className="block sm:inline break-words">{player.full_name?.split(" ")[0]}</span>
+            <h1 className={`${uiBrandingClasses.typography.h1} break-words text-2xl sm:text-3xl md:text-4xl`}>
+              <span className="block break-words sm:inline">{player.full_name?.split(" ")[0]}</span>
               {player.full_name?.includes(" ") ? (
                 <>
                   {" "}
-                  <span className="text-[#7c3aed] break-words">{player.full_name?.split(" ").slice(1).join(" ")}</span>
+                  <span className="break-words text-[color:var(--peaker-ui-PRIMARY)]">
+                    {player.full_name?.split(" ").slice(1).join(" ")}
+                  </span>
                 </>
               ) : null}
             </h1>
           </div>
 
-          <div className="flex flex-wrap justify-center xl:justify-start gap-2">
-            <MetricBadge
+          <div className="flex flex-wrap justify-center gap-2 xl:justify-start">
+            <AthleteMetricChip
               icon={<Target size={14} />}
               label="MEVKI"
               val={player.position ? player.position : "MEVKİ BELİRTİLMEDİ"}
-              color={player.position ? "text-white" : "text-amber-300"}
+              valueClass={player.position ? "text-white" : "text-amber-300"}
             />
-            <MetricBadge icon={<ShieldCheck size={14} />} label="BOY" val={`${player.height || "--"} CM`} />
-            <MetricBadge icon={<Heart size={14} />} label="AĞIRLIK" val={`${player.weight || "--"} KG`} />
-            <MetricBadge icon={<Droplets size={14} />} label="FORMA" val={`#${player.number || "--"}`} color="text-[#7c3aed]" />
+            <AthleteMetricChip icon={<ShieldCheck size={14} />} label="BOY" val={`${player.height || "--"} CM`} />
+            <AthleteMetricChip icon={<Heart size={14} />} label="AĞIRLIK" val={`${player.weight || "--"} KG`} />
+            <AthleteMetricChip
+              icon={<Droplets size={14} />}
+              label="FORMA"
+              val={`#${player.number || "--"}`}
+              valueClass={uiBrandingClasses.kpi.cardTrend}
+            />
           </div>
 
           <form onSubmit={onSubmit} className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
@@ -94,14 +109,14 @@ export function AthleteProfileForm({
               value={profileDraft.fullName}
               onChange={(e) => onDraftChange({ fullName: e.target.value })}
               placeholder="Ad soyad"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed] sm:col-span-2"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black sm:col-span-2`}
             />
             <input
               value={profileDraft.team}
               onChange={(e) => onDraftChange({ team: e.target.value.toUpperCase() })}
               list="athlete-team-options"
               placeholder="Takım (opsiyonel)"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black uppercase`}
             />
             <datalist id="athlete-team-options">
               {teamOptions.map((t) => (
@@ -113,13 +128,13 @@ export function AthleteProfileForm({
               onChange={(e) => onDraftChange({ position: e.target.value.toUpperCase() })}
               list="athlete-position-options"
               placeholder="Pozisyon güncelle (opsiyonel)"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black uppercase`}
             />
             <input
               value={profileDraft.number}
               onChange={(e) => onDraftChange({ number: e.target.value.toUpperCase() })}
               placeholder="Forma no (opsiyonel)"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black uppercase text-white outline-none focus:border-[#7c3aed]"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black uppercase`}
             />
             <input
               type="number"
@@ -128,7 +143,7 @@ export function AthleteProfileForm({
               value={profileDraft.height}
               onChange={(e) => onDraftChange({ height: e.target.value })}
               placeholder="Boy (cm)"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed]"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black`}
             />
             <input
               type="number"
@@ -137,7 +152,7 @@ export function AthleteProfileForm({
               value={profileDraft.weight}
               onChange={(e) => onDraftChange({ weight: e.target.value })}
               placeholder="Kilo (kg)"
-              className="min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs font-black text-white outline-none focus:border-[#7c3aed]"
+              className={`${INPUT_CLASS} min-h-11 px-4 py-3 text-xs font-black`}
             />
             <datalist id="athlete-position-options">
               {positionOptions.map((p) => (
@@ -147,7 +162,7 @@ export function AthleteProfileForm({
             <button
               type="submit"
               disabled={updatingPosition}
-              className="min-h-11 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase text-white disabled:opacity-60 sm:hover:bg-[#6d28d9] sm:col-span-2 sm:w-fit"
+              className={`${uiBrandingClasses.button.primary} min-h-11 px-4 py-3 text-[10px] sm:col-span-2 sm:w-fit`}
             >
               {updatingPosition ? "Güncelleniyor..." : "Profili Kaydet"}
             </button>
@@ -168,9 +183,40 @@ export function AthleteProfileForm({
         </div>
       </div>
 
-      <div className="absolute top-0 right-0 w-[280px] h-[280px] md:w-[360px] md:h-[360px] bg-[#7c3aed]/10 blur-[100px] -z-0 pointer-events-none rounded-full" />
+      <div
+        className="pointer-events-none absolute -z-0 right-0 top-0 h-[280px] w-[280px] rounded-full blur-[100px] md:h-[360px] md:w-[360px]"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--peaker-ui-PRIMARY) 10%, transparent)",
+        }}
+      />
     </section>
   );
 }
 
 export default AthleteProfileForm;
+
+function AthleteMetricChip({
+  icon,
+  label,
+  val,
+  valueClass = "text-white",
+}: {
+  icon: ReactNode;
+  label: string;
+  val: string;
+  valueClass?: string;
+}) {
+  return (
+    <div
+      className={`${uiBrandingClasses.kpi.chip} group/m flex min-w-0 items-center gap-2.5 !py-2.5 shadow-md transition-all sm:hover:border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] sm:hover:bg-[color-mix(in_srgb,var(--peaker-ui-SURFACE)_40%,#000)]`}
+    >
+      <span className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)] transition-transform sm:group-hover/m:scale-105">
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className={`${uiBrandingClasses.kpi.cardLabel} text-[7px] tracking-wider`}>{label}</span>
+        <span className={`${valueClass} break-words text-xs font-black italic tracking-tight sm:text-sm`}>{val}</span>
+      </div>
+    </div>
+  );
+}

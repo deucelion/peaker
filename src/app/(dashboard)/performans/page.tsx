@@ -12,7 +12,8 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { ChartFrame } from "@/components/ui/charts";
+import { ChartFrame, ChartNoData } from "@/components/ui/charts";
+import EmptyState from "@/components/ui/EmptyState";
 import {
   Activity,
   TrendingUp,
@@ -42,7 +43,6 @@ import type { AcwrPoint, AthleteOption, EwmaPoint, TrainingLoadRow, WellnessRepo
 import { profileRowIsActive } from "@/lib/coach/lifecycle";
 import {
   AcwrChartTooltip,
-  ChartEmptyState,
   CompactKpi,
   EwmaChartTooltip,
   OverallStatusBar,
@@ -70,6 +70,7 @@ import {
 import { hasPerformanceDataInRange } from "@/lib/pdf/prepareAthletePerformancePdf";
 import { isValidPdfChartImage } from "@/lib/pdf/pdfFormat";
 import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { pdfTaskErrorMessage } from "@/lib/pdf/pdfActionErrorMessage";
 import { captureSvgChartPng } from "@/lib/pdf/chartSnapshot";
 import { addCalendarDaysToYyyyMmDd } from "@/lib/performance/performanceDateRange";
 import {
@@ -87,7 +88,7 @@ import { PerformanceOrgSummaryBand } from "@/components/performance/PerformanceO
 import { PerformanceTeamListView } from "@/components/performance/PerformanceTeamListView";
 import { PartialDataNotice } from "@/components/performance/PartialDataNotice";
 import { PerformanceExportHint } from "@/components/performance/PerformanceExportHint";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
@@ -179,19 +180,7 @@ export default function PerformanceAnalytics() {
   const [dailyReports, setDailyReports] = useState<Array<{ profile_id?: string | null; rpe_score?: number }>>([]);
   // FAZ 32: sunucu tarafindaki sporcu hard-cap kesintisi gorunur uyariya baglanir.
   const [capWarning, setCapWarning] = useState<{ cap: number; total: number } | null>(null);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
 
   const showPerformanceCsvExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.performanceSummaryCsv, {
     roleAllowed: true,
@@ -520,16 +509,16 @@ export default function PerformanceAnalytics() {
       <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start min-w-0">
         <div className="min-w-0 space-y-2">
           <h1 className="ui-h1">
-            Performans <span className="text-[#7c3aed]">Merkezi</span>
+            Performans <span className="text-[color:var(--peaker-ui-PRIMARY)]">Merkezi</span>
           </h1>
           <p className="ui-lead break-words text-gray-400">
             Karar desteği: risk, yük dengesi ve öneriler — organizasyon takvimine göre seçili dönem.
           </p>
-          <p className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400">
-            <CalendarRange size={12} className="text-[#7c3aed] shrink-0" aria-hidden />
+          <p className="inline-flex flex-wrap items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400">
+            <CalendarRange size={12} className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" aria-hidden />
             <span className="text-white/90">{periodBadge}</span>
             <span
-              className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[8px] font-black tracking-wider text-gray-300"
+              className="rounded-md ui-btn-ghost px-1.5 py-0.5 text-[8px] font-black tracking-wider text-gray-300"
               title="Organizasyonun saat dilimi. Tüm dönem hesaplamaları bu takvime göre yapılır."
             >
               {orgTimeZone}
@@ -540,7 +529,7 @@ export default function PerformanceAnalytics() {
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0 lg:items-center">
           <div className="relative w-full sm:w-72 min-w-0">
             <select
-              className="ui-select w-full min-h-11 bg-[#121215] border-white/5 px-5 rounded-2xl italic text-base sm:text-[10px] uppercase appearance-none cursor-pointer tracking-wide sm:tracking-widest shadow-xl touch-manipulation"
+              className="ui-select w-full min-h-11 px-5 rounded-2xl italic text-base sm:text-[10px] uppercase appearance-none cursor-pointer tracking-wide sm:tracking-widest shadow-xl touch-manipulation"
               onChange={(e) => setSelectedAthleteId(e.target.value)}
               value={selectedAthleteId}
               aria-label="Sporcu seçin"
@@ -554,14 +543,14 @@ export default function PerformanceAnalytics() {
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-[#7c3aed]" aria-hidden />
+            <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
           </div>
           <button
             type="button"
             onClick={() => void fetchData()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-[#7c3aed]/40 hover:text-white touch-manipulation"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl ui-btn-ghost px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] hover:text-white touch-manipulation"
           >
-            <Loader2 className={`size-3.5 shrink-0 ${loading ? "animate-spin text-[#7c3aed]" : "opacity-60"}`} aria-hidden />
+            <Loader2 className={`size-3.5 shrink-0 ${loading ? "animate-spin text-[color:var(--peaker-ui-PRIMARY)]" : "opacity-60"}`} aria-hidden />
             Yenile
           </button>
           {showPerformanceCsvExportUi ? (
@@ -599,7 +588,7 @@ export default function PerformanceAnalytics() {
                 setExportBusy(false);
               }
             }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 touch-manipulation"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl ui-btn-ghost px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 touch-manipulation"
             aria-label="Performans özetini CSV olarak indir"
           >
             {exportBusy ? (
@@ -679,17 +668,17 @@ export default function PerformanceAnalytics() {
                 if (err instanceof PerformancePdfNoDataError) {
                   setExportFeedback({ tone: "err", text: err.message });
                 } else {
-                  setExportFeedback({ tone: "err", text: "PDF oluşturulamadı." });
+                  setExportFeedback({ tone: "err", text: pdfTaskErrorMessage(err, "PDF oluşturulamadı.") });
                 }
               } finally {
                 setPdfExportBusy(false);
               }
             }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-[#7c3aed]/40 hover:text-white disabled:opacity-50 touch-manipulation"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl ui-btn-ghost px-4 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] hover:text-white disabled:opacity-50 touch-manipulation"
             aria-label="ACWR EWMA analiz PDF indir"
           >
             {pdfExportBusy ? (
-              <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+              <Loader2 className="size-3.5 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
             ) : (
               <FileText size={12} className="opacity-80" aria-hidden />
             )}
@@ -699,13 +688,7 @@ export default function PerformanceAnalytics() {
       </header>
       {exportFeedback ? (
         <p
-          className={`mt-2 text-[10px] font-black uppercase tracking-widest ${
-            exportFeedback.tone === "err"
-              ? "text-red-300"
-              : exportFeedback.tone === "warn"
-                ? "text-amber-200"
-                : "text-emerald-300"
-          }`}
+          className={`mt-2 text-[10px] font-black uppercase tracking-widest ${ exportFeedback.tone === "err" ? "text-red-300" : exportFeedback.tone === "warn" ? "text-amber-200" : "text-emerald-300" }`}
           role="status"
         >
           {exportFeedback.text}
@@ -727,16 +710,14 @@ export default function PerformanceAnalytics() {
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <PerformanceTabsNav activeKey="yuk" className="!static !mx-0 !bg-transparent !p-0 !backdrop-blur-none flex-1" sticky={false} />
-        <div className="flex rounded-full border border-white/10 bg-white/[0.03] p-0.5">
+        <div className="flex rounded-full bg-white/[0.03] p-0.5">
           <button
             type="button"
             onClick={() => {
               setViewMode("chart");
               savePerformancePreferences({ viewMode: "chart" });
             }}
-            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${
-              viewMode === "chart" ? "bg-[#7c3aed]/20 text-[#c4b5fd]" : "text-gray-400"
-            }`}
+            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${ viewMode === "chart" ? "ui-kpi-chip--brand ui-kpi-card__trend" : "text-gray-400" }`}
           >
             Grafik
           </button>
@@ -746,9 +727,7 @@ export default function PerformanceAnalytics() {
               setViewMode("team");
               savePerformancePreferences({ viewMode: "team" });
             }}
-            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${
-              viewMode === "team" ? "bg-[#7c3aed]/20 text-[#c4b5fd]" : "text-gray-400"
-            }`}
+            className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase ${ viewMode === "team" ? "ui-kpi-chip--brand ui-kpi-card__trend" : "text-gray-400" }`}
           >
             Takım listesi
           </button>
@@ -770,14 +749,14 @@ export default function PerformanceAnalytics() {
       <div className="mt-2 flex flex-wrap items-center gap-3 text-[9px] font-bold uppercase tracking-wide text-gray-500">
         <span>
           Bugün {dailyReports.length} RPE girişi ·{" "}
-          <Link href={PATHS.idmanRaporu} className="text-[#c4b5fd] hover:text-white">
+          <Link href={PATHS.idmanRaporu} className="ui-kpi-card__trend hover:text-white">
             İdman raporunu aç
           </Link>
         </span>
         {selectedAthleteId ? (
           <Link
             href={hrefAthleteDetailWithRange(selectedAthleteId, { from: "performans", hash: "performans-analitigi", range: appliedPreset ?? "28" })}
-            className="text-[#c4b5fd] hover:text-white"
+            className="ui-kpi-card__trend hover:text-white"
           >
             Sporcu detayında aç →
           </Link>
@@ -786,7 +765,7 @@ export default function PerformanceAnalytics() {
       <PerformanceExportHint scope="performans" className="mt-2" />
 
       <section
-        className="mt-5 rounded-2xl border border-white/8 bg-[#121215]/80 p-4 sm:p-5 space-y-4 min-w-0"
+        className="mt-5 rounded-2xl ui-card opacity-80 p-4 sm:p-5 space-y-4 min-w-0"
         aria-label="Dönem filtresi"
       >
         <div className="flex flex-wrap gap-2">
@@ -806,11 +785,7 @@ export default function PerformanceAnalytics() {
                 setRangeMode("preset");
                 setDraftPreset(k);
               }}
-              className={`min-h-9 rounded-xl border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide touch-manipulation ${
-                rangeMode === "preset" && draftPreset === k
-                  ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                  : "border-white/10 bg-black/30 text-gray-500 hover:text-gray-300"
-              }`}
+              className={`min-h-9 rounded-xl border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide touch-manipulation ${ rangeMode === "preset" && draftPreset === k ? "ui-tabs-nav__tab--active text-white" : "ui-kpi-band text-gray-500 hover:text-gray-300" }`}
             >
               {label}
             </button>
@@ -822,11 +797,7 @@ export default function PerformanceAnalytics() {
               setDraftFrom(appliedFrom);
               setDraftTo(appliedTo);
             }}
-            className={`min-h-9 rounded-xl border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide touch-manipulation ${
-              rangeMode === "custom"
-                ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                : "border-white/10 bg-black/30 text-gray-500 hover:text-gray-300"
-            }`}
+            className={`min-h-9 rounded-xl border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide touch-manipulation ${ rangeMode === "custom" ? "ui-tabs-nav__tab--active text-white" : "ui-kpi-band text-gray-500 hover:text-gray-300" }`}
           >
             Özel aralık
           </button>
@@ -841,7 +812,7 @@ export default function PerformanceAnalytics() {
                   type="date"
                   value={draftFrom}
                   onChange={(e) => setDraftFrom(e.target.value)}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-xs text-white"
+                  className="min-h-10 rounded-xl px-3 text-xs text-white"
                 />
               </label>
               <label className="flex flex-col gap-1 text-[8px] font-black uppercase text-gray-500 tracking-widest min-w-[140px]">
@@ -850,7 +821,7 @@ export default function PerformanceAnalytics() {
                   type="date"
                   value={draftTo}
                   onChange={(e) => setDraftTo(e.target.value)}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-xs text-white"
+                  className="min-h-10 rounded-xl px-3 text-xs text-white"
                 />
               </label>
             </div>
@@ -864,14 +835,14 @@ export default function PerformanceAnalytics() {
           <button
             type="button"
             onClick={() => applyFilters()}
-            className="min-h-10 rounded-xl bg-[#7c3aed] px-5 text-[10px] font-black uppercase tracking-widest text-white hover:bg-[#6d28d9] touch-manipulation"
+            className="min-h-10 rounded-xl ui-btn-primary px-5 text-[10px] font-black uppercase tracking-widest text-white hover:opacity-90 touch-manipulation"
           >
             Filtreleri uygula
           </button>
           <button
             type="button"
             onClick={() => resetFilters()}
-            className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white touch-manipulation"
+            className="inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-white touch-manipulation"
           >
             <RotateCcw size={14} aria-hidden />
             Sıfırla
@@ -893,7 +864,7 @@ export default function PerformanceAnalytics() {
 
       {loading && (
         <div className="mt-4 flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500">
-          <Loader2 className="animate-spin text-[#7c3aed]" size={16} aria-hidden />
+          <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={16} aria-hidden />
           Veriler güncelleniyor...
         </div>
       )}
@@ -1014,12 +985,12 @@ export default function PerformanceAnalytics() {
         <div className="lg:col-span-6 ui-card-chart group min-w-0 !p-5 sm:!p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-10 min-w-0">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em] sm:tracking-[0.4em] flex flex-wrap items-center gap-2 sm:gap-3 italic min-w-0">
-              <TrendingUp size={16} className="shrink-0 text-[#7c3aed]" aria-hidden /> <span className="break-words">Yük Dengesi Analizi</span>
+              <TrendingUp size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> <span className="break-words">Yük Dengesi Analizi</span>
             </h3>
             <div className="flex flex-col gap-1 text-[8px] font-black uppercase text-gray-600 tracking-wide sm:tracking-widest">
               <div className="flex flex-wrap gap-2 sm:gap-4 italic">
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-[#7c3aed]" /> Akut (7G)
+                  <span className="h-2 w-2 rounded-full ui-btn-primary" /> Akut (7G)
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-gray-700" /> Kronik (28G)
@@ -1035,17 +1006,17 @@ export default function PerformanceAnalytics() {
           </div>
 
           {acwrData.length === 0 ? (
-            <div className="w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
-              <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
+            <div className="ui-chart-shell w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
+              <ChartNoData label="Veri yok — idman raporu girildiğinde oluşur." />
             </div>
           ) : (
-            <div ref={acwrChartRef} className="min-w-0">
+            <div ref={acwrChartRef} className="ui-chart-shell min-w-0">
             <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
               <ComposedChart data={acwrData}>
                   <defs>
                     <linearGradient id="colorAkut" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--peaker-ui-PRIMARY)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--peaker-ui-PRIMARY)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <ReferenceArea yAxisId="ratio" y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.1} />
@@ -1093,7 +1064,7 @@ export default function PerformanceAnalytics() {
                     yAxisId="load"
                     type="monotone"
                     dataKey="akut"
-                    stroke="#7c3aed"
+                    stroke="var(--peaker-ui-PRIMARY)"
                     strokeWidth={4}
                     fillOpacity={1}
                     fill="url(#colorAkut)"
@@ -1109,12 +1080,12 @@ export default function PerformanceAnalytics() {
         <div className="lg:col-span-6 ui-card-chart group min-w-0 !p-5 sm:!p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-10 min-w-0">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em] sm:tracking-[0.4em] flex flex-wrap items-center gap-2 sm:gap-3 italic min-w-0">
-              <Waves size={16} className="shrink-0 text-[#7c3aed]" aria-hidden /> <span className="break-words">EWMA Yük Trendi</span>
+              <Waves size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> <span className="break-words">EWMA Yük Trendi</span>
             </h3>
             <div className="flex flex-col gap-1 text-[8px] font-black uppercase text-gray-600 tracking-wide sm:tracking-widest">
               <div className="flex flex-wrap gap-2 sm:gap-4 italic">
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-[#7c3aed]" /> Acute EWMA
+                  <span className="h-2 w-2 rounded-full ui-btn-primary" /> Acute EWMA
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-gray-700" /> Chronic EWMA
@@ -1130,11 +1101,11 @@ export default function PerformanceAnalytics() {
           </div>
 
           {ewmaData.length === 0 ? (
-            <div className="w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
-              <ChartEmptyState message="Veri yok — idman raporu girildiğinde oluşur." />
+            <div className="ui-chart-shell w-full min-w-0 min-h-[140px] sm:min-h-[160px]">
+              <ChartNoData label="Veri yok — idman raporu girildiğinde oluşur." />
             </div>
           ) : (
-            <div ref={ewmaChartRef} className="min-w-0">
+            <div ref={ewmaChartRef} className="ui-chart-shell min-w-0">
             <ChartFrame heightClassName="h-[220px] sm:h-[280px] lg:h-[320px]">
               <ComposedChart data={ewmaData}>
                   <ReferenceArea yAxisId="ratio" y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.08} />
@@ -1178,7 +1149,7 @@ export default function PerformanceAnalytics() {
                     strokeDasharray="6 4"
                     label={{ position: "right", value: "1.5 risk", fill: "#fca5a5", fontSize: 9 }}
                   />
-                  <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="#7c3aed" strokeWidth={3} dot={false} />
+                  <Line yAxisId="load" type="monotone" dataKey="acuteEwma" stroke="var(--peaker-ui-PRIMARY)" strokeWidth={3} dot={false} />
                   <Line yAxisId="load" type="monotone" dataKey="chronicEwma" stroke="#374151" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                   <Line yAxisId="ratio" type="monotone" dataKey="ewmaRatio" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
@@ -1189,7 +1160,7 @@ export default function PerformanceAnalytics() {
 
         <div className="lg:col-span-12 ui-card-chart flex flex-col min-w-0 !p-5 sm:!p-8">
           <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em] sm:tracking-[0.4em] mb-6 sm:mb-8 flex flex-wrap items-center gap-2 sm:gap-3 italic min-w-0">
-            <Moon size={16} className="shrink-0 text-[#7c3aed]" aria-hidden /> <span className="break-words">Son Wellness Raporları</span>
+            <Moon size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden /> <span className="break-words">Son Wellness Raporları</span>
           </h3>
 
           <div className="space-y-4 flex-1 overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar min-w-0">
@@ -1199,7 +1170,7 @@ export default function PerformanceAnalytics() {
               return (
                 <div
                   key={report.id}
-                  className="flex min-w-0 flex-col gap-3 rounded-[1.5rem] border border-white/5 bg-white/[0.02] p-4 transition-all sm:rounded-[2rem] sm:p-5 sm:hover:bg-[#7c3aed]/5 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex min-w-0 flex-col gap-3 rounded-[1.5rem] bg-white/[0.02] p-4 transition-all sm:rounded-[2rem] sm:p-5 sm:hover:ui-kpi-band sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-black italic uppercase text-white tracking-tight break-words">{prof?.full_name}</p>
@@ -1219,7 +1190,7 @@ export default function PerformanceAnalytics() {
                           ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
                           : fatigue.tone === "good"
                             ? "bg-green-500/10 text-green-500 border-green-500/20"
-                            : "bg-white/5 text-gray-500 border-white/10";
+                            : "ui-badge-neutral";
                     return (
                       <div className={`text-[9px] font-black py-2 px-3 rounded-xl border shrink-0 self-start sm:self-auto ${shell}`}>
                         {fatigue.label}
@@ -1230,13 +1201,15 @@ export default function PerformanceAnalytics() {
               );
             })}
             {wellnessReports.length === 0 && (
-              <div className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/10 px-3 py-6 text-center">
-                <Moon size={22} className="text-gray-600" aria-hidden />
-                <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Bu dönemde wellness raporu yok</p>
-                <p className="text-[8px] font-bold text-gray-600 max-w-md leading-relaxed">
-                  Sabah raporu girildiğinde liste ve readiness güncellenir.
-                </p>
-              </div>
+              <EmptyState
+                variant="no_data"
+                bare
+                compact
+                hideIcon
+                className="min-h-[100px] rounded-xl border border-dashed px-3 py-6"
+                title="Bu dönemde wellness raporu yok"
+                description="Sabah raporu girildiğinde liste ve readiness güncellenir."
+              />
             )}
           </div>
 
@@ -1245,7 +1218,7 @@ export default function PerformanceAnalytics() {
               athleteId: selectedAthleteId || undefined,
               athleteName: athletes.find((a) => a.id === selectedAthleteId)?.full_name,
             })}
-            className="mt-6 block min-h-12 w-full touch-manipulation rounded-2xl border border-white/5 bg-[#1c1c21] py-4 text-center text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 transition-all sm:mt-8 sm:py-5 sm:tracking-[0.3em] sm:hover:text-[#7c3aed]"
+            className="mt-6 block min-h-12 w-full touch-manipulation rounded-2xl py-4 text-center text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 transition-all sm:mt-8 sm:py-5 sm:tracking-[0.3em] sm:hover:text-[color:var(--peaker-ui-PRIMARY)]"
           >
             ARŞİVİ GÖRÜNTÜLE →
           </Link>
@@ -1253,14 +1226,14 @@ export default function PerformanceAnalytics() {
       </div>
 
       <section
-        className="mt-6 rounded-2xl border border-white/10 bg-[#121215]/90 p-4 sm:p-5 min-w-0"
+        className="mt-6 rounded-2xl ui-card opacity-90 p-4 sm:p-5 min-w-0"
         aria-label="Öneriler"
       >
         <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mb-3 flex items-center gap-2">
-          <Activity size={14} className="text-[#7c3aed]" aria-hidden />
+          <Activity size={14} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
           Öneriler
         </h3>
-        <ul className="space-y-2 text-[11px] sm:text-xs text-gray-300 leading-snug list-disc pl-4 marker:text-[#7c3aed]">
+        <ul className="space-y-2 text-[11px] sm:text-xs text-gray-300 leading-snug list-disc pl-4 marker:text-[color:var(--peaker-ui-PRIMARY)]">
           {performanceRecommendations.map((line, idx) => (
             <li key={`${idx}-${line.slice(0, 48)}`} className="pl-1">
               {line}

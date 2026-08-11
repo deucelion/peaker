@@ -48,7 +48,7 @@ function MobileLessonRowImpl({
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
+      className="w-full rounded-xl ui-card-inner p-3 text-left"
     >
       <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
         {item.sourceType === "group" ? "Grup Dersi" : "Özel Ders"} ·{" "}
@@ -91,7 +91,7 @@ function VirtualizedDayRows({
   return (
     <div
       ref={parentRef}
-      className="mt-3 max-h-[480px] overflow-y-auto rounded-xl border border-white/5 bg-black/15"
+      className="mt-3 max-h-[480px] overflow-y-auto rounded-xl border border-white/5 ui-card-inner"
       style={{ maxHeight: `${VIRTUAL_CONTAINER_MAX_HEIGHT}px` }}
       role="list"
       aria-label="Ders listesi (sanallaştırılmış)"
@@ -142,11 +142,11 @@ function WeeklyMobileListImpl({
         const rows = itemsByDay.get(dayKey) || [];
         const useVirtual = rows.length >= VIRTUALIZE_THRESHOLD;
         return (
-          <section key={dayIso} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+          <section key={dayIso} className="ui-card p-4">
             <h2 className="text-xs font-black uppercase tracking-wide text-white">
               {dayTitle(dayIso, appTz)}
               {rows.length > 0 ? (
-                <span className="ml-2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-white/80">
+                <span className="ml-2 rounded-md border border-white/5 ui-kpi-band px-1.5 py-0.5 text-[9px] font-bold text-white/80">
                   {rows.length} ders
                 </span>
               ) : null}

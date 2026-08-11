@@ -43,8 +43,8 @@ function AuthCallbackInner() {
   }, [router, searchParams]);
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-[#09090b] px-4 text-center">
-      <Loader2 className="h-10 w-10 animate-spin text-[#7c3aed]" aria-hidden />
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 ui-page px-4 text-center">
+      <Loader2 className="h-10 w-10 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
         {message ?? "Oturum dogrulaniyor..."}
       </p>
@@ -56,8 +56,8 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090b]">
-          <Loader2 className="h-10 w-10 animate-spin text-[#7c3aed]" aria-hidden />
+        <div className="flex min-h-[100dvh] items-center justify-center ui-page">
+          <Loader2 className="h-10 w-10 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
         </div>
       }
     >

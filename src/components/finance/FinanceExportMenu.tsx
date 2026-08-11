@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Download, Loader2 } from "lucide-react";
+import { OverlayMenu, OVERLAY_Z, overlayZIndex } from "@/components/ui/overlay";
 
 export type FinanceExportMenuItem = {
   id: string;
@@ -21,6 +22,7 @@ type Props = {
 export function FinanceExportMenu({ items, exporting = false, label = "Dışa aktar", className = "" }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = "finance-export-menu";
 
   useEffect(() => {
     if (!open) return;
@@ -48,6 +50,7 @@ export function FinanceExportMenu({ items, exporting = false, label = "Dışa ak
         disabled={exporting || enabledItems.length === 0}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
         className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300 hover:bg-white/5 disabled:opacity-50 sm:min-h-9"
       >
         {exporting ? (
@@ -60,9 +63,13 @@ export function FinanceExportMenu({ items, exporting = false, label = "Dışa ak
       </button>
       {open ? (
         <div
-          role="menu"
-          className="absolute right-0 z-40 mt-2 min-w-[14rem] overflow-hidden rounded-xl border border-white/10 bg-[#101013] py-1 shadow-2xl shadow-black/50"
+          className="absolute right-0 mt-2 min-w-[14rem]"
+          style={{ zIndex: overlayZIndex(OVERLAY_Z.BACKDROP) }}
         >
+          <OverlayMenu labelledBy={menuId} className="py-1 shadow-2xl shadow-black/50">
+          <p id={menuId} className="sr-only">
+            Dışa aktarma seçenekleri
+          </p>
           {enabledItems.map((item) => (
             <button
               key={item.id}
@@ -80,6 +87,7 @@ export function FinanceExportMenu({ items, exporting = false, label = "Dışa ak
               ) : null}
             </button>
           ))}
+          </OverlayMenu>
         </div>
       ) : null}
     </div>

@@ -8,6 +8,11 @@ import {
   serializeBranding,
 } from "./constants";
 import {
+  clearOrganizationBrandingProcessCacheForTests,
+  getOrganizationBrandingProcessCacheSizeForTests,
+  writeOrganizationBrandingProcessCache,
+} from "../runtime/processCache";
+import {
   createSupabaseOrganizationBrandingPersistencePort,
   getOrganizationBranding as readOrganizationBrandingPersistence,
   getOrganizationBrandingFromAdminClient,
@@ -200,6 +205,31 @@ describe("saveOrganizationBranding write contract", () => {
       expect(result.code).toBe("revision_conflict");
     }
     expect(rows.get("org-1")?.brandingRevision).toBe(5);
+  });
+
+  it("invalidates process cache on successful save", async () => {
+    const { port } = createMemoryOrganizationBrandingPort({
+      "org-1": {
+        branding: createDefaultBrandingJson(),
+        brandingRevision: 2,
+      },
+    });
+
+    writeOrganizationBrandingProcessCache("org-1", {
+      branding: createDefaultBranding(),
+      brandingRevision: 2,
+    });
+    expect(getOrganizationBrandingProcessCacheSizeForTests()).toBe(1);
+
+    const result = await saveOrganizationBranding(port, {
+      organizationId: "org-1",
+      branding: createDefaultBranding(),
+      expectedRevision: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(getOrganizationBrandingProcessCacheSizeForTests()).toBe(0);
+    clearOrganizationBrandingProcessCacheForTests();
   });
 });
 

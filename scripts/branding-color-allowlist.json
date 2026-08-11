@@ -1,0 +1,81 @@
+{
+  "version": 2,
+  "wave": 35,
+  "mode": "strict-documented-exceptions",
+  "description": "FAZ 35 Wave 2 — documented exceptions only. New hex outside these categories fails CI.",
+  "hexPatterns": [
+    "#7c3aed",
+    "#121215",
+    "#09090b",
+    "#6d28d9",
+    "#c4b5fd",
+    "#101013",
+    "#17171d"
+  ],
+  "documentedExceptionCategories": {
+    "cssVarFallbacks": {
+      "reason": "Tailwind var() fallbacks in globals.css token definitions",
+      "paths": [
+        "src/app/(dashboard)/globals.css"
+      ]
+    },
+    "canonicalDefaults": {
+      "reason": "Single source of truth for Peaker default theme tokens",
+      "paths": [
+        "src/lib/organization/branding/defaults.ts",
+        "src/lib/ui/branding/UI_CONTENT_THEME_VARS.ts"
+      ]
+    },
+    "layoutShellFreeze": {
+      "reason": "Layout/sidebar shell namespace — out of FAZ 34 content scope",
+      "paths": [
+        "src/lib/navigation/layoutThemeTokens.ts",
+        "src/app/layout.tsx"
+      ]
+    },
+    "parityTestFixtures": {
+      "reason": "Contract tests referencing default hex for parity assertions",
+      "paths": [
+        "src/app/(dashboard)/globals.formSurfaces.test.ts",
+        "src/lib/auth/meAccessHydration.test.ts",
+        "src/lib/auth/meAccessServer.test.ts",
+        "src/lib/navigation/layoutThemeTokens.test.ts",
+        "src/lib/navigation/sidebarThemeTokens.test.ts",
+        "src/lib/offline/manifest.test.ts",
+        "src/lib/organization/branding/branding.test.ts",
+        "src/lib/organization/branding/persistence/organizationBrandingRepository.test.ts",
+        "src/lib/organization/branding/runtime/brandingMeAccessContract.test.ts",
+        "src/lib/ui/branding/BrandingUiProvider.test.ts",
+        "src/lib/ui/branding/brandingProviderContract.test.ts",
+        "src/lib/ui/branding/contentThemeParity.test.ts",
+        "src/lib/ui/branding/uiBrandingHelpers.test.ts",
+        "src/lib/ui/branding/uiBrandingSelectors.test.ts"
+      ]
+    },
+    "postWaveSurfaceBacklog": {
+      "reason": "Remaining dashboard surfaces scheduled for post-W14 cleanup; waves 1–13 primitives migrated",
+      "paths": []
+    }
+  },
+  "allowedPaths": [
+    "src/app/(dashboard)/globals.css",
+    "src/app/(dashboard)/globals.formSurfaces.test.ts",
+    "src/app/layout.tsx",
+    "src/lib/auth/meAccessHydration.test.ts",
+    "src/lib/auth/meAccessServer.test.ts",
+    "src/lib/navigation/layoutThemeTokens.test.ts",
+    "src/lib/navigation/layoutThemeTokens.ts",
+    "src/lib/navigation/sidebarThemeTokens.test.ts",
+    "src/lib/offline/manifest.test.ts",
+    "src/lib/organization/branding/branding.test.ts",
+    "src/lib/organization/branding/defaults.ts",
+    "src/lib/organization/branding/persistence/organizationBrandingRepository.test.ts",
+    "src/lib/organization/branding/runtime/brandingMeAccessContract.test.ts",
+    "src/lib/ui/branding/BrandingUiProvider.test.ts",
+    "src/lib/ui/branding/UI_CONTENT_THEME_VARS.ts",
+    "src/lib/ui/branding/brandingProviderContract.test.ts",
+    "src/lib/ui/branding/contentThemeParity.test.ts",
+    "src/lib/ui/branding/uiBrandingHelpers.test.ts",
+    "src/lib/ui/branding/uiBrandingSelectors.test.ts"
+  ]
+}

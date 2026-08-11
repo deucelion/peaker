@@ -41,17 +41,17 @@ add column if not exists marked_at timestamptz;`,
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
+    <div className="ui-page space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
         <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-          SISTEM <span className="text-[#7c3aed]">SAGLIK</span>
+          SISTEM <span className="text-[color:var(--peaker-ui-PRIMARY)]">SAGLIK</span>
         </h1>
-        <p className="text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.2em] sm:tracking-[0.3em] italic mt-2 sm:mt-3 border-l-2 border-[#7c3aed] pl-3 sm:pl-4 break-words">
+        <p className="text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.2em] sm:tracking-[0.3em] italic mt-2 sm:mt-3 border-l-2 border-[color:var(--peaker-ui-PRIMARY)] pl-3 sm:pl-4 break-words">
           Migration ve kritik schema bagimlilik denetimi
         </p>
       </header>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 min-w-0">
+      <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
             Son Kontrol: {new Date(report.generatedAt).toLocaleString("tr-TR")}
@@ -81,7 +81,7 @@ add column if not exists marked_at timestamptz;`,
 
       <section className="grid gap-3 min-w-0">
         {report.checks.map((check) => (
-          <div key={check.key} className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 min-w-0">
+          <div key={check.key} className="ui-card rounded-[1.5rem] p-4 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0">
               <p className="text-white text-sm font-black italic uppercase break-words min-w-0">{check.title}</p>
               <span
@@ -111,7 +111,7 @@ add column if not exists marked_at timestamptz;`,
       />
 
       {failedChecks.length > 0 && (
-        <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 space-y-3 min-w-0">
+        <section className="ui-card rounded-[1.5rem] p-4 space-y-3 min-w-0">
           <p className="text-white text-sm font-black italic uppercase">Copy SQL Checklist</p>
           <p className="text-[10px] text-gray-500 font-bold italic break-words">
             Kalan migrationlar icin SQL Editor uzerinden kopyalayip calistirabilirsiniz.
@@ -121,8 +121,10 @@ add column if not exists marked_at timestamptz;`,
             if (!sql) return null;
             return (
               <div key={`sql-${check.key}`} className="space-y-2">
-                <p className="text-[10px] font-black uppercase text-[#c4b5fd]">{check.migration}</p>
-                <pre className="text-[10px] text-gray-300 bg-black/30 border border-white/10 rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words max-w-full">
+                <p className="text-[10px] font-black uppercase text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">
+                  {check.migration}
+                </p>
+                <pre className="text-[10px] text-gray-300 ui-card-inner rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words max-w-full">
                   {sql}
                 </pre>
               </div>

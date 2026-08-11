@@ -23,3 +23,8 @@ export function coachNoteIdempotencyKey(draftId: string): string {
 export function fieldTestIdempotencyKey(testDate: string, draftId: string): string {
   return `field-test:${testDate}:${draftId}`;
 }
+
+/** One pending offline queue item per session date + tenant/user scope (merge cell updates). */
+export function fieldTestSessionQueueIdempotencyKey(scopeKey: string, testDate: string): string {
+  return `field-test-session:${scopeKey}:${testDate}`;
+}

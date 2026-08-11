@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FileText, GitCompare, Loader2 } from "lucide-react";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import {
   listAthleticResultNotesByDate,
   listAthleticResultsForActorByDate,
@@ -21,6 +22,7 @@ import {
   type FieldTestComparisonRow,
 } from "@/lib/pdf/fieldTestComparisonPdf";
 import { downloadPdfBytes, pdfDownloadUserMessage, runPdfTask } from "@/lib/pdf/pdfCommon";
+import { firstPdfActionErrorMessage, pdfTaskErrorMessage } from "@/lib/pdf/pdfActionErrorMessage";
 import { loadPdfBrandingPresentationFromMeAccess } from "@/lib/navigation/loadPdfBrandingPresentationFromMeAccess";
 import type { TestDefinitionRow } from "@/types/domain";
 
@@ -48,6 +50,9 @@ function monthsAgoDate(months: number): string {
   d.setMonth(d.getMonth() - months);
   return d.toISOString().split("T")[0]!;
 }
+
+const INPUT_CLASS = uiBrandingClasses.form.input;
+const BRAND_EXPORT_BTN = `${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} inline-flex min-h-10 w-full touch-manipulation items-center justify-center gap-2 px-3 text-[9px] tracking-widest disabled:opacity-50`;
 
 export function AthleteFieldTestPdfExport({
   athleteId,
@@ -83,8 +88,9 @@ export function AthleteFieldTestPdfExport({
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: singleDate }),
         listAthleticResultNotesByDate({ profileIds: [athleteId], testDate: singleDate }),
       ]);
-      if ("error" in defsRes || "error" in dataRes) {
-        setMessage("Test verisi alınamadı.");
+      const fetchError = firstPdfActionErrorMessage([defsRes, dataRes]);
+      if (fetchError) {
+        setMessage(fetchError);
         return;
       }
       const pdfOrgName = "error" in orgRes ? undefined : orgRes.orgName;
@@ -129,8 +135,8 @@ export function AthleteFieldTestPdfExport({
       );
       const outcome = await downloadPdfBytes(bytes, fieldTestSingleDatePdfFilename(athleteName, singleDate));
       setMessage(pdfDownloadUserMessage(outcome, "Tek gün PDF indirildi."));
-    } catch {
-      setMessage("PDF oluşturulamadı.");
+    } catch (err) {
+      setMessage(pdfTaskErrorMessage(err, "PDF oluşturulamadı."));
     } finally {
       setBusy(null);
     }
@@ -155,16 +161,17 @@ export function AthleteFieldTestPdfExport({
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: compareFrom }),
         listAthleticResultsForActorByDate({ profileIds: [athleteId], testDate: compareTo }),
       ]);
-      if ("error" in defsRes || "error" in oldRes || "error" in newRes) {
-        setMessage("Kıyas verisi alınamadı.");
+      const fetchError = firstPdfActionErrorMessage([defsRes, oldRes, newRes]);
+      if (fetchError) {
+        setMessage(fetchError);
         return;
       }
       const pdfOrgName = "error" in orgRes ? undefined : orgRes.orgName;
 
       const metrics = (defsRes.metrics || []) as unknown as TestDefinitionRow[];
 
-      const oldMap = new Map(oldRes.results.map((r) => [r.test_id, r]));
-      const newMap = new Map(newRes.results.map((r) => [r.test_id, r]));
+      const oldMap = new Map((oldRes.results || []).map((r) => [r.test_id, r]));
+      const newMap = new Map((newRes.results || []).map((r) => [r.test_id, r]));
 
       let rows: FieldTestComparisonRow[] = metrics.map((m) => {
         const oldR = oldMap.get(m.id);
@@ -222,8 +229,8 @@ export function AthleteFieldTestPdfExport({
         fieldTestComparisonPdfFilename(athleteName, compareFrom, compareTo)
       );
       setMessage(pdfDownloadUserMessage(outcome, "Kıyas PDF indirildi."));
-    } catch {
-      setMessage("Kıyas PDF oluşturulamadı.");
+    } catch (err) {
+      setMessage(pdfTaskErrorMessage(err, "Kıyas PDF oluşturulamadı."));
     } finally {
       setBusy(null);
     }
@@ -232,51 +239,52 @@ export function AthleteFieldTestPdfExport({
   const disabled = busy !== null;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-4 min-w-0">
-      <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Saha testi PDF</p>
+    <div className={`${uiBrandingClasses.kpi.band} min-w-0 space-y-4 rounded-2xl p-4`}>
+      <p className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-black uppercase tracking-widest`}>
+        Saha testi PDF
+      </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="space-y-2 rounded-xl border border-white/5 bg-black/20 p-3">
-          <p className="text-[9px] font-bold normal-case text-gray-600">Seçilen günün tüm test sonuçları</p>
-          <label className="flex flex-col gap-1 text-[9px] font-black uppercase text-gray-500">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className={`${uiBrandingClasses.card.inner} space-y-2 rounded-xl p-3`}>
+          <p className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-bold normal-case`}>
+            Seçilen günün tüm test sonuçları
+          </p>
+          <label className={`${uiBrandingClasses.form.field} text-[9px] font-black uppercase text-gray-500`}>
             Test tarihi
             <input
               type="date"
               value={singleDate}
               onChange={(e) => setSingleDate(e.target.value)}
-              className="min-h-10 rounded-xl border border-white/10 bg-black px-3 text-xs font-bold text-white"
+              className={`${INPUT_CLASS} min-h-10 px-3 text-xs`}
             />
           </label>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => void handleSinglePdf()}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-3 text-[9px] font-black uppercase tracking-widest text-[#c4b5fd] hover:bg-[#7c3aed]/20 disabled:opacity-50 touch-manipulation"
-          >
+          <button type="button" disabled={disabled} onClick={() => void handleSinglePdf()} className={BRAND_EXPORT_BTN}>
             {busy === "single" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileText size={12} aria-hidden />}
             Tek gün PDF
           </button>
         </div>
 
-        <div className="space-y-2 rounded-xl border border-white/5 bg-black/20 p-3">
-          <p className="text-[9px] font-bold normal-case text-gray-600">İki tarih arası metrik farkları</p>
+        <div className={`${uiBrandingClasses.card.inner} space-y-2 rounded-xl p-3`}>
+          <p className={`${uiBrandingClasses.kpi.cardHint} text-[9px] font-bold normal-case`}>
+            İki tarih arası metrik farkları
+          </p>
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1 text-[9px] font-black uppercase text-gray-500">
+            <label className={`${uiBrandingClasses.form.field} text-[9px] font-black uppercase text-gray-500`}>
               Eski
               <input
                 type="date"
                 value={compareFrom}
                 onChange={(e) => setCompareFrom(e.target.value)}
-                className="min-h-10 rounded-xl border border-white/10 bg-black px-3 text-xs font-bold text-white"
+                className={`${INPUT_CLASS} min-h-10 px-3 text-xs`}
               />
             </label>
-            <label className="flex flex-col gap-1 text-[9px] font-black uppercase text-gray-500">
+            <label className={`${uiBrandingClasses.form.field} text-[9px] font-black uppercase text-gray-500`}>
               Yeni
               <input
                 type="date"
                 value={compareTo}
                 onChange={(e) => setCompareTo(e.target.value)}
-                className="min-h-10 rounded-xl border border-white/10 bg-black px-3 text-xs font-bold text-white"
+                className={`${INPUT_CLASS} min-h-10 px-3 text-xs`}
               />
             </label>
           </div>
@@ -285,7 +293,7 @@ export function AthleteFieldTestPdfExport({
               type="checkbox"
               checked={compareOnlyChanged}
               onChange={(e) => setCompareOnlyChanged(e.target.checked)}
-              className="size-4 accent-[#7c3aed]"
+              className="size-4 accent-[var(--peaker-ui-PRIMARY)]"
             />
             Yalnızca değişenler
           </label>
@@ -293,7 +301,7 @@ export function AthleteFieldTestPdfExport({
             type="button"
             disabled={disabled}
             onClick={() => void handleComparePdf()}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[9px] font-black uppercase tracking-widest text-amber-200 hover:bg-amber-500/20 disabled:opacity-50 touch-manipulation"
+            className="inline-flex min-h-10 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-[9px] font-black uppercase tracking-widest text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
           >
             {busy === "compare" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <GitCompare size={12} aria-hidden />}
             Kıyas PDF
@@ -302,7 +310,7 @@ export function AthleteFieldTestPdfExport({
       </div>
 
       {message ? (
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#c4b5fd]" role="status">
+        <p className={`${uiBrandingClasses.kpi.cardTrend} text-[10px] font-black uppercase tracking-widest`} role="status">
           {message}
         </p>
       ) : null}

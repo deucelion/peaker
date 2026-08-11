@@ -57,10 +57,10 @@ type VariantConfig = {
 const VARIANT_CONFIG: Record<EmptyStateVariant, VariantConfig> = {
   no_data: {
     icon: Inbox,
-    iconWrapClass: "border-white/10 bg-white/5",
+    iconWrapClass: "ui-empty-state__icon-wrap",
     iconClass: "text-gray-400",
     borderClass: "border-dashed border-white/10",
-    bgClass: "bg-black/20",
+    bgClass: "",
     titleClass: "text-gray-200",
     defaultTitle: "Kayıt bulunamadı",
     primaryClass:
@@ -93,10 +93,10 @@ const VARIANT_CONFIG: Record<EmptyStateVariant, VariantConfig> = {
   },
   filtered_empty: {
     icon: Filter,
-    iconWrapClass: "border-white/10 bg-white/5",
+    iconWrapClass: "ui-empty-state__icon-wrap",
     iconClass: "text-gray-400",
     borderClass: "border-dashed border-white/10",
-    bgClass: "bg-black/20",
+    bgClass: "",
     titleClass: "text-gray-200",
     defaultTitle: "Filtreye uyan kayıt yok",
     primaryClass:
@@ -185,11 +185,14 @@ export default function EmptyState({
 }: EmptyStateProps) {
   const cfg = VARIANT_CONFIG[variant];
   const Icon = icon || cfg.icon;
-  const padding = compact ? "px-4 py-6" : "px-4 py-8 sm:px-6 sm:py-10";
+  const isNeutralShell = variant === "no_data" || variant === "filtered_empty";
+  const sizeClass = compact ? "ui-empty-state--compact" : "ui-empty-state--default";
 
   const wrapperClass = bare
     ? `text-center ${className}`
-    : `rounded-xl border ${cfg.borderClass} ${cfg.bgClass} text-center ${padding} ${className}`;
+    : isNeutralShell
+      ? `ui-empty-state ${sizeClass} ${cfg.borderClass} text-center ${className}`
+      : `rounded-xl border ${cfg.borderClass} ${cfg.bgClass} text-center ${sizeClass} ${className}`;
 
   return (
     <div role="status" aria-live={cfg.ariaLive} className={wrapperClass}>
@@ -204,7 +207,7 @@ export default function EmptyState({
       <p className={`text-xs font-black uppercase tracking-wide ${cfg.titleClass}`}>
         {title || cfg.defaultTitle}
       </p>
-      <p className="mx-auto mt-1 max-w-md text-xs font-semibold text-gray-400">
+      <p className={`ui-empty-state__description mx-auto mt-1 max-w-md text-xs font-semibold`}>
         {description}
       </p>
       {reason ? (

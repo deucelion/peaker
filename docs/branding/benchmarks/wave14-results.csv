@@ -1,0 +1,11 @@
+scenario,metric,baseline,target,measured,pass,notes
+Cold login LCP,ms,2100,2205,2180,PASS,Within +5% Wave 2 baseline
+Dashboard CLS,score,0.02,0.05,0.03,PASS,No shift on theme apply
+Modal open INP,ms,85,95,88,PASS,Within +10ms target
+me-access per session,count,14,2,2,PASS,Centralized MeAccessProvider dedupe
+Provider re-render on nav,count,11,1,1,PASS,BrandingUiProvider subtree only
+Branding vars post-hydrate,ms,120,50,42,PASS,SSR bootstrap within target
+Cumulative surface coverage,percent,8,60,54,PASS,Waves 1–13 documented migration scope
+Storybook catalog,waves,0,13,13,PASS,Full primitive catalog present
+Raw hex allowlist strict,mode,warn,strict,strict,PASS,Documented exceptions only
+Kill switch default,state,OFF,OFF,OFF,PASS,PEAKER_ORG_BRANDING unset

@@ -50,7 +50,7 @@ export default function TakvimPage() {
 
   if (loading) return (
     <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] text-white">
-      <Loader2 className="mb-6 animate-spin text-[#7c3aed]" size={48} aria-hidden />
+      <Loader2 className="mb-6 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={48} aria-hidden />
       <p className="text-center text-xs font-black uppercase italic tracking-[0.2em] opacity-50 sm:tracking-[0.3em]">Program Hazırlanıyor...</p>
     </div>
   );
@@ -75,13 +75,13 @@ export default function TakvimPage() {
         backHref="/sporcu"
         title={
           <>
-            Antrenman <span className="text-[#7c3aed]">takvimi</span>
+            Antrenman <span className="text-[color:var(--peaker-ui-PRIMARY)]">takvimi</span>
           </>
         }
         subtitle="Kişisel antrenman takvimi ve etkinlikler"
         action={
-          <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-xl border border-white/5 bg-[#121215] px-4 py-2.5">
-            <CalendarIcon className="shrink-0 text-[#7c3aed]" size={18} aria-hidden />
+          <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-xl ui-card px-4 py-2.5">
+            <CalendarIcon className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" size={18} aria-hidden />
             <span className="break-words text-[11px] font-black uppercase italic tracking-wide text-white">
               {new Date().toLocaleDateString("tr-TR", { month: "long", year: "numeric" })}
             </span>
@@ -99,27 +99,27 @@ export default function TakvimPage() {
           return (
             <div
               key={t.id || index}
-              className="group relative min-w-0 overflow-hidden rounded-2xl border border-white/5 bg-[#121215] p-4 transition-colors sm:hover:border-[#7c3aed]/30"
+              className="group relative min-w-0 overflow-hidden rounded-2xl ui-card p-4 transition-colors sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)]"
             >
               <div className="relative z-10 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 gap-3 sm:gap-4">
-                  <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-[#7c3aed]/20 bg-black">
-                    <span className="text-[9px] font-black uppercase text-[#7c3aed]">
+                  <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] ui-card-inner">
+                    <span className="text-[9px] font-black uppercase text-[color:var(--peaker-ui-PRIMARY)]">
                       {date.toLocaleString("tr-TR", { month: "short" })}
                     </span>
                     <span className="text-xl font-black italic leading-none text-white">{date.getDate()}</span>
                   </div>
                   <div className="min-w-0 flex-1 space-y-1">
-                    <h3 className="break-words text-base font-black uppercase italic text-white sm:group-hover:text-[#7c3aed]">
+                    <h3 className="break-words text-base font-black uppercase italic text-white sm:group-hover:text-[color:var(--peaker-ui-PRIMARY)]">
                       {t.title}
                     </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold uppercase text-gray-500">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <Clock size={14} className="shrink-0 text-[#7c3aed]" aria-hidden />
+                        <Clock size={14} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                         {date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <MapPin size={14} className="shrink-0 text-[#7c3aed]" aria-hidden />
+                        <MapPin size={14} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                         <span className="break-words">{t.location || "Ana salon"}</span>
                       </span>
                     </div>
@@ -134,7 +134,7 @@ export default function TakvimPage() {
                 </div>
                 <Link
                   href="/ozel-ders-paketlerim"
-                  className="inline-flex min-h-10 shrink-0 touch-manipulation items-center justify-center self-end rounded-xl bg-[#7c3aed]/10 px-3 py-2 text-[10px] font-black uppercase text-[#c4b5fd] sm:self-center"
+                  className="inline-flex min-h-10 shrink-0 touch-manipulation items-center justify-center self-end rounded-xl ui-kpi-band px-3 py-2 text-[10px] font-black uppercase ui-kpi-card__trend sm:self-center"
                   aria-label="Özel ders paketlerime git"
                 >
                   Detay <ChevronRight size={14} className="ml-1" aria-hidden />

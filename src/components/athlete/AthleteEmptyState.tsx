@@ -20,25 +20,20 @@ export function AthleteEmptyState({
   action,
   compact = false,
 }: AthleteEmptyStateProps) {
-  const py = compact ? "py-8" : "py-10 sm:py-12";
+  const sizeClass = compact ? "ui-empty-state--compact" : "ui-empty-state--default";
 
   return (
-    <div
-      className={`min-w-0 rounded-2xl border border-dashed border-white/10 bg-[#121215] px-4 text-center ${py}`}
-    >
+    <div className={`ui-empty-state ${sizeClass} min-w-0 border-dashed px-4 text-center`}>
       {Icon ? (
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#7c3aed]/10">
+        <div className="ui-empty-state__icon-wrap mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
           <Icon className="text-gray-500" size={22} aria-hidden />
         </div>
       ) : null}
       <p className="text-xs font-black uppercase italic tracking-wide text-white">{title}</p>
-      <p className="mx-auto mt-2 max-w-md text-[11px] font-bold text-gray-500">{description}</p>
+      <p className="ui-empty-state__description mx-auto mt-2 max-w-md text-[11px] font-bold">{description}</p>
       {hint ? <p className="mx-auto mt-2 max-w-md text-[10px] font-medium text-gray-600">{hint}</p> : null}
       {action ? (
-        <HardNavLink
-          href={action.href}
-          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
-        >
+        <HardNavLink href={action.href} className="ui-empty-state__action mt-4">
           {action.label}
         </HardNavLink>
       ) : null}

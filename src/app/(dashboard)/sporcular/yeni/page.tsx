@@ -195,7 +195,7 @@ export default function NewAthleteOnboardingPage() {
           <ArrowLeft size={16} aria-hidden /> Kadroya dön
         </Link>
         <h1 className="ui-h1">
-          Yeni sporcu <span className="text-[#7c3aed]">kaydı</span>
+          Yeni sporcu <span className="text-[color:var(--peaker-ui-PRIMARY)]">kaydı</span>
         </h1>
         <p className="ui-lead max-w-3xl break-words normal-case tracking-normal">
           Bu akış sporcu oluşturma, paket bağlama ve ilk ödeme başlatmayı tek süreçte yönetir.
@@ -230,17 +230,17 @@ export default function NewAthleteOnboardingPage() {
           </div>
         </section>
       ) : (
-      <section className="rounded-2xl border border-white/10 bg-[#121217] p-4">
+      <section className="rounded-2xl border border-white/5 bg-[#121217] p-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           {STEPS.map((label, i) => (
             <div
               key={label}
               className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wider ${
                 i === step
-                  ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-[#e8ddff]"
+                  ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-[#e8ddff]"
                   : i < step
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                    : "border-white/10 bg-black/20 text-gray-500"
+                    : "border-white/5 ui-card-inner text-gray-500"
               }`}
             >
               {i + 1}. {label}
@@ -251,7 +251,7 @@ export default function NewAthleteOnboardingPage() {
       )}
 
       {!successState ? (
-      <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+      <section className="ui-card p-5 sm:p-6">
         {step === 0 ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="ui-field sm:col-span-2">
@@ -303,15 +303,15 @@ export default function NewAthleteOnboardingPage() {
 
         {step === 2 ? (
           <div className="grid gap-3">
-            <button type="button" onClick={() => setMode("none")} className={`rounded-xl border px-4 py-3 text-left ${mode === "none" ? "border-[#7c3aed]/40 bg-[#7c3aed]/10" : "border-white/10 bg-black/20"}`}>
+            <button type="button" onClick={() => setMode("none")} className={`rounded-xl border px-4 py-3 text-left ${mode === "none" ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)]" : "border-white/5 ui-card-inner"}`}>
               <p className="text-sm font-black text-white">Paket yok</p>
               <p className="mt-1 text-xs font-bold text-gray-400">Yalnızca sporcu profili oluşturur.</p>
             </button>
-            <button type="button" onClick={() => setMode("private_lesson")} className={`rounded-xl border px-4 py-3 text-left ${mode === "private_lesson" ? "border-[#7c3aed]/40 bg-[#7c3aed]/10" : "border-white/10 bg-black/20"}`}>
+            <button type="button" onClick={() => setMode("private_lesson")} className={`rounded-xl border px-4 py-3 text-left ${mode === "private_lesson" ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)]" : "border-white/5 ui-card-inner"}`}>
               <p className="text-sm font-black text-white">Özel ders paketi</p>
               <p className="mt-1 text-xs font-bold text-gray-400">Ders sayısı ve toplam ücret tanımlanır.</p>
             </button>
-            <button type="button" onClick={() => setMode("monthly_subscription")} className={`rounded-xl border px-4 py-3 text-left ${mode === "monthly_subscription" ? "border-[#7c3aed]/40 bg-[#7c3aed]/10" : "border-white/10 bg-black/20"}`}>
+            <button type="button" onClick={() => setMode("monthly_subscription")} className={`rounded-xl border px-4 py-3 text-left ${mode === "monthly_subscription" ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)]" : "border-white/5 ui-card-inner"}`}>
               <p className="text-sm font-black text-white">Aylık abonelik</p>
               <p className="mt-1 text-xs font-bold text-gray-400">Aylık ücret ve ödeme akışı tanımlanır.</p>
             </button>
@@ -361,20 +361,20 @@ export default function NewAthleteOnboardingPage() {
 
         {step === 5 ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-              <h3 className="text-[11px] font-black uppercase tracking-wider text-[#c4b5fd]">Sporcu</h3>
+            <div className="rounded-xl ui-card-inner p-4">
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">Sporcu</h3>
               <p className="mt-2 text-sm font-bold text-white">{form.fullName || "—"}</p>
               <p className="text-xs font-bold text-gray-400">{form.email || "—"}</p>
               <p className="text-xs font-bold text-gray-500">{form.phone || "Telefon yok"}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-              <h3 className="text-[11px] font-black uppercase tracking-wider text-[#c4b5fd]">Profil</h3>
+            <div className="rounded-xl ui-card-inner p-4">
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">Profil</h3>
               <p className="mt-2 text-xs font-bold text-gray-300">Takım: {teamOptions.find((team) => team.id === form.teamId)?.name || "—"}</p>
               <p className="text-xs font-bold text-gray-300">Pozisyon: {form.position || "—"}</p>
               <p className="text-xs font-bold text-gray-300">Boy/Kilo: {form.height || "—"} / {form.weight || "—"}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-              <h3 className="text-[11px] font-black uppercase tracking-wider text-[#c4b5fd]">Paket</h3>
+            <div className="rounded-xl ui-card-inner p-4">
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">Paket</h3>
               <p className="mt-2 text-sm font-bold text-white">
                 {mode === "none" ? "Paket yok" : mode === "private_lesson" ? "Özel ders paketi" : "Aylık abonelik"}
               </p>
@@ -387,8 +387,8 @@ export default function NewAthleteOnboardingPage() {
                 <p className="text-xs font-bold text-gray-400">Başlangıç {form.monthlyStartDate || "—"}</p>
               ) : null}
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-              <h3 className="text-[11px] font-black uppercase tracking-wider text-[#c4b5fd]">Ödeme</h3>
+            <div className="rounded-xl ui-card-inner p-4">
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">Ödeme</h3>
               <p className="mt-2 text-sm font-bold text-white">
                 ₺{Number(form.paymentPaid || "0").toFixed(2)} / ₺{Number.isFinite(derivedTotalAmount) ? derivedTotalAmount.toFixed(2) : "0.00"}
               </p>
@@ -398,7 +398,7 @@ export default function NewAthleteOnboardingPage() {
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-4">
           <button type="button" disabled={step === 0} onClick={prevStep} className="ui-btn-ghost min-h-11 px-4 disabled:opacity-50">
             <ChevronLeft size={16} aria-hidden /> Geri
           </button>

@@ -55,20 +55,23 @@ export function AthleteMobileQuickStrip({ permissions, completion }: AthleteMobi
 
   return (
     <div className="space-y-2 sm:hidden">
-      <nav
-        aria-label="Sporcu hızlı erişim"
-        className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-[#121215] p-2"
-      >
+      <nav aria-label="Sporcu hızlı erişim" className="ui-card grid grid-cols-4 gap-1 p-2">
         {primary.map(({ href, label, icon: Icon, done }) => (
           <HardNavLink
             key={href}
             href={href}
-            className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 touch-manipulation active:bg-[#7c3aed]/10 ${
+            className={`flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 touch-manipulation active:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] ${
               done ? "border border-emerald-500/20 bg-emerald-500/5" : ""
             }`}
           >
-            <Icon size={18} className={done ? "text-emerald-400" : "text-[#7c3aed]"} aria-hidden />
-            <span className={`text-[8px] font-black uppercase ${done ? "text-emerald-300" : "text-gray-400"}`}>{label}</span>
+            <Icon
+              size={18}
+              className={done ? "text-emerald-400" : "text-[color:var(--peaker-ui-PRIMARY)]"}
+              aria-hidden
+            />
+            <span className={`text-[8px] font-black uppercase ${done ? "text-emerald-300" : "text-gray-400"}`}>
+              {label}
+            </span>
           </HardNavLink>
         ))}
       </nav>
@@ -78,21 +81,25 @@ export function AthleteMobileQuickStrip({ permissions, completion }: AthleteMobi
           <button
             type="button"
             onClick={() => setSheetOpen((v) => !v)}
-            className="flex w-full min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#121215] text-[9px] font-black uppercase text-gray-400"
+            className="ui-btn-ghost flex w-full min-h-10 items-center justify-center gap-2 text-[9px] font-black uppercase text-gray-400"
           >
             <MoreHorizontal size={14} aria-hidden />
             Daha fazla
-            <ChevronDown size={14} className={sheetOpen ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden />
+            <ChevronDown
+              size={14}
+              className={sheetOpen ? "rotate-180 transition-transform" : "transition-transform"}
+              aria-hidden
+            />
           </button>
           {sheetOpen ? (
-            <nav className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-[#121215] p-2" aria-label="Ek hızlı erişim">
+            <nav className="ui-card grid grid-cols-2 gap-1 p-2" aria-label="Ek hızlı erişim">
               {overflow.map(({ href, label, icon: Icon }) => (
                 <HardNavLink
                   key={href}
                   href={href}
-                  className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-2 active:bg-[#7c3aed]/10"
+                  className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-2 active:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)]"
                 >
-                  <Icon size={16} className="text-[#7c3aed]" aria-hidden />
+                  <Icon size={16} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                   <span className="text-[8px] font-black uppercase text-gray-400">{label}</span>
                 </HardNavLink>
               ))}

@@ -3,3 +3,4 @@
  */
 
 export { ChartFrame, chartTooltipStyle } from "./ChartFrame";
+export { ChartNoData } from "@/components/ui/data-display/ChartNoData";

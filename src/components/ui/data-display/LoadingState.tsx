@@ -16,20 +16,16 @@ export function LoadingState({
 }) {
   if (variant === "inline") {
     return (
-      <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400">
-        <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+      <span className="ui-loading-inline">
+        <Loader2 className="ui-loading-inline__spinner size-3.5 animate-spin" aria-hidden />
         {label}
       </span>
     );
   }
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-2xl border border-white/5 bg-[#121215] p-6"
-    >
-      <Loader2 className="size-7 animate-spin text-[#7c3aed]" aria-hidden />
-      <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</p>
+    <div role="status" aria-live="polite" className="ui-loading-panel">
+      <Loader2 className="ui-loading-panel__spinner size-7 animate-spin" aria-hidden />
+      <p className="ui-loading-panel__label">{label}</p>
     </div>
   );
 }

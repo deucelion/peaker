@@ -6,6 +6,19 @@ import type { BrandingTheme } from "@/lib/organization/branding/types";
 
 export const LAYOUT_THEME_CSS_VAR_PREFIX = "--peaker-layout-theme" as const;
 
+/** Layout shell CSS var referanslari — sidebar token'lari sidebar namespace'te kalir. */
+export const LAYOUT_SHELL_TOKEN_KEYS = [
+  BRANDING_COLOR_TOKEN_KEYS.primary,
+  BRANDING_COLOR_TOKEN_KEYS.secondary,
+  BRANDING_COLOR_TOKEN_KEYS.accent,
+  BRANDING_COLOR_TOKEN_KEYS.background,
+  BRANDING_COLOR_TOKEN_KEYS.surface,
+  BRANDING_COLOR_TOKEN_KEYS.textPrimary,
+  BRANDING_COLOR_TOKEN_KEYS.textSecondary,
+] as const;
+
+export type LayoutShellThemeTokenKey = (typeof LAYOUT_SHELL_TOKEN_KEYS)[number];
+
 export type LayoutThemeTokenSnapshot = {
   [K in (typeof BRANDING_COLOR_TOKEN_KEYS)[keyof typeof BRANDING_COLOR_TOKEN_KEYS]]: string;
 };
@@ -18,10 +31,7 @@ export const LAYOUT_THEME_VARS = {
   SURFACE: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-SURFACE)`,
   TEXT_PRIMARY: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-TEXT_PRIMARY)`,
   TEXT_SECONDARY: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-TEXT_SECONDARY)`,
-  SIDEBAR_BACKGROUND: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-SIDEBAR_BACKGROUND)`,
-  SIDEBAR_TEXT: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-SIDEBAR_TEXT)`,
-  SIDEBAR_ACTIVE: `var(${LAYOUT_THEME_CSS_VAR_PREFIX}-SIDEBAR_ACTIVE)`,
-} as const satisfies LayoutThemeTokenSnapshot;
+} as const satisfies Record<Capitalize<LayoutShellThemeTokenKey>, string>;
 
 /** Yalnizca canonical theme token'larini okur. */
 export function extractLayoutThemeTokens(theme: BrandingTheme): LayoutThemeTokenSnapshot {

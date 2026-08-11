@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 type AthletePageHeaderProps = {
   eyebrow?: string;
@@ -26,7 +27,7 @@ export function AthletePageHeader({
         {backHref ? (
           <Link
             href={backHref}
-            className="-ml-1 inline-flex min-h-10 touch-manipulation items-center gap-2 rounded-lg px-1 text-[10px] font-black uppercase tracking-widest text-[#7c3aed] transition-colors sm:hover:bg-white/[0.03]"
+            className="ui-breadcrumb__link -ml-1 inline-flex min-h-10 touch-manipulation items-center gap-2 rounded-lg px-1 text-[10px] font-black uppercase tracking-widest transition-colors sm:hover:bg-white/[0.03]"
           >
             <ArrowLeft size={14} className="shrink-0" aria-hidden />
             <span className="break-words">{backLabel}</span>
@@ -34,17 +35,26 @@ export function AthletePageHeader({
         ) : null}
         {eyebrow ? (
           <div className="flex items-center gap-2">
-            <div className="h-px w-6 bg-[#7c3aed]" aria-hidden />
-            <span className="text-[9px] font-black uppercase tracking-[0.35em] text-[#7c3aed] italic">
+            <div
+              className="h-px w-6 bg-[color:var(--peaker-ui-PRIMARY)]"
+              aria-hidden
+            />
+            <span className={`${uiBrandingClasses.kpi.cardTrend} text-[9px] tracking-[0.35em]`}>
               {eyebrow}
             </span>
           </div>
         ) : null}
-        <h1 className="break-words text-2xl font-black uppercase italic leading-tight tracking-tighter text-white sm:text-3xl">
+        <h1 className={`${uiBrandingClasses.typography.h1} break-words text-2xl sm:text-3xl`}>
           {title}
         </h1>
         {subtitle ? (
-          <p className="max-w-xl break-words border-l-2 border-[#7c3aed]/40 pl-3 text-[10px] font-bold uppercase tracking-wide text-gray-500 italic">
+          <p
+            className={`${uiBrandingClasses.typography.lead} max-w-xl break-words border-l-2 pl-3 text-[10px] font-bold uppercase tracking-wide italic`}
+            style={{
+              borderLeftColor:
+                "color-mix(in srgb, var(--peaker-ui-PRIMARY) 40%, transparent)",
+            }}
+          >
             {subtitle}
           </p>
         ) : null}

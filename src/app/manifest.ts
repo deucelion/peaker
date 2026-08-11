@@ -1,4 +1,7 @@
 import type { MetadataRoute } from "next";
+import { createDefaultBranding } from "@/lib/organization/branding/defaults";
+
+const defaultTheme = createDefaultBranding().theme;
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -7,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Elite Athletic Performance & Management",
     start_url: "/",
     display: "standalone",
-    background_color: "#09090b",
-    theme_color: "#09090b",
+    background_color: defaultTheme.background,
+    theme_color: defaultTheme.background,
     orientation: "portrait-primary",
     lang: "tr",
     icons: [

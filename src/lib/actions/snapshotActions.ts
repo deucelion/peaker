@@ -793,7 +793,9 @@ export async function getDashboardSnapshot() {
   const resolved = await resolveSessionActor();
   if ("error" in resolved) return { error: resolved.error };
   const { actor } = resolved;
-  if (!actor.organizationId) return { role: actor.role };
+  if (!actor.organizationId) {
+    return { error: "Organizasyon bilgisi yuklenemedi. Lutfen tekrar deneyin." };
+  }
   const adminClient = createSupabaseAdminClient();
 
   const orgRes = await adminClient

@@ -40,7 +40,7 @@ export default function CoachAccountLifecyclePanel({ coachId, coachName, isActiv
   }
 
   return (
-    <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0 overflow-x-hidden">
+    <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0 overflow-x-hidden">
       <div className="min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase break-words">Hesap durumu</h3>
         <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wide sm:tracking-wider break-words">

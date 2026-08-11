@@ -2,7 +2,7 @@
 
 import { memo, useMemo, type ReactNode } from "react";
 import { ResponsiveContainer } from "recharts";
-import { NoData } from "@/app/(dashboard)/sporcu/[id]/_components/AthleteDetailPrimitives";
+import { ChartNoData } from "@/components/ui/data-display/ChartNoData";
 
 /**
  * Faz 8.11 — Reusable chart frame.
@@ -21,19 +21,10 @@ import { NoData } from "@/app/(dashboard)/sporcu/[id]/_components/AthleteDetailP
  *   - `React.memo` ile shallow-compare; chart children'ı genelde aynı reference
  *     ise re-render önlenir.
  *   - Tooltip style gibi inline obje'ler module-level sabitlerle değiştirilmeli;
- *     bunun için `chartTooltipStyle` export edildi.
+ *     bunun için `chartTooltipStyle` export edildi (Wave 10: chartSelectors).
  */
 
-export const chartTooltipStyle = {
-  contentStyle: {
-    backgroundColor: "#1c1c21",
-    border: "1px solid rgba(124,58,237,0.2)",
-    borderRadius: "20px",
-    fontSize: "11px",
-    fontWeight: "bold",
-  },
-  itemStyle: { color: "#7c3aed" },
-} as const;
+export { chartTooltipStyle } from "@/lib/ui/branding/chartSelectors";
 
 type ChartFrameProps = {
   /** Boş veri sinyali; true ise `NoData` gösterilir. */
@@ -42,8 +33,8 @@ type ChartFrameProps = {
   emptyLabel?: string;
   /** Yükseklik sınıfı (Tailwind). Mevcut sayfaların kullandığı pattern korunur. */
   heightClassName?: string;
-  /** Çocuklar (recharts root chart bileşeni). */
-  children: ReactNode;
+  /** Çocuklar (recharts root chart bileşeni). Boş durumda gerekmez. */
+  children?: ReactNode;
 };
 
 function ChartFrameInner({
@@ -59,15 +50,17 @@ function ChartFrameInner({
   if (isEmpty) {
     return (
       <div className={wrapperClass}>
-        <NoData label={emptyLabel} />
+        <ChartNoData label={emptyLabel} />
       </div>
     );
   }
   return (
     <div className={wrapperClass}>
-      <ResponsiveContainer width="100%" height="100%">
-        {children as React.ReactElement}
-      </ResponsiveContainer>
+      <div className="ui-chart-shell h-full w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          {children as React.ReactElement}
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

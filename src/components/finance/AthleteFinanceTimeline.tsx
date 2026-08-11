@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useEffect, useMemo, useState } from "react";
 import type { AthleteFinanceDetail } from "@/lib/types";
 import { getFinanceStatusPresentation } from "@/lib/finance/statusPresentation";
@@ -28,13 +29,13 @@ export type AthleteFinanceTimelineProps = {
 };
 
 function tabActiveClass(accent: "purple" | "green", active: boolean) {
-  if (!active) return "bg-black/30 text-gray-300";
-  return accent === "purple" ? "bg-[#7c3aed] text-white" : "bg-green-600 text-white";
+  if (!active) return "ui-tabs-nav__tab--inactive text-gray-300";
+  return accent === "purple" ? "bg-[color:var(--peaker-ui-PRIMARY)] text-white" : "bg-green-600 text-white";
 }
 
 function filterActiveClass(accent: "purple" | "green", active: boolean) {
-  if (!active) return "border border-white/15 bg-black/30 text-gray-300";
-  return accent === "purple" ? "bg-[#7c3aed] text-white" : "bg-green-600 text-white";
+  if (!active) return "ui-tabs-nav__tab--inactive text-gray-300";
+  return accent === "purple" ? "bg-[color:var(--peaker-ui-PRIMARY)] text-white" : "bg-green-600 text-white";
 }
 
 export function AthleteFinanceTimeline({
@@ -109,14 +110,14 @@ export function AthleteFinanceTimeline({
     <div className="space-y-6">
       {mode === "readonly" ? (
         <>
-          <section className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5">
+          <section className="ui-card rounded-2xl p-4 sm:p-5">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ana Finans Bilgisi</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="rounded-xl ui-card-inner border p-3">
                 <p className="text-[10px] font-black uppercase text-gray-500">Ödenmesi gereken tutar</p>
                 <p className="mt-1 text-xl font-black text-white">{dueAmountLabel}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="rounded-xl ui-card-inner border p-3">
                 <p className="text-[10px] font-black uppercase text-gray-500">Planlanan vade tarihi</p>
                 <p className="mt-1 text-xl font-black text-white">{dueDateLabel}</p>
               </div>
@@ -129,7 +130,7 @@ export function AthleteFinanceTimeline({
             <p className="mt-2 text-[10px] font-semibold text-white/80">
               Sonraki vade (takip): {dueDateLabel} - {dueAmountLabel}
             </p>
-            <div className="mt-3 rounded-xl border border-white/20 bg-black/20 px-3 py-2 text-[11px] font-bold leading-relaxed text-white/90">
+            <div className={`${uiBrandingClasses.card.inner} mt-3 rounded-xl px-3 py-2 text-[11px] font-bold leading-relaxed text-white/90`}>
               {summaryPresentation.supportText}
             </div>
             {showPrimaryAction ? (
@@ -142,9 +143,9 @@ export function AthleteFinanceTimeline({
               </button>
             ) : null}
           </section>
-          <section className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+          <section className="ui-card rounded-2xl p-4">
             <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Özel Ders Toplamı</p>
-            <p className="mt-2 text-lg font-black text-[#c4b5fd]">{formatAthleteFinanceCurrency(snapshot.totals.privateLessonPaidTotal)}</p>
+            <p className="mt-2 text-lg font-black ui-kpi-card__trend">{formatAthleteFinanceCurrency(snapshot.totals.privateLessonPaidTotal)}</p>
             <p className="text-xs font-semibold text-gray-400">
               {snapshot.privateLessonPackages.length} paket • {ozelDersPaymentCount} tahsilat kaydı
             </p>
@@ -156,7 +157,7 @@ export function AthleteFinanceTimeline({
             <p className="text-[9px] font-black uppercase tracking-widest">Finans Durumu</p>
             <p className="mt-2 text-lg font-black uppercase italic">{summaryPresentation.label}</p>
             <p className="mt-2 text-[11px] font-semibold text-white/90">{summaryPresentation.supportText}</p>
-            <div className="mt-3 grid gap-2 rounded-xl border border-white/20 bg-black/20 px-3 py-3 text-[11px] font-semibold leading-relaxed text-white/90 sm:grid-cols-2">
+            <div className={`${uiBrandingClasses.card.inner} mt-3 grid gap-2 rounded-xl px-3 py-3 text-[11px] font-semibold leading-relaxed text-white/90 sm:grid-cols-2`}>
               <p>
                 Sonraki ödeme tarihi: <span className="font-black">{dueDateLabel}</span>
               </p>
@@ -164,7 +165,7 @@ export function AthleteFinanceTimeline({
                 Sonraki ödeme tutarı: <span className="font-black">{dueAmountLabel}</span>
               </p>
             </div>
-            <div className="mt-3 rounded-xl border border-white/20 bg-black/20 px-3 py-2 text-[11px] font-semibold leading-relaxed text-white/90">
+            <div className={`${uiBrandingClasses.card.inner} mt-3 rounded-xl px-3 py-2 text-[11px] font-semibold leading-relaxed text-white/90`}>
               {summaryPresentation.supportText}
             </div>
             {showPrimaryAction && onMarkPlannedPaid ? (
@@ -178,14 +179,14 @@ export function AthleteFinanceTimeline({
               </button>
             ) : null}
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+          <div className="ui-card rounded-2xl p-4">
             <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Özet</p>
             <p className="mt-2 text-lg font-black text-emerald-400">{formatAthleteFinanceCurrency(snapshot.totals.aidatPaidTotal)}</p>
             <p className="text-[10px] font-semibold text-gray-500">Aidat tahsilatı toplamı</p>
             <p className="text-xs font-semibold text-red-300">
               Aidat bekleyen: {formatAthleteFinanceCurrency(snapshot.totals.aidatPendingTotal)}
             </p>
-            <p className="mt-2 text-xs font-semibold text-[#c4b5fd]">
+            <p className="mt-2 text-xs font-semibold ui-kpi-card__trend">
               Özel ders tahsilatı: {formatAthleteFinanceCurrency(combinedPrivatePaid)}
             </p>
             <p className="text-xs font-semibold text-gray-400">
@@ -195,7 +196,7 @@ export function AthleteFinanceTimeline({
         </section>
       )}
 
-      <section className="rounded-2xl border border-white/10 bg-[#121215] p-2 sm:p-3">
+      <section className="ui-card rounded-2xl p-2 sm:p-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {(
             [
@@ -217,7 +218,7 @@ export function AthleteFinanceTimeline({
       </section>
 
       {activeTab === "tumu" ? (
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-[#121215] p-5">
+        <section className="space-y-4 ui-card rounded-2xl p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-sm font-black uppercase text-white">Tüm Tahsilatlar</h2>
@@ -255,7 +256,7 @@ export function AthleteFinanceTimeline({
                     : "Bu filtreye uygun kayıt yok."}
                 </p>
                 {unifiedFilter === "all" && onboardingPrivatePayments.length > 0 && snapshot.aidatPayments.length === 0 ? (
-                  <p className="text-xs font-semibold text-[#c4b5fd]">
+                  <p className="text-xs font-semibold ui-kpi-card__trend">
                     Onboarding ödemeleri paket defterinde listelenir; Paket filtresi veya Paket ve Hizmetler sekmesine bakın.
                   </p>
                 ) : null}
@@ -271,16 +272,16 @@ export function AthleteFinanceTimeline({
                 const borderClass =
                   line.statusTone === "paid" ? "border-white/10" : "border-amber-500/25 bg-amber-500/5";
                 return (
-                  <div key={line.id} className={`rounded-xl border bg-black/20 p-3 ${borderClass}`}>
+                  <div key={line.id} className={`ui-card-inner rounded-xl border p-3 ${borderClass}`}>
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
                         <p className="text-xs font-black text-white">{line.title}</p>
                         <p className="text-[10px] font-bold text-gray-500">{line.detail}</p>
                         <div className="flex flex-wrap gap-2 pt-1">
-                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                          <span className="rounded-md ui-kpi-band border px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
                             {line.scopeLabel}
                           </span>
-                          <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
+                          <span className="rounded-md ui-kpi-band border px-2 py-0.5 text-[9px] font-black uppercase text-gray-400">
                             {line.kindLabel}
                           </span>
                           <span
@@ -293,7 +294,7 @@ export function AthleteFinanceTimeline({
                             {line.statusLabel}
                           </span>
                           {line.sourceBadge ? (
-                            <span className="rounded-md border border-[#c4b5fd]/35 bg-[#c4b5fd]/10 px-2 py-0.5 text-[9px] font-black uppercase text-[#c4b5fd]">
+                            <span className={`${uiBrandingClasses.kpi.chipBrand} rounded-md px-2 py-0.5 text-[9px] font-black uppercase`}>
                               {line.sourceBadge}
                             </span>
                           ) : null}
@@ -354,7 +355,7 @@ export function AthleteFinanceTimeline({
 
       {activeTab === "hizmet" ? (
         <section className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+          <div className="ui-card rounded-2xl p-5">
             <h2 className="text-sm font-black uppercase text-white">
               {mode === "management" ? "Özel Ders Paketleri" : "Paket ve Hizmet Tahsilatları"}
             </h2>
@@ -369,7 +370,7 @@ export function AthleteFinanceTimeline({
                   <p className="text-xs font-bold text-gray-500">Henüz özel ders paketi bulunmuyor.</p>
                 ) : (
                   snapshot.privateLessonPackages.map((pkg) => (
-                    <div key={pkg.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div key={pkg.id} className="rounded-xl ui-card-inner border p-3">
                       <p className="text-xs font-black text-white">{pkg.packageName}</p>
                       <p className="text-[10px] font-bold text-gray-500">
                         {pkg.paymentStatus.toUpperCase()} · {pkg.usedLessons}/{pkg.totalLessons} ders · ₺
@@ -382,13 +383,13 @@ export function AthleteFinanceTimeline({
                 <p className="text-xs font-semibold text-gray-500">Henüz özel ders ödeme kaydı yok.</p>
               ) : (
                 snapshot.privateLessonPayments.map((row) => (
-                  <div key={row.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div key={row.id} className="rounded-xl ui-card-inner border p-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black text-white">{formatAthleteFinanceCurrency(row.amount)}</p>
                       <p className="text-[10px] font-bold text-gray-500">{new Date(row.paidAt).toLocaleDateString("tr-TR")}</p>
                     </div>
                     {(row.note || "").toLowerCase().includes("onboarding") ? (
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd]">Kaynak: Onboarding</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend">Kaynak: Onboarding</p>
                     ) : null}
                     {row.note ? <p className="mt-1 text-[10px] font-bold text-gray-400">{row.note}</p> : null}
                   </div>
@@ -396,7 +397,7 @@ export function AthleteFinanceTimeline({
               )}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+          <div className="ui-card rounded-2xl p-5">
             <h2 className="text-sm font-black uppercase text-white">
               {mode === "management" ? "Paket ve Hizmet Tahsilatları" : "Paket Özeti"}
             </h2>
@@ -406,7 +407,7 @@ export function AthleteFinanceTimeline({
                   <p className="text-xs font-semibold text-gray-500">Henüz özel ders paketi bulunmuyor.</p>
                 ) : (
                   snapshot.privateLessonPackages.map((pkg) => (
-                    <div key={pkg.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div key={pkg.id} className="rounded-xl ui-card-inner border p-3">
                       <p className="text-xs font-black text-white">{pkg.packageName}</p>
                       <p className="text-[10px] font-bold text-gray-500">
                         {pkg.paymentStatus.toUpperCase()} · {pkg.usedLessons}/{pkg.totalLessons} ders · ₺
@@ -419,13 +420,13 @@ export function AthleteFinanceTimeline({
                 <p className="text-xs font-bold text-gray-500">Henüz özel ders ödeme geçmişi yok.</p>
               ) : (
                 snapshot.privateLessonPayments.map((pay) => (
-                  <div key={pay.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div key={pay.id} className="rounded-xl ui-card-inner border p-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black text-white">{formatAthleteFinanceCurrency(pay.amount)}</p>
                       <p className="text-[10px] font-bold text-gray-500">{new Date(pay.paidAt).toLocaleDateString("tr-TR")}</p>
                     </div>
                     {(pay.note || "").toLowerCase().includes("onboarding") ? (
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-[#c4b5fd]">Kaynak: Onboarding</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend">Kaynak: Onboarding</p>
                     ) : null}
                     {pay.note ? <p className="mt-1 text-[10px] font-bold text-gray-400">{pay.note}</p> : null}
                   </div>
@@ -437,7 +438,7 @@ export function AthleteFinanceTimeline({
       ) : null}
 
       {activeTab === "plan" ? (
-        <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+        <section className="ui-card rounded-2xl p-5">
           <h2 className="text-sm font-black uppercase text-white">Planlı Aidat Tahsilatı</h2>
           <p className="mt-1 text-[10px] font-semibold text-gray-500">
             {mode === "readonly"
@@ -445,11 +446,11 @@ export function AthleteFinanceTimeline({
               : "Bu alan yalnızca aylık aidat planı içindir."}
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="rounded-xl ui-card-inner border p-3">
               <p className="text-[10px] font-black uppercase text-gray-500">Tarih</p>
               <p className="mt-2 text-sm font-black text-white">{snapshot.summary.nextDueDate || "-"}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="rounded-xl ui-card-inner border p-3">
               <p className="text-[10px] font-black uppercase text-gray-500">Tutar</p>
               <p className="mt-2 text-sm font-black text-white">₺{snapshot.summary.nextAmount ?? 0}</p>
             </div>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultBranding } from "@/lib/organization/branding/defaults";
 import { mergeBranding } from "@/lib/organization/branding/helpers";
 import { resolvePdfBranding } from "@/lib/organization/branding/surfaces/resolvePdfBranding";
+import { resolvePdfHeaderColorRgb } from "@/lib/pdf/pdfBrandingColors";
 import {
   createDefaultPdfBrandingPresentation,
   createPdfBrandingPresentation,
@@ -19,20 +20,34 @@ describe("pdfBrandingPresentation", () => {
         mergeBranding(createDefaultBranding(), {
           pdf: { title: "Atlas Club Rapor" },
         })
-      )
+      ),
+      resolvePdfHeaderColorRgb(createDefaultBranding())
     );
 
-    expect(presentation).toEqual({ title: "Atlas Club Rapor" });
-    expect(Object.keys(presentation)).toEqual(["title"]);
+    expect(presentation).toEqual({ title: "Atlas Club Rapor", headerColorRgb: [124, 58, 237] });
+    expect(Object.keys(presentation).sort()).toEqual(["headerColorRgb", "title"]);
   });
 
   it("falls back to default pdf title presentation", () => {
-    expect(createDefaultPdfBrandingPresentation().title).toBe("PEAKER Rapor");
+    expect(createDefaultPdfBrandingPresentation()).toEqual({
+      title: "PEAKER Rapor",
+      headerColorRgb: [124, 58, 237],
+    });
   });
 
   it("creates pdf presentation from organizationBranding snapshot", () => {
     const presentation = createPdfBrandingPresentationFromOrganizationBranding(createDefaultBranding());
     expect(presentation.title).toBe("PEAKER Rapor");
+    expect(presentation.headerColorRgb).toEqual([124, 58, 237]);
+  });
+
+  it("maps custom organization primary to pdf header rgb", () => {
+    const presentation = createPdfBrandingPresentationFromOrganizationBranding(
+      mergeBranding(createDefaultBranding(), {
+        theme: { primary: "#112233" },
+      })
+    );
+    expect(presentation.headerColorRgb).toEqual([17, 34, 51]);
   });
 });
 

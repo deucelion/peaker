@@ -49,7 +49,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
   }
 
   return (
-    <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 overflow-x-hidden">
+    <div className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 overflow-x-hidden">
       <h2 className="text-white text-sm font-black italic uppercase mb-1 break-words">Organizasyona koc ekle</h2>
       <p className="text-[10px] text-gray-500 font-bold uppercase mb-4 break-words">
         Service role ile olusturulur; koc listesi ve izin satiri senkron kalir.
@@ -59,7 +59,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
         className="grid w-full min-w-0 gap-3 max-w-none sm:max-w-md [&_input]:min-h-11 [&_input]:text-base [&_input]:sm:text-xs"
       >
         <input
-          className="w-full min-w-0 bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#7c3aed]/50 touch-manipulation"
+          className="ui-input w-full px-4 py-3 text-white font-bold outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] touch-manipulation"
           placeholder="Ad Soyad"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
@@ -69,7 +69,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
         <input
           type="text"
           inputMode="email"
-          className="w-full min-w-0 bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#7c3aed]/50 lowercase touch-manipulation"
+          className="ui-input w-full px-4 py-3 text-white font-bold outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] lowercase touch-manipulation"
           placeholder="E-posta"
           value={email}
           onChange={(e) => setEmail(normalizeEmailInput(e.target.value))}
@@ -79,7 +79,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
         />
         <input
           type="password"
-          className="w-full min-w-0 bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#7c3aed]/50 touch-manipulation normal-case"
+          className="ui-input w-full px-4 py-3 text-white font-bold outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] touch-manipulation normal-case"
           placeholder="Geçici şifre (min 6)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -91,7 +91,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-11 w-full sm:w-auto px-4 py-3 rounded-xl bg-[#7c3aed] text-white text-[10px] font-black uppercase disabled:opacity-50 flex items-center justify-center gap-2 touch-manipulation sm:hover:bg-[#6d28d9]"
+          className="min-h-11 w-full sm:w-auto px-4 py-3 rounded-xl ui-btn-primary text-white text-[10px] font-black uppercase disabled:opacity-50 flex items-center justify-center gap-2 touch-manipulation sm:hover:bg-[color:var(--peaker-ui-PRIMARY)]"
         >
           {submitting ? <Loader2 className="animate-spin" size={16} aria-hidden /> : null}
           Koç oluştur
@@ -107,7 +107,7 @@ export default function SuperAdminAddCoachForm({ organizationId }: Props) {
       )}
       <a
         href={`/koclar?org=${encodeURIComponent(organizationId)}`}
-        className="inline-flex min-h-11 items-center mt-4 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation break-all sm:hover:text-[#e9d5ff]"
+        className="inline-flex min-h-11 items-center mt-4 text-[10px] font-black uppercase text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] touch-manipulation break-all sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
       >
         Bu org koc listesine git
       </a>

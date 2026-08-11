@@ -240,7 +240,7 @@ export default function LessonsPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Dersler yükleniyor…</p>
       </div>
     );
@@ -248,11 +248,11 @@ export default function LessonsPage() {
 
   return (
     <div className="ui-page min-w-0 overflow-x-hidden pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
-      <header className="flex min-w-0 flex-col gap-4 border-b border-white/5 pb-6 md:flex-row md:items-end md:justify-between">
+      <header className="flex min-w-0 flex-col gap-4 border-b pb-6 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-600">İşlem ekranı</p>
           <h1 className="ui-h1">
-            Ders <span className="text-[#7c3aed]">merkezi</span>
+            Ders <span className="text-[color:var(--peaker-ui-PRIMARY)]">merkezi</span>
           </h1>
           <p className="ui-lead max-w-xl break-words normal-case tracking-normal">
             Yeni ders oluşturun; aşağıdaki listeden mevcut derslere geçin.
@@ -265,7 +265,7 @@ export default function LessonsPage() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Ders ara…"
             type="search"
-            className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-[#121215] py-3 pl-11 pr-4 text-sm font-medium text-white outline-none placeholder:text-gray-600 focus:border-[#7c3aed]/50"
+            className="ui-input min-h-11 w-full min-w-0 touch-manipulation rounded-2xl py-3 pl-11 pr-4 text-sm font-medium text-white outline-none placeholder:text-gray-600 focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)]"
           />
         </div>
       </header>
@@ -289,9 +289,9 @@ export default function LessonsPage() {
           onSubmit={handleCreateLesson}
           className="ui-card min-w-0 space-y-6 [&_input]:touch-manipulation [&_select]:touch-manipulation [&_input]:text-sm [&_select]:text-sm"
         >
-          <div className="flex min-w-0 flex-col gap-2 border-b border-white/5 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 border-b pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex min-w-0 items-center gap-2">
-              <Plus size={18} className="shrink-0 text-[#7c3aed]" aria-hidden />
+              <Plus size={18} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <div>
                 <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">Yeni ders oluştur</h2>
                 <p className="mt-0.5 text-xs text-gray-500">
@@ -301,8 +301,8 @@ export default function LessonsPage() {
             </div>
           </div>
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">1 · Ders bilgisi</h3>
+          <section className="ui-kpi-section space-y-3 rounded-2xl p-4 sm:p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] ui-kpi-card__trend">1 · Ders bilgisi</h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 ui-grid-tight">
               <div className="ui-field md:col-span-2">
                 <label className="ui-label">Ders başlığı</label>
@@ -328,8 +328,8 @@ export default function LessonsPage() {
             </div>
           </section>
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">2 · Zaman ve yer</h3>
+          <section className="ui-kpi-section space-y-3 rounded-2xl p-4 sm:p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] ui-kpi-card__trend">2 · Zaman ve yer</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 ui-grid-tight">
               <div className="ui-field sm:col-span-2 lg:col-span-1">
                 <label className="ui-label">Tarih</label>
@@ -385,8 +385,8 @@ export default function LessonsPage() {
             </div>
           </section>
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">Lokasyon ekle</h3>
+          <section className="ui-kpi-section space-y-3 rounded-2xl p-4 sm:p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] ui-kpi-card__trend">Lokasyon ekle</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_120px_auto]">
               <input
                 value={newLocationName}
@@ -406,8 +406,8 @@ export default function LessonsPage() {
             </div>
           </section>
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">3 · Koç ve kapasite</h3>
+          <section className="ui-kpi-section space-y-3 rounded-2xl p-4 sm:p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] ui-kpi-card__trend">3 · Koç ve kapasite</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 ui-grid-tight">
               {role === "admin" ? (
                 <div className="ui-field">
@@ -447,7 +447,7 @@ export default function LessonsPage() {
           </section>
 
           {form.coachId && form.lessonDate ? (
-            <div className="rounded-xl border border-white/10 bg-[#1c1c21] p-4">
+            <div className="rounded-xl ui-card-inner p-4">
               <p className="ui-label mb-2">Bu koçun aynı günkü dersleri</p>
               {coachDayLessons.length === 0 ? (
                 <p className="text-xs text-gray-500">Bu tarihte bu koça atanmış başka ders kaydı yok.</p>
@@ -456,7 +456,7 @@ export default function LessonsPage() {
                   {coachDayLessons.map((lesson) => (
                     <li
                       key={lesson.id}
-                      className="min-w-0 break-words rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs font-medium text-gray-300"
+                      className="min-w-0 break-words rounded-lg ui-kpi-band px-3 py-2 text-xs font-medium text-gray-300"
                     >
                       <span className="font-semibold text-white">{lesson.title}</span>
                       <span className="text-gray-500">
@@ -470,21 +470,21 @@ export default function LessonsPage() {
             </div>
           ) : null}
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-black/25 p-4 sm:p-5">
+          <section className="ui-kpi-section space-y-3 rounded-2xl p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c4b5fd]">4 · Katılımcılar</h3>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] ui-kpi-card__trend">4 · Katılımcılar</h3>
                 <p className="mt-1 text-xs text-gray-500">Listeyi arayın; işaretledikleriniz derse eklenir.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold tabular-nums text-gray-300">
+                <span className="rounded-full px-3 py-1 text-[11px] font-bold tabular-nums text-gray-300">
                   Seçili: {selectedAthletes.length}
                 </span>
                 {selectedAthletes.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => setSelectedAthletes([])}
-                    className="rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold text-gray-400 touch-manipulation hover:border-red-500/30 hover:text-red-300"
+                    className="ui-btn-ghost rounded-full px-3 py-1 text-[11px] font-semibold text-gray-400 touch-manipulation hover:border-red-500/30 hover:text-red-300"
                   >
                     Seçimi temizle
                   </button>
@@ -515,14 +515,12 @@ export default function LessonsPage() {
                 return (
                   <label
                     key={athlete.id}
-                    className={`flex min-h-10 cursor-pointer items-center gap-3 rounded-lg border px-2 py-2 text-sm font-medium touch-manipulation min-w-0 ${
-                      checked ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-white" : "border-transparent hover:bg-white/[0.04]"
-                    }`}
+                    className={`flex min-h-10 cursor-pointer items-center gap-3 rounded-lg border px-2 py-2 text-sm font-medium touch-manipulation min-w-0 ${ checked ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] ui-kpi-band text-white" : "border-transparent hover:ui-kpi-band" }`}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      className="size-4 shrink-0 accent-[#7c3aed]"
+                      className="size-4 shrink-0 accent-[color:var(--peaker-ui-PRIMARY)]"
                       onChange={(e) =>
                         setSelectedAthletes((prev) =>
                           e.target.checked ? [...prev, athlete.id] : prev.filter((id) => id !== athlete.id)
@@ -539,7 +537,7 @@ export default function LessonsPage() {
             </div>
           </section>
 
-          <div className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-20 -mx-1 flex flex-col gap-2 border-t border-white/10 bg-[#0c0c0f]/95 px-1 pt-4 backdrop-blur-sm sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-between sm:border-t-0 sm:bg-transparent sm:pt-0 sm:backdrop-blur-none">
+          <div className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-20 -mx-1 flex flex-col gap-2 border-t ui-kpi-band/95 px-1 pt-4 backdrop-blur-sm sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-between sm:border-t-0 sm:bg-transparent sm:pt-0 sm:backdrop-blur-none">
             <p className="hidden text-xs text-gray-500 sm:block">Kaydetmeden önce tarih, saat ve koç alanlarını kontrol edin.</p>
             <button
               type="submit"
@@ -565,7 +563,7 @@ export default function LessonsPage() {
             <Link
               key={lesson.id}
               href={`/dersler/${lesson.id}`}
-              className="block min-h-[4.5rem] min-w-0 touch-manipulation rounded-[1.75rem] border border-white/5 bg-[#121215] p-4 transition-all sm:hover:border-[#7c3aed]/30"
+              className="block min-h-[4.5rem] min-w-0 touch-manipulation rounded-[1.75rem] ui-card p-4 transition-all sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)]"
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
                 <div className="min-w-0 flex-1">
@@ -582,7 +580,7 @@ export default function LessonsPage() {
                   <span className="ui-badge-neutral break-words max-w-full">
                     Koç: {lesson.coachId ? (coachNameById.get(lesson.coachId) ?? "Bilinmiyor") : "Atanmadı"}
                   </span>
-                  <span className="ui-badge-neutral text-[#c4b5fd] border-[#7c3aed]/20 bg-[#7c3aed]/10 shrink-0">
+                  <span className="ui-kpi-chip--brand shrink-0">
                     {lesson.capacity} kişi
                   </span>
                   <span

@@ -1,5 +1,7 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
+
 export function CompactTimelineItem({
   title,
   time,
@@ -17,13 +19,13 @@ export function CompactTimelineItem({
       : statusTone === "warning"
         ? "text-amber-300"
         : statusTone === "purple"
-          ? "text-[#c4b5fd]"
+          ? "ui-kpi-card__trend"
           : "text-gray-500";
 
   return (
-    <li className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2.5 py-2 text-[10px]">
+    <li className={`${uiBrandingClasses.kpi.card} flex min-w-0 items-center justify-between gap-2 !py-2 !px-2.5 text-[10px]`}>
       <span className="min-w-0 truncate font-bold text-white">{title}</span>
-      {time ? <span className="shrink-0 tabular-nums text-gray-600">{time}</span> : null}
+      {time ? <span className="ui-kpi-card__hint shrink-0 tabular-nums">{time}</span> : null}
       {status ? <span className={`shrink-0 font-black uppercase ${statusClass}`}>{status}</span> : null}
     </li>
   );

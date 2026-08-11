@@ -1,0 +1,116 @@
+/** ui-* class referanslari — globals.css ile hizalanir; Wave 5+ migration hedefleri. */
+export const uiBrandingClasses = {
+  page: {
+    base: "ui-page",
+    loose: "ui-page-loose",
+  },
+  typography: {
+    h1: "ui-h1",
+    h2: "ui-h2",
+    h2Sm: "ui-h2-sm",
+    lead: "ui-lead",
+    label: "ui-label",
+    body: "ui-body",
+  },
+  button: {
+    base: "ui-btn",
+    primary: "ui-btn-primary",
+    ghost: "ui-btn-ghost",
+    danger: "ui-btn-danger",
+  },
+  card: {
+    base: "ui-card",
+    inner: "ui-card-inner",
+    chart: "ui-card-chart",
+    compact: "ui-compact-card",
+  },
+  form: {
+    field: "ui-field",
+    input: "ui-input",
+    select: "ui-select",
+    textarea: "ui-textarea",
+  },
+  badge: {
+    base: "ui-badge",
+    neutral: "ui-badge-neutral",
+    success: "ui-badge-success",
+    warning: "ui-badge-warning",
+    danger: "ui-badge-danger",
+  },
+  layout: {
+    grid: "ui-grid",
+    gridTight: "ui-grid-tight",
+    section: "ui-section",
+    toolbar: "ui-toolbar",
+  },
+  data: {
+    tableScroll: "ui-table-scroll",
+    tableShell: "ui-table-shell",
+    tableToolbar: "ui-table-toolbar",
+    tablePagination: "ui-table-pagination",
+    tableRowHover: "ui-table-row ui-table-row--hover",
+    tableTh: "ui-table-th",
+    tableTd: "ui-table-td",
+  },
+  chart: {
+    shell: "ui-chart-shell",
+    shellPassive: "ui-chart-shell--passive",
+    noData: "ui-chart-no-data",
+  },
+  empty: {
+    state: "ui-empty-state",
+    compact: "ui-empty-state--compact",
+    default: "ui-empty-state--default",
+    iconWrap: "ui-empty-state__icon-wrap",
+    description: "ui-empty-state__description",
+    action: "ui-empty-state__action",
+  },
+  loading: {
+    panel: "ui-loading-panel",
+    panelSpinner: "ui-loading-panel__spinner",
+    panelLabel: "ui-loading-panel__label",
+    inline: "ui-loading-inline",
+    inlineSpinner: "ui-loading-inline__spinner",
+    refresh: "ui-loading-refresh",
+  },
+  skeleton: {
+    shell: "ui-skeleton-shell",
+    stat: "ui-skeleton-stat",
+    pulse: "ui-skeleton-pulse",
+    line: "ui-skeleton-line",
+  },
+  kpi: {
+    grid: "ui-kpi-grid",
+    grid5: "ui-kpi-grid--5",
+    section: "ui-kpi-section",
+    band: "ui-kpi-band",
+    card: "ui-kpi-card",
+    cardLabel: "ui-kpi-card__label",
+    cardValue: "ui-kpi-card__value",
+    cardHint: "ui-kpi-card__hint",
+    cardTrend: "ui-kpi-card__trend",
+    cardTrendLine: "ui-kpi-card__trend-line",
+    chip: "ui-kpi-chip",
+    chipBrand: "ui-kpi-chip--brand",
+    chipRefresh: "ui-kpi-chip__refresh",
+  },
+  metric: {
+    card: "ui-metric-card",
+    cardInput: "ui-metric-card__input",
+  },
+  navigation: {
+    tabsNav: "ui-tabs-nav",
+    tabsNavSticky: "ui-tabs-nav--sticky",
+    tabsNavTab: "ui-tabs-nav__tab",
+    tabsNavTabActive: "ui-tabs-nav__tab--active",
+    breadcrumb: "ui-breadcrumb",
+  },
+  toast: {
+    shell: "ui-toast-shell",
+  },
+  notification: {
+    info: "ui-notification-info",
+  },
+} as const;
+
+export type UiBrandingClasses = typeof uiBrandingClasses;

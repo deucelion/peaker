@@ -28,10 +28,10 @@ export default async function SporcuHesapDurumuPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#09090b] min-w-0">
-      <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/10 bg-[#121215] p-5 sm:p-8 shadow-2xl min-w-0">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] ui-page min-w-0">
+      <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/5 ui-card p-5 sm:p-8 shadow-2xl min-w-0">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[#7c3aed]">Peaker</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[color:var(--peaker-ui-PRIMARY)]">Peaker</p>
           <h1 className="mt-2 text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white break-words">Sporcu hesabi pasif</h1>
           <p className="mt-3 text-sm font-bold text-gray-400 leading-relaxed break-words">{ATHLETE_ACCOUNT_DISABLED_MESSAGE}</p>
         </div>

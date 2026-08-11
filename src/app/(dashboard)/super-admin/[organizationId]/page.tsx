@@ -78,7 +78,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
         <Link
           href="/super-admin"
-          className="inline-flex min-h-11 items-center rounded-xl border border-white/5 bg-[#121215] px-4 py-2 text-[#c4b5fd] text-[10px] font-black uppercase touch-manipulation sm:hover:border-[#7c3aed]/30 sm:hover:bg-[#7c3aed]/10 sm:hover:text-[#e9d5ff]"
+          className="inline-flex min-h-11 items-center rounded-xl border border-white/5 ui-card px-4 py-2 text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] text-[10px] font-black uppercase touch-manipulation sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] sm:hover:ui-kpi-chip--brand sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
         >
           {"<-"} Geri Don
         </Link>
@@ -94,10 +94,16 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
         </p>
         <a
           href="#kullanici-sifreleri"
-          className="inline-flex min-h-10 mt-3 items-center rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase text-[#ddd6fe] touch-manipulation sm:hover:bg-[#7c3aed]/20"
+          className="inline-flex min-h-10 mt-3 items-center rounded-xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] ui-kpi-chip--brand px-4 text-[10px] font-black uppercase text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] touch-manipulation sm:hover:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]"
         >
           Kullanıcı şifrelerine git
         </a>
+        <Link
+          href={`/super-admin/${organizationId}/branding`}
+          className="inline-flex min-h-10 mt-3 ml-2 items-center rounded-xl border border-white/5 ui-kpi-band px-4 text-[10px] font-black uppercase text-white touch-manipulation sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] sm:hover:ui-kpi-chip--brand"
+        >
+          Branding Editor
+        </Link>
       </header>
 
       <div id="kullanici-sifreleri" className="scroll-mt-6">
@@ -132,14 +138,14 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
       </section>
 
       <section className="grid lg:grid-cols-2 gap-4 min-w-0">
-        <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+        <div className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
           <p className="text-white text-sm font-black italic uppercase mb-3">Son Ders Aktivitesi</p>
           {lessons.length === 0 ? (
             <p className="text-[10px] text-gray-500 font-bold uppercase">Ders verisi yok</p>
           ) : (
             <div className="grid gap-2 min-w-0">
               {lessons.slice(0, 8).map((lesson) => (
-                <div key={lesson.id} className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 min-w-0">
+                <div key={lesson.id} className="ui-card-inner border border-white/5 rounded-lg px-3 py-2 min-w-0">
                   <p className="text-white text-xs font-black italic uppercase break-words">{lesson.title}</p>
                   <p className="text-[10px] text-gray-500 font-bold break-words">
                     {lesson.start_time ? new Date(lesson.start_time).toLocaleString("tr-TR") : "-"} • {lesson.location || "Lokasyon yok"}
@@ -150,14 +156,14 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
           )}
         </div>
 
-        <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+        <div className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
           <p className="text-white text-sm font-black italic uppercase mb-3">Son Program Aktivitesi</p>
           {programs.length === 0 ? (
             <p className="text-[10px] text-gray-500 font-bold uppercase">Program verisi yok</p>
           ) : (
             <div className="grid gap-2 min-w-0">
               {programs.map((program) => (
-                <div key={program.id} className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 min-w-0">
+                <div key={program.id} className="ui-card-inner border border-white/5 rounded-lg px-3 py-2 min-w-0">
                   <p className="text-white text-xs font-black italic uppercase break-words">{program.title || "Program"}</p>
                   <p className="text-[10px] text-gray-500 font-bold break-words">
                     {program.created_at ? new Date(program.created_at).toLocaleString("tr-TR") : "-"}
@@ -174,7 +180,7 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
 
 function Mini({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-[#121215] border border-white/5 rounded-xl p-2.5 sm:p-3 min-w-0">
+    <div className="ui-card border border-white/5 rounded-xl p-2.5 sm:p-3 min-w-0">
       <p className="text-[8px] sm:text-[9px] text-gray-500 font-black uppercase truncate">{label}</p>
       <p className="text-xl sm:text-2xl text-white font-black italic tabular-nums">{value}</p>
     </div>

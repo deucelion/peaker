@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  encodeNumericCellEditSeqMetadata,
+  encodeTextCellWithEditSeq,
+} from "@/lib/fieldTests/fieldTestEditSeqMetadata";
 
 export type AthleticResultsWriteShape = {
   hasValueText: boolean;
@@ -69,6 +73,7 @@ export function buildAthleticResultUpsertRow(params: {
   valueType: "number" | "text";
   valueNumber: number | null;
   valueText: string | null;
+  editSeq?: number;
   shape: AthleticResultsWriteShape;
 }): Record<string, unknown> {
   const row: Record<string, unknown> = {
@@ -80,17 +85,25 @@ export function buildAthleticResultUpsertRow(params: {
     row.organization_id = params.organizationId;
   }
 
+  const editSeq = params.editSeq ?? 0;
+
   if (params.valueType === "number") {
     row.value = params.valueNumber;
     if (params.shape.hasValueText) {
-      row.value_text = null;
+      row.value_text = editSeq > 0 ? encodeNumericCellEditSeqMetadata(editSeq) : null;
     }
     return row;
   }
 
   row.value = FIELD_TEST_TEXT_VALUE_PLACEHOLDER;
   if (params.shape.hasValueText) {
-    row.value_text = params.valueText;
+    const text = params.valueText?.trim() || "";
+    row.value_text =
+      editSeq > 0
+        ? encodeTextCellWithEditSeq(text, editSeq)
+        : text === ""
+          ? null
+          : text;
   }
   return row;
 }

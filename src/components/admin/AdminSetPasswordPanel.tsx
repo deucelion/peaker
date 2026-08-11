@@ -5,6 +5,7 @@ import { Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { setUserPasswordByAdmin } from "@/lib/actions/adminPasswordActions";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
 import { PASSWORD_FIELD_PROPS } from "@/lib/auth/passwordInput";
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 
 type Props = {
   targetUserId: string;
@@ -73,29 +74,33 @@ export function AdminSetPasswordPanel({
 
   return (
     <section
-      className={`bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0 overflow-x-hidden ${className}`}
+      className={`${uiBrandingClasses.card.base} space-y-4 min-w-0 overflow-x-hidden rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 ${className}`}
     >
       <div className="min-w-0">
-        <h3 className="text-base sm:text-lg font-black italic text-white uppercase break-words flex items-center gap-2">
-          <KeyRound size={18} className="shrink-0 text-[#7c3aed]" aria-hidden />
+        <h3 className="flex items-center gap-2 break-words text-base font-black uppercase italic text-white sm:text-lg">
+          <KeyRound
+            size={18}
+            className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]"
+            aria-hidden
+          />
           Şifre atama
         </h3>
-        <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wide sm:tracking-wider break-words">
+        <p className="mt-1 break-words text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:tracking-wider">
           {targetRoleLabel ? `${targetRoleLabel} · ` : ""}
           {targetName} — doğrudan yeni şifre belirlenir (e-posta gönderilmez).
         </p>
       </div>
       {message ? (
-        <p className="text-[11px] font-bold text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 break-words">
+        <p className="break-words rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-400/90">
           {message}
         </p>
       ) : null}
       {error ? (
-        <p className="text-[11px] font-bold text-red-300/90 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 break-words">
+        <p className="break-words rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-bold text-red-300/90">
           {error}
         </p>
       ) : null}
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 min-w-0">
+      <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-2 sm:flex-row">
         <div className="relative min-w-0 flex-1">
           <input
             type={showPassword ? "text" : "password"}
@@ -104,7 +109,7 @@ export function AdminSetPasswordPanel({
             minLength={6}
             autoComplete="new-password"
             placeholder="Yeni şifre (min 6 karakter)"
-            className="ui-input min-h-11 w-full bg-black/40 pr-11 normal-case"
+            className={`${uiBrandingClasses.form.input} min-h-11 w-full pr-11 normal-case`}
             disabled={pending}
             {...PASSWORD_FIELD_PROPS}
           />
@@ -120,7 +125,7 @@ export function AdminSetPasswordPanel({
         <button
           type="submit"
           disabled={pending || password.length < 6}
-          className="min-h-11 shrink-0 rounded-xl border border-[#7c3aed]/35 bg-[#7c3aed]/15 px-4 py-2.5 text-[10px] font-black uppercase text-[#ddd6fe] sm:hover:bg-[#7c3aed]/25 disabled:opacity-40 touch-manipulation inline-flex items-center justify-center gap-2"
+          className={`${uiBrandingClasses.kpi.chipBrand} ${uiBrandingClasses.button.base} min-h-11 shrink-0 touch-manipulation disabled:opacity-40`}
         >
           {pending ? <Loader2 className="animate-spin" size={14} aria-hidden /> : null}
           Şifreyi kaydet

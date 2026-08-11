@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight, Loader2 } from "lucide-react";
+import { DataTable, uiTableRowHoverClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 
 export type TeamDetailAthleteRow = {
   id: string;
@@ -50,20 +51,20 @@ export function TeamDetailPanel({
   onBackToTeams,
 }: TeamDetailPanelProps) {
   return (
-    <section className="space-y-5 rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+    <section className="space-y-5 rounded-2xl ui-card p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <button
             type="button"
             onClick={onBackToTeams}
-            className="mb-2 inline-flex min-h-9 items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400 transition hover:border-white/20 hover:text-white"
+            className="mb-2 inline-flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400 transition hover:border-white/20 hover:text-white"
           >
             <ChevronRight className="size-3.5 rotate-180" aria-hidden />
             Takımlara dön
           </button>
           {teamDetailLoading && !teamDetail ? (
             <div className="flex items-center gap-2 py-2">
-              <Loader2 className="size-5 animate-spin text-[#7c3aed]" aria-hidden />
+              <Loader2 className="size-5 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <span className="text-[11px] font-semibold text-gray-500">Yükleniyor…</span>
             </div>
           ) : teamDetail ? (
@@ -74,7 +75,7 @@ export function TeamDetailPanel({
                 <span className="tabular-nums text-gray-300">{teamDetail.summary.total}</span>
                 {teamDetailLoading ? (
                   <span className="ml-2 inline-flex align-middle">
-                    <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+                    <Loader2 className="size-3.5 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                   </span>
                 ) : null}
               </p>
@@ -90,7 +91,7 @@ export function TeamDetailPanel({
       ) : null}
 
       {teamDetail && teamDetail.canManageTeamMembers ? (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+        <div className="rounded-xl ui-card-inner p-4">
           <p className="text-[10px] font-black uppercase text-gray-500">Sporcu ekle</p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
@@ -114,7 +115,7 @@ export function TeamDetailPanel({
               type="button"
               disabled={assignBusy || !athleteToAddId || teamDetailLoading}
               onClick={() => onAssignAthlete()}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-[#7c3aed] px-5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-[#7c3aed]/25 transition hover:bg-[#6d28d9] disabled:opacity-45"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl ui-btn-primary px-5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)] transition hover:opacity-90 disabled:opacity-45"
             >
               {assignBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               Takıma ekle
@@ -125,48 +126,49 @@ export function TeamDetailPanel({
 
       {teamDetail && !teamDetailLoading ? (
         teamDetail.athletes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/10 bg-black/15 px-4 py-10 text-center">
+          <div className="rounded-xl border border-dashed ui-card-inner px-4 py-10 text-center">
             <p className="text-sm font-black text-gray-200">Bu takımda henüz sporcu yok.</p>
             <p className="mt-1 text-[11px] font-semibold text-gray-500">Yukarıdan sporcu ekleyerek başlayın.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-white/10">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Ad soyad</th>
-                  <th className="px-4 py-3">E-posta</th>
-                  <th className="px-4 py-3">Kategori</th>
-                  <th className="px-4 py-3 text-right"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamDetail.athletes.map((a) => (
-                  <tr key={a.id} className="border-b border-white/5 text-xs text-gray-200">
-                    <td className="px-4 py-3 font-semibold text-white">{a.fullName}</td>
-                    <td className="max-w-[12rem] truncate px-4 py-3 text-gray-400">{a.email}</td>
-                    <td className="px-4 py-3 text-gray-400">{a.position}</td>
-                    <td className="px-4 py-3 text-right">
-                      {teamDetail.canManageTeamMembers ? (
-                        <button
-                          type="button"
-                          disabled={removeBusyId === a.id || assignBusy}
-                          onClick={() => onRemoveAthlete(a.id, a.fullName)}
-                          className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-red-200 transition hover:bg-red-500/20 disabled:opacity-45"
-                        >
-                          {removeBusyId === a.id ? (
-                            <Loader2 className="mx-auto size-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            "Takımdan çıkar"
-                          )}
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            className="rounded-xl"
+            scrollClassName=""
+            tableClassName="min-w-full text-left text-sm"
+            headClassName="ui-table-head ui-table-head--divided text-[10px] font-black uppercase"
+            head={
+              <tr>
+                <th className={`${uiTableThClass} px-4 py-3`}>Ad soyad</th>
+                <th className={`${uiTableThClass} px-4 py-3`}>E-posta</th>
+                <th className={`${uiTableThClass} px-4 py-3`}>Kategori</th>
+                <th className={`${uiTableThClass} px-4 py-3 text-right`}> </th>
+              </tr>
+            }
+          >
+            {teamDetail.athletes.map((a) => (
+              <tr key={a.id} className={`${uiTableRowHoverClass} text-xs text-gray-200`}>
+                <td className={`${uiTableTdClass} px-4 py-3 font-semibold text-white`}>{a.fullName}</td>
+                <td className={`${uiTableTdClass} max-w-[12rem] truncate px-4 py-3 text-gray-400`}>{a.email}</td>
+                <td className={`${uiTableTdClass} px-4 py-3 text-gray-400`}>{a.position}</td>
+                <td className={`${uiTableTdClass} px-4 py-3 text-right`}>
+                  {teamDetail.canManageTeamMembers ? (
+                    <button
+                      type="button"
+                      disabled={removeBusyId === a.id || assignBusy}
+                      onClick={() => onRemoveAthlete(a.id, a.fullName)}
+                      className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-red-200 transition hover:bg-red-500/20 disabled:opacity-45"
+                    >
+                      {removeBusyId === a.id ? (
+                        <Loader2 className="mx-auto size-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        "Takımdan çıkar"
+                      )}
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )
       ) : null}
     </section>

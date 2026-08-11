@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   loadAccountingFinanceDashboard,
   type AccountingFinanceSnapshot,
 } from "@/lib/actions/accountingFinanceActions";
+import { OverlayDialog, OVERLAY_Z } from "@/components/ui/overlay";
 
 function monthKeyNow() {
   const date = new Date();
@@ -136,13 +138,13 @@ function TahsilatMerkeziContent() {
   const tabBaseClass =
     "min-h-10 inline-flex items-center justify-center rounded-xl px-3 text-[10px] font-black uppercase tracking-wide transition-colors sm:px-4";
   const tabActiveClass = "bg-emerald-500 text-black shadow-md shadow-emerald-500/15";
-  const tabIdleClass = "border border-white/10 bg-black/30 text-gray-300 hover:bg-white/5";
+  const tabIdleClass = "ui-kpi-band border text-gray-300 hover:bg-white/5";
 
   const scope = scopeForView(view);
 
   return (
     <div className="ui-page-loose space-y-5 pb-[max(5rem,env(safe-area-inset-bottom,0px))]">
-      <header className="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#121215] p-4 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 ui-kpi-section rounded-xl p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="ui-h1">
             Tahsilat <span className="text-green-500">Merkezi</span>
@@ -151,7 +153,7 @@ function TahsilatMerkeziContent() {
             Muhasebe, alacak takibi ve sporcu ödemelerini tek workspace üzerinden yönetin.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-black/30 p-1">
+            <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl ui-kpi-band border p-1">
               {HUB_TABS.map((tab) => (
                 <button
                   key={tab}
@@ -220,9 +222,15 @@ function TahsilatMerkeziContent() {
       ) : null}
 
       {tahsilatLoading && tahsilatOpen && !snapshot ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <OverlayDialog
+          open
+          layer={OVERLAY_Z.DIALOG}
+          className="!items-center justify-center"
+          enableFocusTrap={false}
+          shellClassName="border-0 bg-transparent p-0 shadow-none"
+        >
           <Loader2 className="size-10 animate-spin text-emerald-400" aria-hidden />
-        </div>
+        </OverlayDialog>
       ) : null}
 
       <TahsilatRecordSheet

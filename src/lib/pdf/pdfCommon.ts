@@ -1,6 +1,7 @@
 import type { jsPDF } from "jspdf";
 import type { PdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
 import { createDefaultPdfBrandingPresentation } from "@/lib/navigation/pdfBrandingPresentation";
+import type { PdfHeaderColorRgb } from "@/lib/pdf/pdfBrandingColors";
 
 /** jsPDF Helvetica icin ASCII fallback. */
 export function pdfSafeTr(text: string): string {
@@ -38,7 +39,10 @@ export type PdfBrandOptions = {
 
 const MARGIN = 14;
 const FOOTER_H = 10;
-const BRAND_COLOR: [number, number, number] = [124, 58, 237];
+
+function pdfHeaderColorRgb(opts: PdfBrandOptions): [number, number, number] {
+  return resolvePdfBrandOptions(opts).pdfBranding.headerColorRgb;
+}
 
 export function resolvePdfBrandOptions(opts: PdfBrandOptions): Required<Pick<PdfBrandOptions, "pdfBranding">> & PdfBrandOptions {
   return {
@@ -49,8 +53,9 @@ export function resolvePdfBrandOptions(opts: PdfBrandOptions): Required<Pick<Pdf
 
 export function drawReportHeader(doc: jsPDF, opts: PdfBrandOptions, ctx: PdfTextContext): number {
   const resolved = resolvePdfBrandOptions(opts);
+  const headerRgb = pdfHeaderColorRgb(opts);
   const pageW = doc.internal.pageSize.getWidth();
-  doc.setFillColor(...BRAND_COLOR);
+  doc.setFillColor(...headerRgb);
   doc.rect(0, 0, pageW, 22, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
@@ -81,11 +86,17 @@ export function ensureSpace(doc: jsPDF, y: number, need: number): number {
   return y;
 }
 
-export function drawSectionTitle(doc: jsPDF, y: number, title: string, ctx: PdfTextContext): number {
+export function drawSectionTitle(
+  doc: jsPDF,
+  y: number,
+  title: string,
+  ctx: PdfTextContext,
+  headerColorRgb?: PdfHeaderColorRgb
+): number {
   y = ensureSpace(doc, y, 12);
   pdfSetFont(doc, ctx, "bold");
   doc.setFontSize(11);
-  doc.setTextColor(...BRAND_COLOR);
+  doc.setTextColor(...(headerColorRgb ?? createDefaultPdfBrandingPresentation().headerColorRgb));
   doc.text(pdfT(title, ctx), MARGIN, y);
   doc.setDrawColor(220, 220, 220);
   doc.line(MARGIN, y + 2, doc.internal.pageSize.getWidth() - MARGIN, y + 2);

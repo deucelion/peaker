@@ -821,12 +821,12 @@ export default function WeeklyLessonSchedulePage() {
 
       {loading ? (
         <div className="flex min-h-[45dvh] items-center justify-center">
-          <Loader2 className="animate-spin text-[#7c3aed]" size={40} aria-hidden />
+          <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={40} aria-hidden />
         </div>
       ) : (
         <>
           {focusedDayKey ? (
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#121215] px-3 py-2">
+            <div className="mt-4 flex items-center justify-between rounded-xl ui-card px-3 py-2">
               <p className="text-[11px] font-black uppercase tracking-wide text-gray-200">
                 Gün detayı · {dayTitle(shownDayStarts[0] || dayStarts[0], appTz)}
               </p>

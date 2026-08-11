@@ -5,6 +5,7 @@ import { Loader2, Package, X } from "lucide-react";
 import { createPrivateLessonPackage } from "@/lib/actions/privateLessonPackageActions";
 import { parseTRYMoneyInput } from "@/lib/privateLessons/packageMath";
 import { MoneyAmountInput } from "@/components/privateLessons/MoneyAmountInput";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 
 export type PrivateLessonPackageFormValues = {
   athleteId: string;
@@ -114,15 +115,18 @@ export function PrivateLessonPackageFormModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal>
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Kapat" onClick={() => !saving && onClose()} />
-      <form
-        onSubmit={(e) => void handleSubmit(e)}
-        className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#121215] p-5 shadow-xl"
-      >
+    <OverlayDialog
+      open={open}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+      layer={OVERLAY_Z.DIALOG}
+      shellClassName="relative w-full max-w-lg rounded-2xl ui-card p-5 shadow-xl !max-w-lg"
+    >
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#7c3aed]/15 text-[#c4b5fd] ring-1 ring-[#7c3aed]/25">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ui-kpi-chip--brand ui-kpi-card__trend ring-1 ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)]">
               <Package size={22} aria-hidden />
             </span>
             <div className="min-w-0">
@@ -136,7 +140,7 @@ export function PrivateLessonPackageFormModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-lg border border-white/10 p-2 text-gray-400 hover:text-white"
+            className="rounded-lg p-2 text-gray-400 hover:text-white"
           >
             <X size={16} aria-hidden />
           </button>
@@ -144,14 +148,14 @@ export function PrivateLessonPackageFormModal({
 
         <div className="mt-5 space-y-4">
           {lockedAthleteId ? (
-            <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[11px] font-bold text-gray-300">
+            <div className="rounded-xl ui-kpi-band px-3 py-2 text-[11px] font-bold text-gray-300">
               Sporcu: <span className="text-white">{lockedAthleteName || "Seçili sporcu"}</span>
             </div>
           ) : (
             <label className="block space-y-1.5">
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sporcu *</span>
               <select
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={form.athleteId}
                 onChange={(e) => setForm((p) => ({ ...p, athleteId: e.target.value }))}
                 required
@@ -169,7 +173,7 @@ export function PrivateLessonPackageFormModal({
           <label className="block space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Koç</span>
             <select
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={form.coachId}
               onChange={(e) => setForm((p) => ({ ...p, coachId: e.target.value }))}
               disabled={viewerRole === "coach"}
@@ -186,7 +190,7 @@ export function PrivateLessonPackageFormModal({
           <label className="block space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Paket adı *</span>
             <input
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={form.packageName}
               onChange={(e) => setForm((p) => ({ ...p, packageName: e.target.value }))}
               placeholder="Örn: 8'li özel ders"
@@ -199,7 +203,7 @@ export function PrivateLessonPackageFormModal({
             <input
               type="number"
               min={1}
-              className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+              className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
               value={form.totalLessons}
               onChange={(e) => setForm((p) => ({ ...p, totalLessons: e.target.value }))}
               required
@@ -228,7 +232,7 @@ export function PrivateLessonPackageFormModal({
               <input
                 type="number"
                 min={1}
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={form.installmentCount}
                 onChange={(e) => setForm((p) => ({ ...p, installmentCount: e.target.value }))}
                 placeholder="Opsiyonel"
@@ -239,7 +243,7 @@ export function PrivateLessonPackageFormModal({
               <input
                 type="number"
                 min={1}
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={form.installmentIntervalDays}
                 onChange={(e) => setForm((p) => ({ ...p, installmentIntervalDays: e.target.value }))}
               />
@@ -248,7 +252,7 @@ export function PrivateLessonPackageFormModal({
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sonraki vade</span>
               <input
                 type="datetime-local"
-                className="min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] px-4 text-sm font-bold text-white"
+                className="min-h-[3rem] w-full rounded-2xl px-4 text-sm font-bold text-white"
                 value={form.nextPaymentDueAt}
                 onChange={(e) => setForm((p) => ({ ...p, nextPaymentDueAt: e.target.value }))}
               />
@@ -258,25 +262,25 @@ export function PrivateLessonPackageFormModal({
           {error ? <p className="text-[11px] font-bold text-red-300">{error}</p> : null}
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <OverlayFooter>
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-xl border border-white/10 px-4 py-2 text-[10px] font-black uppercase text-gray-300"
+            className="rounded-xl px-4 py-2 text-[10px] font-black uppercase text-gray-300"
           >
             Vazgeç
           </button>
           <button
             type="submit"
             disabled={saving || !isValid}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl ui-btn-primary px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
             Paketi kaydet
           </button>
-        </div>
+        </OverlayFooter>
       </form>
-    </div>
+    </OverlayDialog>
   );
 }

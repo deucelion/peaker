@@ -23,11 +23,12 @@ import {
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
-import { InlineErrorState } from "@/components/ui/data-display";
+import { InlineErrorState, DataTable, uiTableRowHoverClass, uiTableTdClass, uiTableThClass } from "@/components/ui/data-display";
 import { useMountedRef } from "@/lib/hooks/useMountedRef";
 import { queryErrorCopy } from "@/lib/ui/queryState";
 import { ChartFrame, chartTooltipStyle } from "@/components/ui/charts";
 import { LiveConnectionStrip, type LiveStatusTone } from "@/components/realtime/LiveStatusPrimitives";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 import { getSystemOperationsSnapshot } from "@/lib/actions/systemOperationsActions";
 import type { SystemOperationsSnapshot } from "@/lib/actions/systemOperationsTypes";
 import { getSchemaHealthSnapshotForOps } from "@/lib/actions/schemaHealthActions";
@@ -88,16 +89,16 @@ function statusToneClass(status: string | null | undefined): string {
   if (s === "succeeded") return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
   if (s === "failed") return "text-red-400 border-red-500/30 bg-red-500/10";
   if (s === "dead_letter") return "text-red-400 border-red-500/30 bg-red-500/10";
-  if (s === "cancelled") return "text-gray-400 border-white/10 bg-white/5";
+  if (s === "cancelled") return "text-gray-400 ui-kpi-band";
   if (s === "queued") return "text-sky-300 border-sky-500/30 bg-sky-500/10";
-  return "text-gray-400 border-white/10 bg-white/5";
+  return "text-gray-400 ui-kpi-band";
 }
 
 function mvStalenessToneClass(staleness: string): string {
   if (staleness === "fresh") return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
   if (staleness === "stale") return "text-amber-400 border-amber-500/30 bg-amber-500/10";
   if (staleness === "critical") return "text-red-400 border-red-500/30 bg-red-500/10";
-  return "text-gray-400 border-white/10 bg-white/5";
+  return "text-gray-400 ui-kpi-band";
 }
 
 function mvStalenessLabel(staleness: string): string {
@@ -329,9 +330,9 @@ export default function SystemOperationsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
-        <p className="text-center text-[10px] font-black uppercase italic tracking-wide text-gray-500 sm:tracking-widest">
+      <div className="ui-loading-panel flex min-h-[50dvh] min-w-0 flex-col items-center justify-center overflow-x-hidden px-4">
+        <Loader2 className="ui-loading-panel__spinner animate-spin" size={44} aria-hidden />
+        <p className="ui-loading-panel__label text-center italic tracking-wide sm:tracking-widest">
           Sistem operasyonları yükleniyor...
         </p>
       </div>
@@ -339,11 +340,11 @@ export default function SystemOperationsPage() {
   }
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden p-4 md:p-10">
+    <div className="ui-page space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden p-4 md:p-10">
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-            SİSTEM <span className="text-[#7c3aed]">OPERASYONLARI</span>
+            SİSTEM <span className="text-[color:var(--peaker-ui-PRIMARY)]">OPERASYONLARI</span>
           </h1>
           <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
             Retention cron, materialized view ve job durumu
@@ -355,7 +356,7 @@ export default function SystemOperationsPage() {
                 lastSyncAtMs != null ? formatRelativeTimeTr(new Date(lastSyncAtMs).toISOString()) : null
               }
             />
-            <details className="rounded-lg border border-white/10 bg-black/20 p-2 text-[9px] text-gray-500">
+            <details className="ui-card-inner p-2 text-[9px] text-gray-500">
               <summary className="cursor-pointer font-bold uppercase tracking-widest text-gray-400">
                 Bu oturum — istemci realtime telemetri
               </summary>
@@ -369,12 +370,12 @@ export default function SystemOperationsPage() {
           type="button"
           onClick={() => void load()}
           disabled={refreshing}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-[10px] font-black uppercase tracking-widest text-gray-200 disabled:cursor-not-allowed disabled:opacity-40 hover:border-[#7c3aed]/40 hover:text-white touch-manipulation"
+          className="ui-btn-ghost inline-flex min-h-11 items-center gap-2 px-4 text-[10px] font-black uppercase tracking-widest text-gray-200 disabled:cursor-not-allowed disabled:opacity-40 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:hover:text-white touch-manipulation"
         >
           {refreshing ? (
-            <Loader2 className="size-3.5 animate-spin text-[#7c3aed]" aria-hidden />
+            <Loader2 className="size-3.5 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
           ) : (
-            <RefreshCcw className="size-3.5 text-[#7c3aed]" aria-hidden />
+            <RefreshCcw className="size-3.5 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
           )}
           Yenile
         </button>
@@ -430,14 +431,14 @@ export default function SystemOperationsPage() {
               DLQ: <span className="tabular-nums">{snapshot.queueStats.deadLetterCount}</span>
             </span>
             <span
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              className="ui-kpi-band inline-flex items-center gap-1 rounded-md px-2 py-0.5"
               title="Son 60 dakikada kuyruğa alınan iş tahmini"
             >
-              <Gauge size={12} className="text-[#7c3aed]" aria-hidden />
+              <Gauge size={12} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               ~{snapshot.queueAnalyticsBrief.jobsPerMinuteEstimate?.toFixed(1) ?? "—"}/dk
             </span>
             <span
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              className="ui-kpi-band inline-flex items-center gap-1 rounded-md px-2 py-0.5"
               title="Son 24 saatte tamamlanan export sayısı ve satır"
             >
               <TrendingUp size={12} className="text-emerald-400" aria-hidden />
@@ -445,7 +446,7 @@ export default function SystemOperationsPage() {
               {snapshot.queueAnalyticsBrief.exportRowsLast24h} satır)
             </span>
             <span
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              className="ui-kpi-band inline-flex items-center gap-1 rounded-md px-2 py-0.5"
               title="En son worker heartbeat"
             >
               <Clock size={12} className="text-gray-500" aria-hidden />
@@ -456,7 +457,7 @@ export default function SystemOperationsPage() {
               )}
             </span>
             <span
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5"
+              className="ui-kpi-band inline-flex items-center gap-1 rounded-md px-2 py-0.5"
               title="pg_cron retention job son çalışma"
             >
               <Database size={12} className="text-gray-500" aria-hidden />
@@ -519,21 +520,21 @@ export default function SystemOperationsPage() {
 
           {/* Faz 13.1 — Worker recovery kartları */}
           <section className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+            <div className="ui-card p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Stuck rescue (24sa)</p>
               <p className="mt-2 text-2xl font-black text-emerald-400 tabular-nums">
                 {snapshot.workerRecovery24h.rescuedJobs}
               </p>
               <p className="mt-1 text-[10px] font-bold text-gray-500">Requeued (heartbeat window)</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+            <div className="ui-card p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">DLQ finalize (24sa)</p>
               <p className="mt-2 text-2xl font-black text-red-400 tabular-nums">
                 {snapshot.workerRecovery24h.deadJobs}
               </p>
               <p className="mt-1 text-[10px] font-bold text-gray-500">Stuck + max attempts</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+            <div className="ui-card p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Retry storms (24sa)</p>
               <p className="mt-2 text-2xl font-black text-amber-400 tabular-nums">
                 {snapshot.workerRecovery24h.retryStorms}
@@ -543,7 +544,7 @@ export default function SystemOperationsPage() {
           </section>
 
           {isSuperAdmin ? (
-            <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+            <section className="ui-card p-5 sm:p-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="min-w-0">
                   <h2 className="text-sm font-black uppercase text-white tracking-widest">Super admin — org daraltma</h2>
@@ -556,13 +557,13 @@ export default function SystemOperationsPage() {
                     value={orgScopeInput}
                     onChange={(e) => setOrgScopeInput(e.target.value)}
                     placeholder="Organizasyon UUID"
-                    className="min-h-11 min-w-[12rem] flex-1 rounded-xl border border-white/10 bg-black/40 px-3 text-[11px] font-mono text-gray-200"
+                    className="min-h-11 min-w-[12rem] flex-1 rounded-xl ui-input border px-3 text-[11px] font-mono text-gray-200"
                   />
                   <button
                     type="button"
                     onClick={() => void load()}
                     disabled={refreshing}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                    className="ui-btn-primary inline-flex min-h-11 items-center gap-2 px-4 text-[10px] tracking-widest disabled:opacity-40"
                   >
                     Uygula
                   </button>
@@ -572,9 +573,9 @@ export default function SystemOperationsPage() {
           ) : null}
 
           {/* Faz 14.2 — Rate limiter runtime */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <Gauge size={18} className="text-[#7c3aed]" aria-hidden />
+              <Gauge size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Rate limiter</h2>
               {snapshot.rateLimiterRuntime.limiterUnhealthyBackendHits > 0 ? (
                 <span className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-300">
@@ -588,19 +589,19 @@ export default function SystemOperationsPage() {
               ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-[11px] font-bold text-gray-400">
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Aktif adapter</p>
                 <p className="mt-1 font-mono text-white">{snapshot.rateLimiterRuntime.activeAdapter}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Fallback adapter</p>
                 <p className="mt-1 font-mono text-white">{snapshot.rateLimiterRuntime.fallbackAdapter}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Fallback sayısı</p>
                 <p className="mt-1 tabular-nums text-amber-300">{snapshot.rateLimiterRuntime.limiterFallbackCount}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-600">Son hata</p>
                 <p className="mt-1 break-words text-gray-300">
                   {snapshot.rateLimiterRuntime.lastLimiterFailureReason ?? "—"}
@@ -627,13 +628,13 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 14.5 — Kuyruk analitiği (aggregate) */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={18} className="text-[#7c3aed]" aria-hidden />
+              <TrendingUp size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Kuyruk analitiği</h2>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-[11px] mb-4">
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase text-gray-600">Job/dk (60dk örnek)</p>
                 <p className="mt-1 tabular-nums text-white text-lg font-black">
                   {snapshot.queueAnalyticsBrief.jobsPerMinuteEstimate != null
@@ -641,7 +642,7 @@ export default function SystemOperationsPage() {
                     : "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase text-gray-600">Çoklu deneme oranı</p>
                 <p className="mt-1 tabular-nums text-amber-300 text-lg font-black">
                   {snapshot.queueAnalyticsBrief.multiAttemptFraction != null
@@ -649,7 +650,7 @@ export default function SystemOperationsPage() {
                     : "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase text-gray-600">Export satır/dk (24s)</p>
                 <p className="mt-1 tabular-nums text-emerald-300 text-lg font-black">
                   {snapshot.queueAnalyticsBrief.exportRowsPerMinuteEstimate != null
@@ -657,7 +658,7 @@ export default function SystemOperationsPage() {
                     : "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <div className="ui-card-inner p-3">
                 <p className="text-[9px] font-black uppercase text-gray-600">Export tamam (24s)</p>
                 <p className="mt-1 tabular-nums text-white text-lg font-black">
                   {snapshot.queueAnalyticsBrief.exportsFinishedLast24h}
@@ -673,7 +674,7 @@ export default function SystemOperationsPage() {
                     <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} />
                     <YAxis width={32} tick={{ fill: "#9ca3af", fontSize: 10 }} allowDecimals={false} />
                     <Tooltip contentStyle={chartTooltipStyle.contentStyle} itemStyle={chartTooltipStyle.itemStyle} />
-                    <Bar dataKey="value" fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                    <Bar dataKey="value" fill="var(--peaker-ui-PRIMARY)" radius={[4, 4, 0, 0]} maxBarSize={48} />
                   </BarChart>
                 </ChartFrame>
               </div>
@@ -693,7 +694,7 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 14.7 — Operational replay */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <h2 className="text-sm font-black uppercase text-white tracking-widest mb-3">Operasyon replay</h2>
             <p className="text-[10px] font-bold text-gray-500 mb-3">
               Tümü audit kaydı üretir. Retention yalnızca super_admin.
@@ -706,7 +707,7 @@ export default function SystemOperationsPage() {
                   setReplayOpen("alerts");
                   setReplayReason("");
                 }}
-                className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200"
+                className="ui-btn-ghost inline-flex min-h-10 items-center gap-1 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200"
               >
                 Uyarı değerlendirme
               </button>
@@ -717,7 +718,7 @@ export default function SystemOperationsPage() {
                   setReplayOpen("export_audit");
                   setReplayReason("");
                 }}
-                className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200"
+                className="ui-btn-ghost inline-flex min-h-10 items-center gap-1 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200"
               >
                 Audit export job
               </button>
@@ -738,7 +739,7 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 13.3 / 14.4 — Operasyonel uyarılar */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={18} className="text-amber-400" aria-hidden />
@@ -752,8 +753,7 @@ export default function SystemOperationsPage() {
                     onClick={() => setAlertSevFilter(k)}
                     className={`rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
                       alertSevFilter === k
-                        ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                        : "border-white/10 bg-white/5 text-gray-400"
+                        ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white" : "ui-kpi-band text-gray-400"
                     }`}
                   >
                     {k === "all" ? "Tümü" : k}
@@ -768,7 +768,7 @@ export default function SystemOperationsPage() {
                 {filteredOpenAlerts.map((a) => (
                   <li
                     key={a.id}
-                    className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 flex flex-wrap items-start justify-between gap-2"
+                    className="ui-card-inner px-4 py-3 flex flex-wrap items-start justify-between gap-2"
                   >
                     <div className="min-w-0">
                       <p className="text-xs font-black text-white break-words">{a.title}</p>
@@ -779,7 +779,7 @@ export default function SystemOperationsPage() {
                             Onaylı
                           </span>
                         ) : (
-                          <span className="rounded border border-white/10 px-1.5 py-0.5">Açık</span>
+                          <span className="rounded ui-kpi-band border px-1.5 py-0.5">Açık</span>
                         )}
                         {a.escalationCount > 0 ? (
                           <span className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-red-200">
@@ -825,7 +825,7 @@ export default function SystemOperationsPage() {
                               }
                             })();
                           }}
-                          className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase text-gray-200 disabled:opacity-40"
+                          className="ui-kpi-band rounded-lg px-2 py-1 text-[9px] font-black uppercase text-gray-200 disabled:opacity-40"
                         >
                           Onayla
                         </button>
@@ -865,10 +865,10 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 13.7 — Operasyon timeline */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div className="flex items-center gap-2">
-                <History size={18} className="text-[#7c3aed]" aria-hidden />
+                <History size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                 <h2 className="text-sm font-black uppercase text-white tracking-widest">Operasyon zaman çizelgesi</h2>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -887,8 +887,7 @@ export default function SystemOperationsPage() {
                     onClick={() => setTimelineFilter(key)}
                     className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-widest touch-manipulation ${
                       timelineFilter === key
-                        ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                        : "border-white/10 bg-white/5 text-gray-400"
+                        ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white" : "ui-kpi-band text-gray-400"
                     }`}
                   >
                     <ListFilter size={12} aria-hidden />
@@ -921,7 +920,7 @@ export default function SystemOperationsPage() {
                   {rows.slice(0, 40).map((t) => (
                     <li
                       key={t.id}
-                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 flex flex-wrap gap-2 items-start justify-between"
+                      className="ui-card-inner px-3 py-2 flex flex-wrap gap-2 items-start justify-between"
                     >
                       <div className="min-w-0">
                         <p className="text-[10px] font-mono text-gray-500">{t.eventType}</p>
@@ -945,9 +944,9 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Cron Jobs */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <ServerCog size={18} className="text-[#7c3aed]" aria-hidden />
+              <ServerCog size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Cron Job Durumu</h2>
               <span
                 className={`ml-2 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
@@ -978,7 +977,7 @@ export default function SystemOperationsPage() {
                 {snapshot.cronJobs.map((job) => (
                   <div
                     key={job.jobname}
-                    className="rounded-xl border border-white/10 bg-black/30 p-4 min-w-0"
+                    className="ui-card-inner p-4 min-w-0"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -1020,9 +1019,9 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Recent Retention Runs */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Clock size={18} className="text-[#7c3aed]" aria-hidden />
+              <Clock size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Son 7 Gün Retention Run&apos;ları</h2>
             </div>
             {snapshot.recentRetentionRuns.length === 0 ? (
@@ -1033,48 +1032,49 @@ export default function SystemOperationsPage() {
                 variant="no_data"
               />
             ) : (
-              <div className="overflow-x-auto -mx-2 px-2">
-                <table className="min-w-full text-left text-[11px]">
-                  <thead>
-                    <tr className="border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-gray-500">
-                      <th className="px-3 py-2">Job</th>
-                      <th className="px-3 py-2">Başlangıç</th>
-                      <th className="px-3 py-2">Durum</th>
-                      <th className="px-3 py-2">Süre</th>
-                      <th className="px-3 py-2">Mesaj</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.recentRetentionRuns.map((run, idx) => (
-                      <tr key={`${run.jobname}-${run.startTime}-${idx}`} className="border-b border-white/5 last:border-0">
-                        <td className="px-3 py-2 font-bold text-white whitespace-nowrap">{run.jobname}</td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{formatDateTime(run.startTime)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusToneClass(run.status)}`}>
-                            {run.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{formatDuration(run.durationMs)}</td>
-                        <td className="px-3 py-2 text-gray-400 break-words min-w-0 max-w-[24ch]">
-                          {run.returnMessage || "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                bare
+                scrollClassName="-mx-2 px-2"
+                tableClassName="min-w-full text-left text-[11px]"
+                headClassName="ui-table-head ui-table-head--divided text-[9px] font-black uppercase tracking-widest"
+                head={
+                  <tr>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Job</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Başlangıç</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Durum</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Süre</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Mesaj</th>
+                  </tr>
+                }
+              >
+                {snapshot.recentRetentionRuns.map((run, idx) => (
+                  <tr key={`${run.jobname}-${run.startTime}-${idx}`} className={uiTableRowHoverClass}>
+                    <td className={`${uiTableTdClass} px-3 py-2 font-bold text-white whitespace-nowrap`}>{run.jobname}</td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>{formatDateTime(run.startTime)}</td>
+                    <td className={`${uiTableTdClass} px-3 py-2`}>
+                      <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusToneClass(run.status)}`}>
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>{formatDuration(run.durationMs)}</td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 break-words min-w-0 max-w-[24ch]`}>
+                      {run.returnMessage || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </DataTable>
             )}
           </section>
 
           {/* Materialized Views */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Database size={18} className="text-[#7c3aed]" aria-hidden />
+              <Database size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Materialized View Durumu</h2>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {snapshot.materializedViews.map((mv) => (
-                <div key={mv.name} className="rounded-xl border border-white/10 bg-black/30 p-4 min-w-0">
+                <div key={mv.name} className="ui-card-inner p-4 min-w-0">
                   <p className="text-xs font-black text-white break-words">{mv.name}</p>
                   {mv.available ? (
                     <>
@@ -1092,9 +1092,9 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 12.8 — MV freshness indicators */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Database size={18} className="text-[#7c3aed]" aria-hidden />
+              <Database size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">MV Freshness</h2>
             </div>
             {snapshot.mvFreshness.length === 0 ? (
@@ -1109,7 +1109,7 @@ export default function SystemOperationsPage() {
                 {snapshot.mvFreshness.map((mv) => (
                   <div
                     key={mv.name}
-                    className="rounded-xl border border-white/10 bg-black/30 p-4 min-w-0"
+                    className="ui-card-inner p-4 min-w-0"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-xs font-black text-white break-words">{mv.name}</p>
@@ -1139,11 +1139,11 @@ export default function SystemOperationsPage() {
           </section>
 
           {/* Faz 12.8 — Active workers */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Cpu size={18} className="text-[#7c3aed]" aria-hidden />
+              <Cpu size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Aktif Worker&apos;lar</h2>
-              <span className="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
+              <span className="ml-2 ui-kpi-band rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
                 {snapshot.activeWorkers.filter((w) => w.isActive).length} aktif /{" "}
                 {snapshot.activeWorkers.length} toplam
               </span>
@@ -1156,77 +1156,78 @@ export default function SystemOperationsPage() {
                 variant="no_data"
               />
             ) : (
-              <div className="overflow-x-auto -mx-2 px-2">
-                <table className="min-w-full text-left text-[11px]">
-                  <thead>
-                    <tr className="border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-gray-500">
-                      <th className="px-3 py-2">Worker</th>
-                      <th className="px-3 py-2">Kaynak</th>
-                      <th className="px-3 py-2">Son Tick</th>
-                      <th className="px-3 py-2">İşlenen</th>
-                      <th className="px-3 py-2">OK / Fail / DLQ</th>
-                      <th className="px-3 py-2">Rescue / DLQ</th>
-                      <th className="px-3 py-2">Storm</th>
-                      <th className="px-3 py-2">Süre</th>
-                      <th className="px-3 py-2">Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.activeWorkers.map((w) => (
-                      <tr key={w.workerId} className="border-b border-white/5 last:border-0">
-                        <td className="px-3 py-2 font-bold text-white whitespace-nowrap font-mono text-[10px]">
-                          {w.workerId}
-                        </td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{w.source}</td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
-                          {formatDateTime(w.lastTickAt)}
-                        </td>
-                        <td className="px-3 py-2 text-gray-300 tabular-nums">{w.processedCount}</td>
-                        <td className="px-3 py-2 tabular-nums">
-                          <span className="text-emerald-400">{w.succeededCount}</span>
-                          {" / "}
-                          <span className="text-amber-400">{w.failedCount}</span>
-                          {" / "}
-                          <span className="text-red-400">{w.deadLetterCount}</span>
-                        </td>
-                        <td className="px-3 py-2 text-[10px] text-gray-400 tabular-nums whitespace-nowrap">
-                          <span className="text-emerald-400">{w.rescueRescuedCount ?? 0}</span>
-                          {" / "}
-                          <span className="text-red-400">{w.rescueDeadStuckCount ?? 0}</span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-400 text-[10px]">
-                          {w.retryStormDetected ? (
-                            <span className="text-amber-400 font-black">EVET</span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
-                          {formatDuration(w.durationMs)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
-                              w.isActive
-                                ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
-                                : "text-gray-500 border-white/10 bg-white/5"
-                            }`}
-                          >
-                            {w.isActive ? "Aktif" : "Bekliyor"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                bare
+                scrollClassName="-mx-2 px-2"
+                tableClassName="min-w-full text-left text-[11px]"
+                headClassName="ui-table-head ui-table-head--divided text-[9px] font-black uppercase tracking-widest"
+                head={
+                  <tr>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Worker</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Kaynak</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Son Tick</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>İşlenen</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>OK / Fail / DLQ</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Rescue / DLQ</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Storm</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Süre</th>
+                    <th className={`${uiTableThClass} px-3 py-2`}>Durum</th>
+                  </tr>
+                }
+              >
+                {snapshot.activeWorkers.map((w) => (
+                  <tr key={w.workerId} className={uiTableRowHoverClass}>
+                    <td className={`${uiTableTdClass} px-3 py-2 font-bold text-white whitespace-nowrap font-mono text-[10px]`}>
+                      {w.workerId}
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>{w.source}</td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>
+                      {formatDateTime(w.lastTickAt)}
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-300 tabular-nums`}>{w.processedCount}</td>
+                    <td className={`${uiTableTdClass} px-3 py-2 tabular-nums`}>
+                      <span className="text-emerald-400">{w.succeededCount}</span>
+                      {" / "}
+                      <span className="text-amber-400">{w.failedCount}</span>
+                      {" / "}
+                      <span className="text-red-400">{w.deadLetterCount}</span>
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-[10px] text-gray-400 tabular-nums whitespace-nowrap`}>
+                      <span className="text-emerald-400">{w.rescueRescuedCount ?? 0}</span>
+                      {" / "}
+                      <span className="text-red-400">{w.rescueDeadStuckCount ?? 0}</span>
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 text-[10px]`}>
+                      {w.retryStormDetected ? (
+                        <span className="text-amber-400 font-black">EVET</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>
+                      {formatDuration(w.durationMs)}
+                    </td>
+                    <td className={`${uiTableTdClass} px-3 py-2`}>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                          w.isActive
+                            ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                            : "text-gray-500 ui-kpi-band"
+                        }`}
+                      >
+                        {w.isActive ? "Aktif" : "Bekliyor"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </DataTable>
             )}
           </section>
 
           {/* Queue & Recent Jobs — Faz 11.8 + Faz 12.8 */}
-          <section className="rounded-2xl border border-white/5 bg-[#121215] p-5 sm:p-6">
+          <section className="ui-card p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Activity size={18} className="text-[#7c3aed]" aria-hidden />
+              <Activity size={18} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
               <h2 className="text-sm font-black uppercase text-white tracking-widest">Async Queue Durumu</h2>
               <span
                 className={`ml-2 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
@@ -1251,25 +1252,25 @@ export default function SystemOperationsPage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-4">
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Toplam (son 100)</p>
                     <p className="mt-1 text-xl font-black text-white tabular-nums">
                       {snapshot.queueStats.total}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Queued</p>
                     <p className="mt-1 text-xl font-black text-amber-300 tabular-nums">
                       {snapshot.queueStats.byStatus.queued ?? 0}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Failed (24h)</p>
                     <p className="mt-1 text-xl font-black text-red-300 tabular-nums">
                       {snapshot.queueStats.failedRecentCount}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <div className="flex items-center gap-1">
                       <AlertTriangle size={11} className="text-red-400" aria-hidden />
                       <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">
@@ -1280,13 +1281,13 @@ export default function SystemOperationsPage() {
                       {snapshot.queueStats.deadLetterCount}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Avg süre</p>
                     <p className="mt-1 text-base font-black text-white tabular-nums">
                       {formatDuration(snapshot.queueStats.averageDurationMs)}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <div className="flex items-center gap-1">
                       <TrendingUp size={11} className="text-amber-300" aria-hidden />
                       <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">
@@ -1297,18 +1298,18 @@ export default function SystemOperationsPage() {
                       {formatDuration(snapshot.queueStats.p95DurationMs)}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">En eski queued</p>
                     <p className="mt-1 text-[11px] font-bold text-gray-300">
                       {formatDateTime(snapshot.queueStats.oldestQueuedAt)}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <div className="ui-card-inner p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Export Süreleri</p>
                     <ExportDurationSparkline samples={snapshot.exportDurationSamples} />
                   </div>
                 </div>
-                <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="mb-4 flex flex-col gap-3 ui-card-inner p-4 sm:flex-row sm:flex-wrap sm:items-center">
                   <p className="shrink-0 text-[10px] font-black uppercase tracking-widest text-gray-500">
                     Queue aksiyonları
                   </p>
@@ -1326,7 +1327,7 @@ export default function SystemOperationsPage() {
                           })
                         )
                       }
-                      className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200 disabled:opacity-40"
+                      className="ui-btn-ghost inline-flex min-h-10 items-center gap-1 px-3 text-[9px] font-black uppercase tracking-widest text-gray-200 disabled:opacity-40"
                     >
                       <RotateCcw size={12} aria-hidden />
                       {queueBusy === "retry_all" ? <Loader2 className="size-3 animate-spin" /> : null}
@@ -1367,73 +1368,70 @@ export default function SystemOperationsPage() {
                     variant="no_data"
                   />
                 ) : (
-                  <div className="overflow-x-auto -mx-2 px-2">
-                    <table className="min-w-full text-left text-[11px]">
-                      <thead>
-                        <tr className="border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-gray-500">
-                          <th className="px-3 py-2">Kind</th>
-                          <th className="px-3 py-2">Status</th>
-                          <th className="px-3 py-2">Attempts</th>
-                          <th className="px-3 py-2">Enqueued</th>
-                          <th className="px-3 py-2">Finished</th>
-                          <th className="px-3 py-2">Hata</th>
-                          <th className="px-3 py-2 text-right">İşlem</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {snapshot.recentJobs.slice(0, 15).map((job) => (
-                          <tr key={job.id} className="border-b border-white/5 last:border-0">
-                            <td className="px-3 py-2 font-bold text-white whitespace-nowrap">{job.kind}</td>
-                            <td className="px-3 py-2">
-                              <span
-                                className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusToneClass(
-                                  job.status
-                                )}`}
-                              >
-                                {job.status}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-gray-400 tabular-nums">
-                              {job.attempts}/{job.maxAttempts}
-                            </td>
-                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{formatDateTime(job.enqueuedAt)}</td>
-                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{formatDateTime(job.finishedAt)}</td>
-                            <td className="px-3 py-2 text-gray-400 break-words min-w-0 max-w-[20ch]">
-                              {job.errorMessage || "-"}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedJob(job)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#7c3aed] hover:border-[#7c3aed]/40"
-                              >
-                                Detay
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable
+                    bare
+                    scrollClassName="-mx-2 px-2"
+                    tableClassName="min-w-full text-left text-[11px]"
+                    headClassName="ui-table-head ui-table-head--divided text-[9px] font-black uppercase tracking-widest"
+                    head={
+                      <tr>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Kind</th>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Status</th>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Attempts</th>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Enqueued</th>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Finished</th>
+                        <th className={`${uiTableThClass} px-3 py-2`}>Hata</th>
+                        <th className={`${uiTableThClass} px-3 py-2 text-right`}>İşlem</th>
+                      </tr>
+                    }
+                  >
+                    {snapshot.recentJobs.slice(0, 15).map((job) => (
+                      <tr key={job.id} className={uiTableRowHoverClass}>
+                        <td className={`${uiTableTdClass} px-3 py-2 font-bold text-white whitespace-nowrap`}>{job.kind}</td>
+                        <td className={`${uiTableTdClass} px-3 py-2`}>
+                          <span
+                            className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusToneClass(
+                              job.status
+                            )}`}
+                          >
+                            {job.status}
+                          </span>
+                        </td>
+                        <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 tabular-nums`}>
+                          {job.attempts}/{job.maxAttempts}
+                        </td>
+                        <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>{formatDateTime(job.enqueuedAt)}</td>
+                        <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 whitespace-nowrap`}>{formatDateTime(job.finishedAt)}</td>
+                        <td className={`${uiTableTdClass} px-3 py-2 text-gray-400 break-words min-w-0 max-w-[20ch]`}>
+                          {job.errorMessage || "-"}
+                        </td>
+                        <td className={`${uiTableTdClass} px-3 py-2 text-right`}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedJob(job)}
+                            className="ui-kpi-band rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--peaker-ui-PRIMARY)] sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)]"
+                          >
+                            Detay
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </DataTable>
                 )}
               </>
             )}
           </section>
 
           {replayOpen ? (
-            <div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="replay-modal-title"
+            <OverlayDialog
+              open
+              onClose={() => {
+                if (!replayBusy) setReplayOpen(null);
+              }}
+              layer={OVERLAY_Z.DIALOG}
+              titleId="replay-modal-title"
+              shellClassName="relative w-full max-w-md ui-card p-5 shadow-xl !max-w-md"
             >
-              <button
-                type="button"
-                className="absolute inset-0 cursor-default"
-                aria-label="Kapat"
-                onClick={() => !replayBusy && setReplayOpen(null)}
-              />
-              <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-5 shadow-xl">
                 <div className="flex items-start justify-between gap-2">
                   <h3 id="replay-modal-title" className="text-sm font-black uppercase text-white tracking-widest">
                     Replay
@@ -1442,7 +1440,7 @@ export default function SystemOperationsPage() {
                     type="button"
                     disabled={replayBusy}
                     onClick={() => setReplayOpen(null)}
-                    className="rounded-lg border border-white/10 p-1.5 text-gray-400 hover:text-white disabled:opacity-40"
+                    className="ui-btn-ghost rounded-lg p-1.5 text-gray-400 hover:text-white disabled:opacity-40"
                   >
                     <X size={16} aria-hidden />
                   </button>
@@ -1462,16 +1460,16 @@ export default function SystemOperationsPage() {
                     onChange={(e) => setReplayReason(e.target.value)}
                     rows={3}
                     disabled={replayBusy}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-[11px] text-gray-200"
+                    className="mt-1 w-full rounded-xl ui-input border px-3 py-2 text-[11px] text-gray-200"
                     placeholder="Opsiyonel — audit metadata"
                   />
                 </label>
-                <div className="mt-4 flex justify-end gap-2">
+                <OverlayFooter>
                   <button
                     type="button"
                     disabled={replayBusy}
                     onClick={() => setReplayOpen(null)}
-                    className="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-black uppercase text-gray-300"
+                    className="ui-btn-ghost rounded-lg px-3 py-2 text-[10px] font-black uppercase text-gray-300"
                   >
                     Vazgeç
                   </button>
@@ -1519,30 +1517,23 @@ export default function SystemOperationsPage() {
                         }
                       })();
                     }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/15 px-3 py-2 text-[10px] font-black uppercase text-white disabled:opacity-40"
+                    className="ui-btn-primary inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] disabled:opacity-40"
                   >
                     {replayBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
                     Çalıştır
                   </button>
-                </div>
-              </div>
-            </div>
+                </OverlayFooter>
+            </OverlayDialog>
           ) : null}
 
           {selectedJob ? (
-            <div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="job-detail-title"
+            <OverlayDialog
+              open
+              onClose={() => setSelectedJob(null)}
+              layer={OVERLAY_Z.DIALOG}
+              titleId="job-detail-title"
+              shellClassName="relative max-h-[90vh] w-full max-w-lg overflow-y-auto ui-card p-5 shadow-xl custom-scrollbar !max-w-lg"
             >
-              <button
-                type="button"
-                className="absolute inset-0 cursor-default"
-                aria-label="Kapat"
-                onClick={() => setSelectedJob(null)}
-              />
-              <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#121215] p-5 shadow-xl custom-scrollbar">
                 <div className="flex items-start justify-between gap-2">
                   <h3 id="job-detail-title" className="text-sm font-black uppercase text-white tracking-widest">
                     Job detayı
@@ -1550,7 +1541,7 @@ export default function SystemOperationsPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedJob(null)}
-                    className="rounded-lg border border-white/10 p-1.5 text-gray-400 hover:text-white"
+                    className="ui-btn-ghost rounded-lg p-1.5 text-gray-400 hover:text-white"
                   >
                     <X size={16} aria-hidden />
                   </button>
@@ -1589,7 +1580,7 @@ export default function SystemOperationsPage() {
                     </div>
                   ) : null}
                 </dl>
-                <div className="mt-5 flex flex-wrap gap-2">
+                <OverlayFooter>
                   {(selectedJob.status === "failed" || selectedJob.status === "dead_letter") && (
                     <button
                       type="button"
@@ -1653,9 +1644,8 @@ export default function SystemOperationsPage() {
                       Kuyruktan iptal
                     </button>
                   )}
-                </div>
-              </div>
-            </div>
+                </OverlayFooter>
+            </OverlayDialog>
           ) : null}
 
           <p className="text-[9px] font-black uppercase tracking-widest text-gray-600 text-right">

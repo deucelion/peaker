@@ -30,7 +30,7 @@ export function PackageCard({ pkg }: { pkg: PrivateLessonPackage }) {
   const remainingPay = Math.max(Number(pkg.totalPrice) - Number(pkg.amountPaid), 0);
 
   return (
-    <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#18181f] via-[#131318] to-[#101014] shadow-[0_12px_40px_-16px_rgba(0,0,0,0.85)] transition duration-200 sm:rounded-[1.35rem] sm:hover:border-[#7c3aed]/35 sm:hover:shadow-[0_20px_50px_-20px_rgba(124,58,237,0.25)]">
+    <div className="group relative min-w-0 overflow-hidden rounded-2xl ui-card shadow-[0_12px_40px_-16px_rgba(0,0,0,0.85)] transition duration-200 sm:rounded-[1.35rem] sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] sm:hover:shadow-[0_20px_50px_-20px_color-mix(in_srgb,var(--peaker-ui-PRIMARY)_25%,transparent)]">
       <Link
         href={href}
         className="absolute inset-0 z-0 rounded-2xl sm:rounded-[1.35rem]"
@@ -58,7 +58,7 @@ export function PackageCard({ pkg }: { pkg: PrivateLessonPackage }) {
               </span>
             ) : null}
             {blocked && pkg.usedLessons > 0 ? (
-              <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
+              <span className="rounded-xl ui-btn-ghost px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400">
                 Kullanım kapalı
               </span>
             ) : null}
@@ -71,11 +71,11 @@ export function PackageCard({ pkg }: { pkg: PrivateLessonPackage }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-wider text-[#c4b5fd]">Kalan ders</p>
+          <div className="rounded-xl border ui-kpi-chip--brand px-4 py-3">
+            <p className="text-[9px] font-black uppercase tracking-wider ui-kpi-card__trend">Kalan ders</p>
             <p className="mt-1 text-xl font-black tabular-nums text-white">{pkg.remainingLessons}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-xl ui-kpi-band px-4 py-3">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Ders (toplam / yapılan)</p>
             <p className="mt-1 text-xl font-black tabular-nums text-white">
               {pkg.totalLessons}
@@ -83,7 +83,7 @@ export function PackageCard({ pkg }: { pkg: PrivateLessonPackage }) {
               {pkg.usedLessons}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+          <div className="rounded-xl ui-kpi-band px-4 py-3">
             <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Toplam ücret</p>
             <p className="mt-1 text-lg font-black tabular-nums text-white">₺{pkg.totalPrice}</p>
           </div>
@@ -94,10 +94,10 @@ export function PackageCard({ pkg }: { pkg: PrivateLessonPackage }) {
         </div>
 
         <div className="flex items-center justify-between border-t border-white/5 pt-4">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c4b5fd]">Paketi yönet</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] ui-kpi-card__trend">Paketi yönet</span>
           <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-gray-500 transition group-hover:text-white">
             Detay
-            <ChevronRight size={16} className="text-[#7c3aed] transition-transform group-hover:translate-x-0.5" aria-hidden />
+            <ChevronRight size={16} className="text-[color:var(--peaker-ui-PRIMARY)] transition-transform group-hover:translate-x-0.5" aria-hidden />
           </span>
         </div>
       </div>

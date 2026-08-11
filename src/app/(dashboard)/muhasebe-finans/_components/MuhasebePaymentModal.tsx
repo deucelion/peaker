@@ -1,6 +1,8 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { CollectionPaymentForm } from "@/components/finance/CollectionPaymentForm";
+import { OverlayDialog, OVERLAY_Z } from "@/components/ui/overlay";
 import type { AccountingFinanceSnapshot } from "@/lib/actions/accountingFinanceActions";
 
 export type MuhasebePaymentModalProps = {
@@ -30,13 +32,14 @@ export function MuhasebePaymentModal({
 }: MuhasebePaymentModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 sm:p-6">
-      <div
-        className="max-h-[min(90dvh,800px)] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#101013] shadow-2xl shadow-black/40"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="payment-modal-title"
-      >
+    <OverlayDialog
+      open
+      layer={OVERLAY_Z.DIALOG}
+      className="!items-center justify-center p-4 sm:p-6"
+      titleId="payment-modal-title"
+      shellClassName="max-h-[min(90dvh,800px)] w-full max-w-xl overflow-y-auto rounded-2xl shadow-2xl shadow-black/40 !max-w-xl !p-0"
+      enableFocusTrap
+    >
         <div className="border-b border-white/10 p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -68,7 +71,6 @@ export function MuhasebePaymentModal({
             onSuccess={onSuccess}
           />
         </div>
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }

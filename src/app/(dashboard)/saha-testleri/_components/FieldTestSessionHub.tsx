@@ -78,7 +78,7 @@ export function FieldTestSessionHub() {
       <header className="flex flex-col gap-4 min-w-0">
         <div className="space-y-2 min-w-0">
           <h1 className="ui-h1 break-words">
-            SAHA <span className="text-[#7c3aed]">TESTLERİ</span>
+            SAHA <span className="text-[color:var(--peaker-ui-PRIMARY)]">TESTLERİ</span>
           </h1>
           <p className="text-[11px] font-bold text-gray-500">
             Oturum seçin veya yeni bir test günü başlatın. Her oturum bir tarihe bağlıdır.
@@ -109,8 +109,8 @@ export function FieldTestSessionHub() {
       ) : null}
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="rounded-2xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 p-4 sm:p-5">
-          <p className="text-[9px] font-black uppercase tracking-wider text-[#c4b5fd]">Bugün</p>
+        <div className="ui-kpi-chip--brand rounded-2xl p-4 sm:p-5">
+          <p className="ui-kpi-chip__refresh">Bugün</p>
           <p className="mt-2 text-lg font-black text-white">{formatSessionDateLabel(today)}</p>
           {todaySession ? (
             <p className="mt-2 text-[11px] font-bold text-gray-400">{sessionSummaryLine(todaySession)}</p>
@@ -119,20 +119,20 @@ export function FieldTestSessionHub() {
           )}
           <Link
             href={hrefFieldTestSession(today)}
-            className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-wide text-white transition sm:hover:bg-[#6d28d9]"
+            className="ui-btn-primary mt-4 inline-flex min-h-11 items-center justify-center gap-2"
           >
             <Plus size={14} aria-hidden />
             {todaySession ? "Bugünkü oturuma devam et" : "Bugünkü oturumu başlat"}
           </Link>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5">
+        <div className="ui-card p-4 sm:p-5">
           <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Başka bir tarih</p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Tarih seç</span>
-              <div className="flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3">
-                <Calendar size={16} className="shrink-0 text-[#7c3aed]" aria-hidden />
+              <div className="ui-card-inner flex min-h-11 items-center gap-2 px-3">
+                <Calendar size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
                 <input
                   type="date"
                   value={pickDate}
@@ -144,7 +144,7 @@ export function FieldTestSessionHub() {
             <button
               type="button"
               onClick={() => router.push(hrefFieldTestSession(pickDate))}
-              className="min-h-11 rounded-xl border border-white/15 bg-white/5 px-4 text-[10px] font-black uppercase tracking-wide text-gray-200 transition sm:hover:border-[#7c3aed]/35 sm:hover:text-[#c4b5fd]"
+              className="ui-btn-ghost min-h-11 px-4 text-[10px] font-black uppercase tracking-wide text-gray-200 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
             >
               Oturuma git
             </button>
@@ -156,7 +156,7 @@ export function FieldTestSessionHub() {
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Geçmiş oturumlar</h2>
           {loading ? (
-            <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-label="Yükleniyor" />
+            <Loader2 className="size-4 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-label="Yükleniyor" />
           ) : null}
         </div>
 
@@ -173,7 +173,7 @@ export function FieldTestSessionHub() {
             <li key={session.testDate}>
               <Link
                 href={hrefFieldTestSession(session.testDate)}
-                className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#121215] px-4 py-3 transition sm:hover:border-[#7c3aed]/35"
+                className="ui-kpi-band flex min-h-14 items-center justify-between gap-3 px-4 py-3 transition sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)]"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black text-white">{formatSessionDateLabel(session.testDate)}</p>

@@ -21,9 +21,9 @@ export function FieldTestAthletePicker({
   const filtered = useMemo(() => filterFieldTestAthletes(players, query), [players, query]);
 
   return (
-    <div className="min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#121215] p-4">
+    <div className="ui-card min-w-0 space-y-3 p-4">
       <div className="flex items-center gap-2">
-        <UserRound size={16} className="shrink-0 text-[#7c3aed]" aria-hidden />
+        <UserRound size={16} className="shrink-0 text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sporcu seç</p>
       </div>
       <label className="relative block">
@@ -55,13 +55,13 @@ export function FieldTestAthletePicker({
                 onClick={() => onSelect(player.id)}
                 className={`flex w-full min-h-11 items-center gap-3 rounded-xl border px-3 py-2 text-left transition touch-manipulation ${
                   active
-                    ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                    : "border-white/8 bg-black/20 text-gray-300 hover:border-[#7c3aed]/30 hover:bg-white/[0.03]"
+                    ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white"
+                    : "ui-kpi-band border-transparent text-gray-300 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)]"
                 }`}
               >
                 <span
                   className={`flex size-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-black italic ${
-                    active ? "bg-[#7c3aed] text-white" : "bg-[#1c1c21] text-gray-500"
+                    active ? "bg-[color:var(--peaker-ui-PRIMARY)] text-white" : "ui-card-inner text-gray-500"
                   }`}
                 >
                   {player.full_name.substring(0, 2).toUpperCase()}

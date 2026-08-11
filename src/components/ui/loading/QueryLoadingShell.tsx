@@ -32,13 +32,13 @@ export function QueryLoadingShell({
   }
   return (
     <div
-      className={`flex min-h-[120px] flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-[#121215] px-6 py-10 ${className}`}
+      className={`ui-loading-panel min-h-[120px] px-6 py-10 ${className}`}
       role="status"
       aria-live="polite"
       aria-label={label}
     >
-      <Loader2 className="size-8 animate-spin text-[#7c3aed]" aria-hidden />
-      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{label}</p>
+      <Loader2 className="ui-loading-panel__spinner size-8 animate-spin" aria-hidden />
+      <p className="ui-loading-panel__label text-[11px] font-bold normal-case tracking-wide">{label}</p>
     </div>
   );
 }
@@ -46,11 +46,7 @@ export function QueryLoadingShell({
 export function SoftRefreshIndicator({ active, className = "" }: { active: boolean; className?: string }) {
   if (!active) return null;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-md border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#ddd6fe] ${className}`}
-      role="status"
-      aria-live="polite"
-    >
+    <span className={`ui-loading-refresh ${className}`} role="status" aria-live="polite">
       <Loader2 className="size-3 animate-spin" aria-hidden />
       Güncelleniyor
     </span>

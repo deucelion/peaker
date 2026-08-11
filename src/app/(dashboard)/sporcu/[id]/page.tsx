@@ -47,7 +47,7 @@ import type { AthleteBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
 import { AthleteDetailSectionNav } from "@/components/performance/AthleteDetailSectionNav";
 import { useScrollRestore } from "@/lib/hooks/useScrollRestore";
 import { CoachReportsAccessBanner } from "@/components/performance/CoachReportsAccessBanner";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccess } from "@/lib/auth/useMeAccess";
 
 export default function SporcuDetayDinamik() {
   const params = useParams();
@@ -108,16 +108,19 @@ export default function SporcuDetayDinamik() {
 
   useScrollRestore(id ? `athlete-detail-${id}` : "athlete-detail", Boolean(id));
 
+  const { payload: meAccessPayload, ready: meAccessReady } = useMeAccess();
+
   useEffect(() => {
-    void (async () => {
-      const me = await fetchMeAccessClient();
-      if (!me.ok || me.role !== "coach") {
-        setShowCoachReportsBanner(false);
-        return;
-      }
-      setShowCoachReportsBanner(me.coachPermissions?.can_view_reports === false);
-    })();
-  }, []);
+    if (!meAccessReady || !meAccessPayload?.ok) {
+      setShowCoachReportsBanner(false);
+      return;
+    }
+    if (meAccessPayload.role !== "coach") {
+      setShowCoachReportsBanner(false);
+      return;
+    }
+    setShowCoachReportsBanner(meAccessPayload.coachPermissions?.can_view_reports === false);
+  }, [meAccessPayload, meAccessReady]);
 
   const latestWellness = useMemo(() => {
     if (!wellnessReports.length) return null;

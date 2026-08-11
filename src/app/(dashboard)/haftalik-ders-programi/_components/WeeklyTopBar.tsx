@@ -42,25 +42,25 @@ export function WeeklyTopBar({
   onLocationChange: (next: string) => void;
 }) {
   return (
-    <header className="flex min-w-0 flex-col gap-4 border-b border-white/5 pb-6">
+    <header className="flex min-w-0 flex-col gap-4 border-b pb-6">
       <div className="min-w-0">
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-600">Operasyon ekranı</p>
         <h1 className="ui-h1">
-          Haftalık <span className="text-[#7c3aed]">ders programı</span>
+          Haftalık <span className="text-[color:var(--peaker-ui-PRIMARY)]">ders programı</span>
         </h1>
         <p className="ui-lead max-w-3xl break-words normal-case tracking-normal">
           Grup dersleri ve özel ders planlarını tek çizelgede görün. Filtrelerle haftayı, dersi ve koçu daraltın.
         </p>
       </div>
 
-      <div className="grid gap-2 rounded-2xl border border-white/10 bg-gradient-to-br from-[#121215] to-[#171721] p-3 shadow-[0_8px_26px_-22px_rgba(124,58,237,0.45)] lg:grid-cols-12">
+      <div className="ui-toolbar grid gap-2 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-gray-500">Hafta</p>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => onShiftWeek(-7)}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/10 px-2.5 text-gray-300 sm:hover:bg-white/5"
+              className="ui-btn-ghost inline-flex min-h-10 items-center justify-center rounded-xl px-2.5 text-gray-300"
               aria-label="Önceki hafta"
             >
               <ChevronLeft size={16} aria-hidden />
@@ -74,7 +74,7 @@ export function WeeklyTopBar({
             <button
               type="button"
               onClick={() => onShiftWeek(7)}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/10 px-2.5 text-gray-300 sm:hover:bg-white/5"
+              className="ui-btn-ghost inline-flex min-h-10 items-center justify-center rounded-xl px-2.5 text-gray-300"
               aria-label="Sonraki hafta"
             >
               <ChevronRight size={16} aria-hidden />
@@ -82,7 +82,7 @@ export function WeeklyTopBar({
             <button
               type="button"
               onClick={() => onWeekStartChange(getWeekStartMondayIso())}
-              className="inline-flex min-h-10 items-center rounded-xl border border-[#7c3aed]/50 bg-[#7c3aed]/25 px-2.5 text-[10px] font-black uppercase tracking-wide text-[#e8ddff] transition sm:hover:bg-[#7c3aed]/35"
+              className="inline-flex min-h-10 items-center rounded-xl border ui-kpi-chip--brand px-2.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend transition sm:hover:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)]"
             >
               Bu hafta
             </button>
@@ -119,7 +119,7 @@ export function WeeklyTopBar({
             <select
               value={location}
               onChange={(e) => onLocationChange(e.target.value)}
-              className="ui-select min-h-10 w-full appearance-none rounded-xl border-white/10 bg-[#17171f] pr-10"
+              className="ui-select min-h-10 w-full appearance-none rounded-xl pr-10"
             >
               <option value="">Tüm lokasyonlar</option>
               {locationOptions.map((loc) => (
@@ -131,7 +131,7 @@ export function WeeklyTopBar({
             <ChevronDown
               size={16}
               aria-hidden
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#c4b5fd]"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ui-kpi-card__trend"
             />
             {selectedLocationColor ? (
               <span
@@ -149,8 +149,8 @@ export function WeeklyTopBar({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-white/10 bg-[#111117] p-2 sm:grid-cols-4">
-        <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5">
+      <div className="grid grid-cols-2 gap-1.5 rounded-xl ui-card p-2 sm:grid-cols-4">
+        <div className="rounded-lg ui-card-inner px-2.5 py-1.5">
           <p className="text-[8px] font-black uppercase tracking-wider text-gray-500">Toplam Ders</p>
           <p className="mt-0.5 text-base font-black tabular-nums text-white">{summary.totalLessons}</p>
         </div>
@@ -162,9 +162,9 @@ export function WeeklyTopBar({
           <p className="text-[8px] font-black uppercase tracking-wider text-emerald-200/80">Özel Ders</p>
           <p className="mt-0.5 text-base font-black tabular-nums text-emerald-100">{summary.privateLessons}</p>
         </div>
-        <div className="rounded-lg border border-[#7c3aed]/30 bg-[#7c3aed]/10 px-2.5 py-1.5">
-          <p className="text-[8px] font-black uppercase tracking-wider text-[#d8cbff]/85">Aktif Koç</p>
-          <p className="mt-0.5 text-base font-black tabular-nums text-[#f0e9ff]">{summary.activeCoachCount}</p>
+        <div className="rounded-lg border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] ui-kpi-band px-2.5 py-1.5">
+          <p className="text-[8px] font-black uppercase tracking-wider ui-kpi-card__trend opacity-85">Aktif Koç</p>
+          <p className="mt-0.5 text-base font-black tabular-nums text-[color:var(--peaker-ui-PRIMARY)]">{summary.activeCoachCount}</p>
         </div>
       </div>
     </header>

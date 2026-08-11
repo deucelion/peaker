@@ -1,4 +1,5 @@
 import { FIELD_TEST_TEXT_VALUE_PLACEHOLDER } from "@/lib/fieldTests/athleticResultsWriteShape";
+import { parseStoredFieldTestEditSeq } from "@/lib/fieldTests/fieldTestEditSeqMetadata";
 import type { MetricValueKind } from "@/lib/fieldTests/metricValueType";
 import { isTextMetricValueType } from "@/lib/fieldTests/metricValueType";
 
@@ -57,7 +58,8 @@ export function resolveFieldTestCellValueFromRow(params: {
   valueText: string | null | undefined;
   valueType: MetricValueKind;
 }): string | number | undefined {
-  const text = (params.valueText ?? "").trim();
+  const parsedText = parseStoredFieldTestEditSeq(params.valueText);
+  const text = (parsedText.displayText ?? "").trim();
 
   if (params.valueType === "text") {
     return text !== "" ? text : undefined;
@@ -185,10 +187,11 @@ export function fieldTestResultRowDisplay(row: {
   value_type?: unknown;
 }): FieldTestCellDisplay {
   const textMetric = isTextMetricValueType(row.value_type);
+  const parsedText = parseStoredFieldTestEditSeq(row.value_text);
   if (textMetric) {
-    return formatFieldTestCellDisplayValue({ raw: row.value_text ?? "", valueType: "text" });
+    return formatFieldTestCellDisplayValue({ raw: parsedText.displayText ?? "", valueType: "text" });
   }
-  const note = (row.value_text ?? "").trim();
+  const note = (parsedText.displayText ?? "").trim();
   if (note && (row.value === 0 || row.value === null)) {
     return formatFieldTestCellDisplayValue({ raw: note, valueType: "text" });
   }

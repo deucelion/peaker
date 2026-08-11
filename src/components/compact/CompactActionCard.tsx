@@ -7,7 +7,8 @@ import { ChevronRight } from "lucide-react";
 type Tone = "purple" | "amber" | "emerald" | "neutral";
 
 const TONE: Record<Tone, string> = {
-  purple: "border-[#7c3aed]/20 bg-[#7c3aed]/10 text-[#c4b5fd]",
+  purple:
+    "border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] bg-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_55%,#ffffff)]",
   amber: "border-amber-500/20 bg-amber-500/10 text-amber-200",
   emerald: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
   neutral: "border-white/10 bg-white/5 text-gray-300",

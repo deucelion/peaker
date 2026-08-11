@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { ProfileBasic } from "@/types/domain";
 import { PerformanceTabsNav } from "@/components/performance/PerformanceTabsNav";
 import { PerformanceBreadcrumb } from "@/components/performance/PerformanceBreadcrumb";
+import EmptyState from "@/components/ui/EmptyState";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 
 interface TrainingLoadReport {
@@ -82,7 +83,7 @@ export default function GunlukIdmanRaporu() {
   }, [reports]);
 
   if (loading) return (
-    <div className="min-h-[40dvh] px-4 py-10 flex flex-col sm:flex-row items-center justify-center gap-3 text-[#7c3aed] font-black italic animate-pulse tracking-wide sm:tracking-widest uppercase text-center text-sm min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)]">
+    <div className="min-h-[40dvh] px-4 py-10 flex flex-col sm:flex-row items-center justify-center gap-3 text-[color:var(--peaker-ui-PRIMARY)] font-black italic animate-pulse tracking-wide sm:tracking-widest uppercase text-center text-sm min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)]">
       <Loader2 className="animate-spin shrink-0" aria-hidden />
       <span className="break-words max-w-md">Raporlar Analiz Ediliyor...</span>
     </div>
@@ -101,10 +102,10 @@ export default function GunlukIdmanRaporu() {
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5 sm:gap-6 min-w-0">
         <div className="min-w-0">
           <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
-            GÜNLÜK <span className="text-[#7c3aed]">RAPOR</span>
+            GÜNLÜK <span className="text-[color:var(--peaker-ui-PRIMARY)]">RAPOR</span>
           </h1>
-          <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[#7c3aed] pl-3 sm:pl-4 min-w-0">
-            <CalendarDays size={14} className="text-[#7c3aed] shrink-0 mt-0.5" aria-hidden />
+          <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[color:var(--peaker-ui-PRIMARY)] pl-3 sm:pl-4 min-w-0">
+            <CalendarDays size={14} className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0 mt-0.5" aria-hidden />
             <span className="break-words">{new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' }).toUpperCase()}</span>
           </div>
         </div>
@@ -118,10 +119,10 @@ export default function GunlukIdmanRaporu() {
               autoComplete="off"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full min-h-11 bg-[#121215] border border-white/5 rounded-2xl py-3 sm:py-4 pl-11 sm:pl-12 pr-4 text-base sm:text-xs font-black italic uppercase text-white outline-none focus:border-[#7c3aed] transition-all touch-manipulation"
+              className="ui-input w-full min-h-11 rounded-2xl py-3 sm:py-4 pl-11 sm:pl-12 pr-4 text-base sm:text-xs font-black italic uppercase text-white outline-none focus:border-[color:var(--peaker-ui-PRIMARY)] transition-all touch-manipulation"
             />
           </div>
-          <button type="button" onClick={fetchDailyReports} className="shrink-0 min-h-11 min-w-11 sm:min-w-[3.25rem] flex items-center justify-center bg-white/5 p-3 sm:p-4 rounded-2xl border border-white/5 text-gray-400 sm:hover:bg-white/10 touch-manipulation" aria-label="Yenile">
+          <button type="button" onClick={fetchDailyReports} className="ui-btn-ghost shrink-0 min-h-11 min-w-11 sm:min-w-[3.25rem] flex items-center justify-center p-3 sm:p-4 rounded-2xl touch-manipulation" aria-label="Yenile">
             <Zap size={20} className={loading ? "animate-pulse" : ""} aria-hidden />
           </button>
         </div>
@@ -135,7 +136,7 @@ export default function GunlukIdmanRaporu() {
       />
       <p className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
         Bu veriler{" "}
-        <Link href={PATHS.performans} className="text-[#c4b5fd] hover:text-white">
+        <Link href={PATHS.performans} className="ui-kpi-card__trend hover:text-white">
           Yük Analizi
         </Link>{" "}
         grafiklerini besler.
@@ -146,20 +147,20 @@ export default function GunlukIdmanRaporu() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5 min-w-0">
         <SummaryCard label="KATILIM" value={`${reports.length}`} sub="Bugün (İstanbul) rapor" icon={<Users className="text-blue-500" />} />
         <SummaryCard label="ORT. RPE" value={stats.avgRpe} sub="Yoğunluk (1–10)" icon={<Zap className="text-yellow-500" />} />
-        <SummaryCard label="ORT. SÜRE" value={stats.totalDuration} sub="Dakika / seans" icon={<Clock className="text-[#7c3aed]" />} />
+        <SummaryCard label="ORT. SÜRE" value={stats.totalDuration} sub="Dakika / seans" icon={<Clock className="text-[color:var(--peaker-ui-PRIMARY)]" />} />
         <SummaryCard label="RİSKLİ" value={stats.riskyCount} sub="RPE ≥ 8" icon={<AlertCircle className="text-red-500" />} />
       </div>
 
       {/* RAPOR LİSTESİ */}
-      <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-xl min-w-0">
-        <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center min-w-0">
+      <div className="ui-card rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-xl min-w-0">
+        <div className="ui-table-caption flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center min-w-0">
           <h3 className="text-xs sm:text-sm font-black italic text-white uppercase tracking-wide sm:tracking-widest break-words">SPORCU GERİ BİLDİRİMLERİ</h3>
-          <span className="bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] font-black px-4 py-1 rounded-full uppercase italic shrink-0 self-start sm:self-auto">
+          <span className="ui-kpi-chip--brand text-[color:var(--peaker-ui-PRIMARY)] text-[10px] font-black px-4 py-1 rounded-full uppercase italic shrink-0 self-start sm:self-auto">
             Güncel kayıtlar
           </span>
         </div>
 
-        <div className="divide-y divide-white/5">
+        <div className="ui-table-records">
           {loadError && loadErrorKind === "permission_denied" ? (
             <div
               className="p-6 sm:p-8 text-amber-200 break-words px-4 space-y-1"
@@ -181,10 +182,10 @@ export default function GunlukIdmanRaporu() {
           {!loadError && reports
             .filter((r) => r.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()))
             .map((report) => (
-            <div key={report.id} className="p-4 sm:p-5 sm:hover:bg-white/[0.01] transition-all group flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between min-w-0">
+            <div key={report.id} className="ui-table-row ui-table-row--hover p-4 sm:p-5 transition-all group flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between min-w-0">
               {/* Sporcu Kimlik */}
               <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full sm:w-auto sm:max-w-[min(100%,280px)]">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-[#1c1c21] border border-white/5 flex items-center justify-center font-black italic text-[#7c3aed] sm:group-hover:bg-[#7c3aed] sm:group-hover:text-white transition-all uppercase">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-2xl flex items-center justify-center font-black italic text-[color:var(--peaker-ui-PRIMARY)] sm:group-hover:ui-btn-primary sm:group-hover:text-white transition-all uppercase">
                   {report.profiles?.full_name?.[0]}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -201,7 +202,7 @@ export default function GunlukIdmanRaporu() {
                   <span className="text-[10px] font-black text-gray-500 uppercase italic">Zorluk Derecesi (RPE)</span>
                   <span className={`text-lg font-black italic ${getRpeColor(report.rpe_score)}`}>{report.rpe_score}/10</span>
                 </div>
-                <div className="h-1.5 w-full bg-[#1c1c21] rounded-full overflow-hidden">
+                <div className="h-1.5 w-full rounded-full overflow-hidden">
                   <div 
                     className={`h-full rounded-full transition-all duration-1000 ${getRpeBg(report.rpe_score)}`} 
                     style={{ width: `${report.rpe_score * 10}%` }}
@@ -232,18 +233,18 @@ export default function GunlukIdmanRaporu() {
             </div>
           ))}
           {!loadError && reports.filter((r) => r.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-            <div className="p-12 sm:p-20 text-center text-gray-600 font-black italic uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm px-4 break-words space-y-3">
-              {searchTerm ? (
-                <p>Arama kriterine uygun rapor bulunamadı.</p>
-              ) : (
-                <>
-                  <p>Bugün (İstanbul takvimi) için rapor girişi yapılmadı.</p>
-                  <p className="text-[10px] font-bold text-gray-500 not-italic max-w-md mx-auto leading-relaxed">
-                    Sporcular idman anketini gönderdiğinde RPE, süre ve iş yükü burada listelenir; Performans Merkezi yük analizine düşer.
-                  </p>
-                </>
-              )}
-            </div>
+            <EmptyState
+              variant={searchTerm ? "filtered_empty" : "no_data"}
+              bare
+              compact
+              className="p-12 sm:p-20 px-4"
+              title={searchTerm ? "Arama sonucu yok" : "Bugün rapor girişi yok"}
+              description={
+                searchTerm
+                  ? "Arama kriterine uygun rapor bulunamadı."
+                  : "Sporcular idman anketini gönderdiğinde RPE, süre ve iş yükü burada listelenir; Performans Merkezi yük analizine düşer."
+              }
+            />
           )}
         </div>
       </div>
@@ -263,9 +264,9 @@ function SummaryCard({
   icon: ReactNode;
 }) {
   return (
-    <div className="bg-[#121215] border border-white/5 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] sm:hover:border-[#7c3aed]/30 transition-all group min-w-0">
+    <div className="ui-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] transition-all group min-w-0">
       <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2 min-w-0">
-        <div className="p-2.5 sm:p-3 bg-white/5 rounded-xl sm:group-hover:scale-110 transition-transform shrink-0" aria-hidden>{icon}</div>
+        <div className="ui-card-inner p-2.5 sm:p-3 rounded-xl sm:group-hover:scale-110 transition-transform shrink-0" aria-hidden>{icon}</div>
         <p className="text-[9px] sm:text-[10px] font-black text-gray-600 uppercase tracking-wide sm:tracking-widest italic text-right break-words">{label}</p>
       </div>
       <h3 className="text-2xl sm:text-3xl font-black italic text-white uppercase leading-none mb-1 tabular-nums">{value}</h3>

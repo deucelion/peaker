@@ -16,7 +16,7 @@ export default function SuperAdminError({ error, reset }: { error: Error & { dig
         Sayfa verisi alinirken bir hata olustu. Genelde SUPABASE_SERVICE_ROLE_KEY eksik/yanlis veya Supabase baglantisi kopuk oldugunda gorulur.
       </p>
       {error?.message && (
-        <pre className="text-[10px] text-red-300/90 whitespace-pre-wrap break-all rounded-xl border border-white/10 bg-black/30 p-3">
+        <pre className="text-[10px] text-red-300/90 whitespace-pre-wrap break-all rounded-xl ui-card-inner p-3">
           {error.message}
         </pre>
       )}
@@ -24,13 +24,13 @@ export default function SuperAdminError({ error, reset }: { error: Error & { dig
         <button
           type="button"
           onClick={() => reset()}
-          className="min-h-11 touch-manipulation rounded-xl bg-[#7c3aed] px-4 py-2.5 text-[10px] font-black uppercase text-white sm:hover:bg-[#6d28d9]"
+          className="min-h-11 touch-manipulation rounded-xl ui-btn-primary px-4 py-2.5 text-[10px] font-black uppercase text-white sm:hover:bg-[color:var(--peaker-ui-PRIMARY)]"
         >
           Tekrar Dene
         </button>
         <Link
           href="/"
-          className="inline-flex min-h-11 touch-manipulation items-center rounded-xl border border-white/10 px-4 py-2.5 text-[10px] font-black uppercase text-gray-300 sm:hover:border-[#7c3aed]/40 sm:hover:text-white"
+          className="inline-flex min-h-11 touch-manipulation items-center rounded-xl border border-white/5 px-4 py-2.5 text-[10px] font-black uppercase text-gray-300 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:hover:text-white"
         >
           Ana Sayfa
         </Link>

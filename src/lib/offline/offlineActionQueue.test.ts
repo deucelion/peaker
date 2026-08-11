@@ -7,6 +7,7 @@ import {
 } from "@/lib/offline/offlineActionQueue";
 import { clearOfflineStorage } from "@/lib/offline/storage";
 import { riskForKind } from "@/lib/offline/actionRegistry";
+import { fieldTestSessionQueueIdempotencyKey } from "@/lib/offline/draftKeys";
 import { resetOfflineQueueForTests } from "@/lib/offline/queueStore";
 
 describe("offlineActionQueue", () => {
@@ -69,5 +70,43 @@ describe("offlineActionQueue", () => {
 
   it("marks field_test_draft as requires_confirmation", () => {
     expect(riskForKind("field_test_draft")).toBe("requires_confirmation");
+  });
+
+  it("merges field test queue items per session date idempotency key", () => {
+    const testDate = "2026-08-11";
+    const idempotencyKey = fieldTestSessionQueueIdempotencyKey(scope, testDate);
+
+    const first = enqueueOfflineAction({
+      kind: "field_test_draft",
+      scopeKey: scope,
+      draftId: "draft-1",
+      idempotencyKey,
+      payload: {
+        testDate,
+        selectedProfileIds: ["athlete-1"],
+        cells: [{ profileId: "athlete-1", testId: "metric-a", valueNumber: 20, editSeq: 1 }],
+      },
+    });
+    const second = enqueueOfflineAction({
+      kind: "field_test_draft",
+      scopeKey: scope,
+      draftId: "draft-2",
+      idempotencyKey,
+      payload: {
+        testDate,
+        selectedProfileIds: ["athlete-1"],
+        cells: [{ profileId: "athlete-1", testId: "metric-a", valueNumber: 30, editSeq: 2 }],
+      },
+    });
+
+    expect("error" in first).toBe(false);
+    expect("error" in second).toBe(false);
+    if ("error" in first || "error" in second) return;
+
+    expect(first.id).toBe(second.id);
+    expect(listOfflineActions(scope)).toHaveLength(1);
+    expect(second.payload.cells).toEqual([
+      { profileId: "athlete-1", testId: "metric-a", valueNumber: 30, editSeq: 2 },
+    ]);
   });
 });

@@ -12,7 +12,7 @@ type MoneyAmountInputProps = {
 };
 
 const INPUT_CLASS =
-  "min-h-[3rem] w-full rounded-2xl border border-white/10 bg-[#0d0d11] pl-10 pr-4 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 focus:border-[#7c3aed]/60 focus:ring-2 focus:ring-[#7c3aed]/20 sm:text-base";
+  "min-h-[3rem] w-full rounded-2xl border border-white/10 pl-10 pr-4 py-3 text-sm font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition placeholder:text-gray-600 sm:text-base bg-[color-mix(in_srgb,var(--peaker-ui-SURFACE)_94%,var(--peaker-ui-TEXT_PRIMARY)_6%)] text-[var(--peaker-ui-TEXT_PRIMARY)] focus:border-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]";
 
 export function MoneyAmountInput({
   label,

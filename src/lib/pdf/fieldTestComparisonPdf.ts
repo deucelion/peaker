@@ -138,6 +138,7 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
   });
 
   let y = drawReportHeader(doc, resolvedBranding, ctx);
+  const headerColorRgb = resolvedBranding.pdfBranding.headerColorRgb;
 
   const counts = resolved.reduce(
     (acc, r) => {
@@ -150,7 +151,7 @@ export async function buildFieldTestComparisonPdf(input: FieldTestComparisonPdfI
   );
   y = drawComparisonSummary(doc, y, counts, ctx);
 
-  y = drawSectionTitle(doc, y, "Metrik Kıyas Tablosu", ctx);
+  y = drawSectionTitle(doc, y, "Metrik Kıyas Tablosu", ctx, headerColorRgb);
   const startX = PDF_LAYOUT_MARGIN;
   const pageW = doc.internal.pageSize.getWidth();
   const tableW = pageW - startX * 2;

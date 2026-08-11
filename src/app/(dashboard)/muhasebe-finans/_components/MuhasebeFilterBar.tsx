@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import { useMemo, useState } from "react";
 import {
   FinanceFilterChipRow,
@@ -292,7 +293,7 @@ export function MuhasebeFilterBar(props: MuhasebeFilterBarProps) {
   );
 
   return (
-    <section className="rounded-xl border border-white/10 bg-[#121215] p-4">
+    <section className="ui-kpi-section rounded-xl p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xs font-black uppercase text-white">Filtreler</h2>
         {feedback ? (
@@ -327,7 +328,7 @@ export function MuhasebeFilterBar(props: MuhasebeFilterBarProps) {
 
       {chips.length > 0 ? <div className="mt-3"><FinanceFilterChipRow chips={chips} /></div> : null}
 
-      <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[10px] font-semibold text-gray-400">
+      <div className="mt-3 ui-card-inner rounded-lg px-3 py-2 text-[10px] font-semibold text-gray-400">
         <p className="font-black uppercase tracking-wide text-gray-500">Aktif filtre özeti</p>
         <p className="mt-1 text-gray-300">{props.summary.rangePart}</p>
         <p className="mt-0.5">{props.summary.coachPart}</p>

@@ -1,3 +1,15 @@
+import { tableSelectors } from "@/lib/ui/branding/tableSelectors";
+
+/** Resolve a content-theme CSS color to a canvas/SVG-safe computed value in the browser. */
+function resolveThemeColor(anchor: HTMLElement, cssColor: string): string {
+  const probe = document.createElement("div");
+  probe.style.backgroundColor = cssColor;
+  anchor.appendChild(probe);
+  const resolved = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return resolved || getComputedStyle(anchor).backgroundColor;
+}
+
 /** Recharts SVG'sini PNG data URL'e cevirir (performans PDF icin). */
 export async function captureSvgChartPng(
   container: HTMLElement | null,
@@ -8,6 +20,8 @@ export async function captureSvgChartPng(
   const svg = container.querySelector("svg");
   if (!svg) return null;
 
+  const surfaceFill = resolveThemeColor(container, tableSelectors.surface);
+
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   clone.setAttribute("width", String(width));
@@ -16,7 +30,7 @@ export async function captureSvgChartPng(
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("width", "100%");
   bg.setAttribute("height", "100%");
-  bg.setAttribute("fill", "#121215");
+  bg.setAttribute("fill", surfaceFill);
   clone.insertBefore(bg, clone.firstChild);
 
   const serializer = new XMLSerializer();
@@ -39,7 +53,7 @@ export async function captureSvgChartPng(
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.scale(scale, scale);
-    ctx.fillStyle = "#121215";
+    ctx.fillStyle = surfaceFill;
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
     return canvas.toDataURL("image/png");

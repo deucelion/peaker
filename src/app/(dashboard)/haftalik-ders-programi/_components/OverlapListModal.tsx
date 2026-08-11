@@ -3,6 +3,7 @@
 import { formatLessonTimeTr } from "@/lib/forms/datetimeLocal";
 import type { WeeklyLessonScheduleItem } from "@/lib/types";
 import { CheckCircle2 } from "lucide-react";
+import { OverlayDialog, OVERLAY_Z, OverlayFooter } from "@/components/ui/overlay";
 import { locationCardStyle } from "../_utils/scheduleGrid";
 
 function overlapTimeRangeLabel(items: WeeklyLessonScheduleItem[], appTz: string): string | null {
@@ -40,17 +41,14 @@ export function OverlapListModal({
   const slotRange = allPrivate ? overlapTimeRangeLabel(items, appTz) : null;
 
   return (
-    <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
-      onClick={onClose}
+    <OverlayDialog
+      open={open}
+      onClose={onClose}
+      layer={OVERLAY_Z.MODAL_ELEVATED}
+      strongBackdrop
+      shellClassName="w-full max-w-lg rounded-2xl ui-card p-5 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)] !max-w-lg sm:!p-5"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#17171d] p-5 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">
+        <p className="text-[10px] font-black uppercase tracking-wider ui-kpi-card__trend">
           {allPrivate ? "Aynı slottaki özel dersler" : "Çakışan dersler"}
         </p>
         <h3 className="mt-2 text-sm font-black text-white">{title}</h3>
@@ -59,13 +57,13 @@ export function OverlapListModal({
         ) : null}
 
         {allPrivate ? (
-          <ul className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-4">
+          <ul className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto rounded-xl ui-kpi-band p-4">
             {items.map((item) => (
               <li key={`ov-${item.id}`}>
                 <button
                   type="button"
                   onClick={() => onSelect(item)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-bold text-white sm:hover:bg-white/5"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-bold text-white sm:hover:ui-kpi-band"
                 >
                   <CheckCircle2 size={16} className="shrink-0 text-emerald-400" aria-hidden />
                   <span>{privateAthleteLabel(item)}</span>
@@ -80,7 +78,7 @@ export function OverlapListModal({
                 key={`ov-${item.id}`}
                 type="button"
                 onClick={() => onSelect(item)}
-                className="w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left"
+                className="w-full rounded-xl ui-kpi-band p-3 text-left"
                 style={locationCardStyle(item.locationColor)}
               >
                 <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
@@ -102,13 +100,12 @@ export function OverlapListModal({
           </div>
         )}
 
-        <div className="mt-4 flex justify-end">
+        <OverlayFooter>
           <button type="button" onClick={onClose} className="ui-btn-ghost min-h-11 px-4">
             Kapat
           </button>
-        </div>
-      </div>
-    </div>
+        </OverlayFooter>
+    </OverlayDialog>
   );
 }
 

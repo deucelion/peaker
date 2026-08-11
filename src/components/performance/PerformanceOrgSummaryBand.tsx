@@ -58,7 +58,7 @@ export function PerformanceOrgSummaryBand({ athleteCount, className = "" }: Perf
 
   return (
     <section
-      className={`rounded-2xl border border-white/10 bg-[#121215]/90 p-4 sm:p-5 ${className}`}
+      className={`ui-kpi-band ${className}`}
       aria-label="Organizasyon performans özeti"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -69,14 +69,14 @@ export function PerformanceOrgSummaryBand({ athleteCount, className = "" }: Perf
           <button
             type="button"
             onClick={() => void fetchSummary()}
-            className="text-[9px] font-black uppercase tracking-wider text-[#c4b5fd] hover:text-white"
+            className="ui-kpi-chip__refresh"
           >
             Yenile
           </button>
         )}
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="ui-kpi-grid mt-3">
         <SummaryChip
           icon={<Users size={14} aria-hidden />}
           label="RPE katılımı"
@@ -135,20 +135,17 @@ function SummaryChip({
       : tone === "amber"
         ? "border-amber-500/30 bg-amber-500/10"
         : tone === "violet"
-          ? "border-[#7c3aed]/30 bg-[#7c3aed]/10"
-          : "border-white/10 bg-white/[0.03]";
+          ? "ui-kpi-chip--brand"
+          : "";
 
   return (
-    <Link
-      href={href}
-      className={`flex min-h-16 flex-col justify-between rounded-xl border p-3 transition hover:border-[#7c3aed]/40 ${toneClass}`}
-    >
+    <Link href={href} className={`ui-kpi-chip ${toneClass}`}>
       <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-gray-400">
         {icon}
         {label}
       </div>
-      <p className="text-lg font-black tabular-nums text-white">{value}</p>
-      <p className="text-[8px] font-bold uppercase tracking-wide text-gray-500">{hint}</p>
+      <p className="ui-kpi-card__value text-lg">{value}</p>
+      <p className="ui-kpi-card__hint text-[8px] font-bold uppercase tracking-wide">{hint}</p>
     </Link>
   );
 }

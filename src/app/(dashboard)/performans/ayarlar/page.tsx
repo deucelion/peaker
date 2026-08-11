@@ -167,7 +167,7 @@ export default function AyarlarPage() {
 
   if (loading) return (
     <div className="flex flex-col justify-center items-center min-h-[50dvh] gap-4 px-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
-      <Loader2 className="animate-spin text-[#7c3aed]" size={48} aria-hidden />
+      <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={48} aria-hidden />
       <p className="text-gray-500 font-black italic uppercase text-[10px] tracking-wide sm:tracking-widest animate-pulse break-words max-w-md">
         Ayarlar Yükleniyor...
       </p>
@@ -179,10 +179,10 @@ export default function AyarlarPage() {
       <header className="min-w-0">
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter leading-tight break-words">
           {isSuperAdmin ? "PLATFORM" : isCoach ? "HESAP VE SPORCU" : "HESAP"}{" "}
-          <span className="text-[#7c3aed]">AYARLARI</span>
+          <span className="text-[color:var(--peaker-ui-PRIMARY)]">AYARLARI</span>
         </h1>
-        <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[#7c3aed] pl-3 sm:pl-4 min-w-0">
-          <ShieldCheck size={14} className="text-[#7c3aed] shrink-0 mt-0.5" aria-hidden />
+        <div className="flex items-start gap-3 mt-3 sm:mt-4 text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest italic border-l-2 border-[color:var(--peaker-ui-PRIMARY)] pl-3 sm:pl-4 min-w-0">
+          <ShieldCheck size={14} className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0 mt-0.5" aria-hidden />
           <span className="break-words">
             {isSuperAdmin
               ? "PLATFORM YÖNETİMİ VE KULLANICI ŞİFRELERİ"
@@ -200,16 +200,12 @@ export default function AyarlarPage() {
       ) : null}
 
       {/* TABS NAVIGATION */}
-      <div className="flex flex-wrap gap-2 p-1.5 bg-[#121215] border border-white/5 rounded-[1.5rem] w-full min-w-0 sm:w-fit">
+      <div className="flex flex-wrap gap-2 p-1.5 ui-card rounded-[1.5rem] w-full min-w-0 sm:w-fit">
         {isSuperAdmin ? (
           <button
             type="button"
             onClick={() => setActiveTab("platform")}
-            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${
-              activeTab === "platform"
-                ? "bg-[#7c3aed] text-white shadow-xl shadow-[#7c3aed]/20"
-                : "text-gray-500 sm:hover:text-white"
-            }`}
+            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${ activeTab === "platform" ? "ui-btn-primary text-white shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]" : "text-gray-500 sm:hover:text-white" }`}
           >
             <KeyRound size={14} aria-hidden /> Şifre yönetimi
           </button>
@@ -218,9 +214,7 @@ export default function AyarlarPage() {
         <button 
           type="button"
           onClick={() => setActiveTab("profil")}
-          className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${
-            activeTab === 'profil' ? 'bg-[#7c3aed] text-white shadow-xl shadow-[#7c3aed]/20' : 'text-gray-500 sm:hover:text-white'
-          }`}
+          className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${ activeTab === 'profil' ? 'ui-btn-primary text-white shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]' : 'text-gray-500 sm:hover:text-white' }`}
         >
           <User size={14} aria-hidden /> Profil
         </button>
@@ -229,9 +223,7 @@ export default function AyarlarPage() {
           <button 
             type="button"
             onClick={() => setActiveTab("yetkiler")}
-            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${
-              activeTab === 'yetkiler' ? 'bg-[#7c3aed] text-white shadow-xl shadow-[#7c3aed]/20' : 'text-gray-500 sm:hover:text-white'
-            }`}
+            className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${ activeTab === 'yetkiler' ? 'ui-btn-primary text-white shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]' : 'text-gray-500 sm:hover:text-white' }`}
           >
             <ShieldCheck size={14} aria-hidden /> Yetkiler
           </button>
@@ -240,9 +232,7 @@ export default function AyarlarPage() {
         <button 
           type="button"
           onClick={() => setActiveTab("guvenlik")}
-          className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${
-            activeTab === 'guvenlik' ? 'bg-[#7c3aed] text-white shadow-xl shadow-[#7c3aed]/20' : 'text-gray-500 sm:hover:text-white'
-          }`}
+          className={`min-h-11 flex-1 sm:flex-none px-4 sm:px-8 py-3 rounded-xl font-black italic text-[10px] uppercase transition-all flex items-center justify-center gap-2 touch-manipulation ${ activeTab === 'guvenlik' ? 'ui-btn-primary text-white shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]' : 'text-gray-500 sm:hover:text-white' }`}
         >
           <Lock size={14} aria-hidden /> Güvenlik
         </button>
@@ -251,7 +241,7 @@ export default function AyarlarPage() {
       {activeTab === "platform" && isSuperAdmin ? (
         <div className="space-y-5 sm:space-y-6 animate-in slide-in-from-bottom-2 duration-500 min-w-0">
           <SuperAdminPasswordHub />
-          <div className="rounded-[1.5rem] border border-white/10 bg-[#121215] p-4 sm:p-5 text-[11px] text-gray-400 font-semibold break-words">
+          <div className="rounded-[1.5rem] ui-card p-4 sm:p-5 text-[11px] text-gray-400 font-semibold break-words">
             İpucu: Ana super admin panelinde bir organizasyona tıklayıp sayfada <strong className="text-white">Kullanıcı şifreleri</strong> bölümünden de aynı işlemi yapabilirsiniz.
           </div>
         </div>
@@ -265,7 +255,7 @@ export default function AyarlarPage() {
               <Notification message="Sporcu gorunurluk ayarlari icin yetkiniz yok." variant="error" />
             </div>
           )}
-          <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[9px] font-bold leading-relaxed text-gray-500">
+          <p className="rounded-xl bg-white/[0.03] px-4 py-3 text-[9px] font-bold leading-relaxed text-gray-500">
             Sabah Raporu → /sporcu/sabah-raporu · RPE → /anket · Gelişim Profili → /sporcu · Performans metrikleri koç panelinde sporcu detayında görünür.
           </p>
           <div className="relative w-full max-w-md min-w-0">
@@ -274,16 +264,16 @@ export default function AyarlarPage() {
               type="search" 
               placeholder="KADRODA ARA..." 
               autoComplete="off"
-              className="w-full min-h-11 bg-[#121215] border border-white/5 py-3 pl-12 sm:pl-14 pr-4 rounded-2xl outline-none focus:border-[#7c3aed]/50 transition-all font-black italic text-base sm:text-[11px] text-white uppercase tracking-wide sm:tracking-widest touch-manipulation"
+              className="ui-input w-full min-h-11 py-3 pl-12 sm:pl-14 pr-4 rounded-2xl outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] transition-all font-black italic text-base sm:text-[11px] text-white uppercase tracking-wide sm:tracking-widest touch-manipulation"
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
           <div className="grid gap-4 min-w-0">
             {athletes.filter(a => a.full_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((athlete) => (
-              <div key={athlete.id} className="bg-[#121215] border border-white/5 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 sm:gap-6 sm:hover:bg-white/[0.01] transition-all group min-w-0">
+              <div key={athlete.id} className="ui-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 sm:gap-6 sm:hover:bg-white/[0.01] transition-all group min-w-0">
                 <div className="flex items-center gap-4 sm:gap-5 min-w-0 w-full lg:w-auto">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 bg-[#1c1c21] rounded-2xl border border-white/5 flex items-center justify-center font-black italic text-lg sm:text-xl text-[#7c3aed] sm:group-hover:border-[#7c3aed]/30 transition-all">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl flex items-center justify-center font-black italic text-lg sm:text-xl text-[color:var(--peaker-ui-PRIMARY)] sm:group-hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] transition-all">
                     {athlete.avatar_url ? (
                       <Image
                         src={athlete.avatar_url}
@@ -373,10 +363,10 @@ export default function AyarlarPage() {
       {/* TAB CONTENT: PROFİL */}
       {activeTab === "profil" && (
         <div className="max-w-3xl w-full min-w-0 grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8 animate-in slide-in-from-bottom-2 duration-500">
-          <div className="bg-[#121215] border border-white/5 p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] shadow-2xl relative overflow-hidden min-w-0">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-[#7c3aed]/5 rounded-full blur-3xl -mr-16 -mt-16" />
+          <div className="ui-card p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] shadow-2xl relative overflow-hidden min-w-0">
+             <div className="absolute top-0 right-0 w-32 h-32 ui-kpi-band rounded-full blur-3xl -mr-16 -mt-16" />
              <h3 className="text-lg sm:text-xl font-black italic text-white uppercase mb-6 sm:mb-8 flex items-center gap-3 break-words">
-               <User className="text-[#7c3aed] shrink-0" size={20} aria-hidden /> KİMLİK BİLGİLERİ
+               <User className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" size={20} aria-hidden /> KİMLİK BİLGİLERİ
              </h3>
              <div className="space-y-6">
                 <InfoBox label="Tam Adınız" value={userProfile?.full_name ?? ""} />
@@ -388,13 +378,13 @@ export default function AyarlarPage() {
              </div>
           </div>
 
-          <div className="bg-[#121215] border border-white/5 p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] shadow-2xl min-w-0">
+          <div className="ui-card p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] shadow-2xl min-w-0">
              <h3 className="text-lg sm:text-xl font-black italic text-white uppercase mb-6 sm:mb-8 flex items-center gap-3 break-words">
-               <Mail className="text-[#7c3aed] shrink-0" size={20} aria-hidden /> İLETİŞİM
+               <Mail className="text-[color:var(--peaker-ui-PRIMARY)] shrink-0" size={20} aria-hidden /> İLETİŞİM
              </h3>
              <div className="space-y-6">
                 <InfoBox label="E-Posta Adresi" value={userProfile?.email ?? ""} />
-                <div className="p-4 sm:p-6 bg-[#1c1c21] rounded-2xl border border-white/5 italic min-w-0">
+                <div className="p-4 sm:p-6 rounded-2xl italic min-w-0">
                   <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed tracking-wide sm:tracking-wider break-words">
                     Profil bilgilerinizde bir hata olduğunu düşünüyorsanız lütfen teknik ekip ile iletişime geçin.
                   </p>
@@ -406,7 +396,7 @@ export default function AyarlarPage() {
 
       {/* TAB CONTENT: GÜVENLİK */}
       {activeTab === "guvenlik" && (
-        <div className="max-w-2xl w-full min-w-0 bg-[#121215] border border-white/5 p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] animate-in slide-in-from-bottom-2 duration-500 shadow-2xl">
+        <div className="max-w-2xl w-full min-w-0 ui-card p-5 sm:p-8 md:p-10 rounded-[1.75rem] sm:rounded-[3rem] animate-in slide-in-from-bottom-2 duration-500 shadow-2xl">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8 min-w-0">
             <h3 className="text-lg sm:text-xl font-black italic text-white uppercase flex items-center gap-3 break-words">
               <Lock className="text-red-500 shrink-0" size={20} aria-hidden /> GUVENLIK MERKEZI
@@ -416,7 +406,7 @@ export default function AyarlarPage() {
           
           <div className="p-5 sm:p-8 bg-red-500/5 border border-red-500/10 rounded-[1.5rem] sm:rounded-[2rem] mb-6 sm:mb-10 min-w-0">
             <p className="text-gray-400 text-[11px] font-bold uppercase leading-relaxed tracking-[0.08em] sm:tracking-[0.1em] break-words">
-              Şifre değişikliği için sistemde kayıtlı olan <span className="text-white underline decoration-[#7c3aed]">{userProfile?.email?.replace(/(.{3})(.*)(?=@)/, "$1***")}</span> adresine bir güvenli bağlantı gönderilecektir.
+              Şifre değişikliği için sistemde kayıtlı olan <span className="text-white underline decoration-[color:var(--peaker-ui-PRIMARY)]">{userProfile?.email?.replace(/(.{3})(.*)(?=@)/, "$1***")}</span> adresine bir güvenli bağlantı gönderilecektir.
             </p>
           </div>
 
@@ -424,11 +414,7 @@ export default function AyarlarPage() {
             type="button"
             onClick={handlePasswordReset}
             disabled={mailSent}
-            className={`w-full min-h-[3.5rem] sm:min-h-0 p-5 sm:p-6 rounded-2xl font-black italic text-[10px] sm:text-[11px] transition-all flex items-center justify-between gap-3 group border uppercase tracking-[0.15em] sm:tracking-[0.2em] touch-manipulation ${
-              mailSent 
-              ? 'bg-green-500/20 border-green-500/30 text-green-500 cursor-default' 
-              : 'bg-[#1c1c21] sm:hover:bg-[#7c3aed] text-white border-white/5 sm:hover:border-[#7c3aed] sm:hover:scale-[1.02] active:scale-[0.99] shadow-xl'
-            }`}
+            className={`w-full min-h-[3.5rem] sm:min-h-0 p-5 sm:p-6 rounded-2xl font-black italic text-[10px] sm:text-[11px] transition-all flex items-center justify-between gap-3 group border uppercase tracking-[0.15em] sm:tracking-[0.2em] touch-manipulation ${ mailSent ? 'bg-green-500/20 border-green-500/30 text-green-500 cursor-default' : 'ui-btn-primary text-white sm:hover:scale-[1.02] active:scale-[0.99] shadow-xl' }`}
           >
             <span>{mailSent ? "BAĞLANTI GÖNDERİLDİ" : "ŞİFRE SIFIRLAMA MAİLİ GÖNDER"}</span>
             {mailSent ? <CheckCircle2 size={20} aria-hidden /> : <Mail size={20} className="text-gray-600 sm:group-hover:text-white" aria-hidden />}
@@ -451,11 +437,7 @@ function PermissionToggle({ label, active, onClick, loading }: { label: string, 
       type="button"
       onClick={onClick}
       disabled={loading}
-      className={`min-h-11 min-w-0 max-w-full px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-black italic text-[9px] sm:text-[10px] uppercase transition-all flex items-center gap-2 sm:gap-3 border shadow-sm touch-manipulation ${
-        active 
-        ? 'bg-[#7c3aed]/10 border-[#7c3aed]/30 text-[#7c3aed]' 
-        : 'bg-black/20 border-white/5 text-gray-600'
-      } ${loading ? 'opacity-50 cursor-not-allowed' : 'sm:hover:scale-105 active:scale-[0.98]'}`}
+      className={`min-h-11 min-w-0 max-w-full px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-black italic text-[9px] sm:text-[10px] uppercase transition-all flex items-center gap-2 sm:gap-3 border shadow-sm touch-manipulation ${ active ? 'ui-kpi-chip--brand border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] text-[color:var(--peaker-ui-PRIMARY)]' : 'ui-card-inner text-gray-600' } ${loading ? 'opacity-50 cursor-not-allowed' : 'sm:hover:scale-105 active:scale-[0.98]'}`}
     >
       <span className="shrink-0" aria-hidden>{active ? <Eye size={14}/> : <EyeOff size={14}/>}</span>
       <span className="text-left break-words">{label}</span>
@@ -467,11 +449,7 @@ function InfoBox({ label, value, highlight }: { label: string, value: string, hi
   return (
     <div>
       <label className="text-[9px] font-black text-gray-600 uppercase tracking-[0.2em] ml-2 mb-2 block italic">{label}</label>
-      <div className={`w-full min-w-0 p-4 sm:p-5 rounded-2xl font-bold text-xs border transition-all break-words ${
-        highlight 
-        ? 'bg-[#7c3aed]/5 border-[#7c3aed]/20 text-[#7c3aed] italic' 
-        : 'bg-[#1c1c21] border-white/5 text-gray-200'
-      }`}>
+      <div className={`w-full min-w-0 p-4 sm:p-5 rounded-2xl font-bold text-xs border transition-all break-words ${ highlight ? 'ui-kpi-band border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] text-[color:var(--peaker-ui-PRIMARY)] italic' : 'ui-card-inner text-gray-200' }`}>
         {value || "---"}
       </div>
     </div>

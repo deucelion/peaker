@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Search } from "lucide-react";
-import EmptyStateCard from "@/components/EmptyStateCard";
+import EmptyState from "@/components/ui/EmptyState";
 import Notification from "@/components/Notification";
 import { listLessonsSnapshot } from "@/lib/actions/snapshotActions";
 import { cancelLesson, getLessonManagementDetail, hardDeleteLesson } from "@/lib/actions/lessonActions";
@@ -157,8 +157,8 @@ export function GroupLessonsView({
 
   if (loading && !detail && lessons.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-[#121215] px-6 py-14 text-center">
-        <Loader2 className="mx-auto mb-3 size-8 animate-spin text-[#7c3aed]" aria-hidden />
+      <div className="rounded-2xl ui-card px-6 py-14 text-center">
+        <Loader2 className="mx-auto mb-3 size-8 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
         <p className="text-sm font-bold text-gray-400">Ders görünümü hazırlanıyor…</p>
       </div>
     );
@@ -202,24 +202,24 @@ export function GroupLessonsView({
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
           : detail.participants.length > 0
             ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-            : "border-white/15 bg-white/5 text-gray-300";
+            : "ui-btn-ghost text-gray-300";
     const canCancel = lesson.status !== "cancelled";
     const canHardDelete = detail.role === "admin";
     const participantPreview = detail.participants.slice(0, 5);
     return (
-      <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+      <section className="rounded-2xl ui-card p-5 sm:p-6">
         <button
           type="button"
           onClick={onBackToList}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-[10px] font-black uppercase tracking-wide text-gray-300"
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border ui-btn-ghost px-3 text-[10px] font-black uppercase tracking-wide text-gray-300"
         >
           <ArrowLeft size={14} aria-hidden />
           Listeye dön
         </button>
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+        <div className="mt-4 rounded-xl ui-card-inner p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-wide text-[#b8a4f8]">Grup Dersi Detayı</p>
+              <p className="text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend">Grup Dersi Detayı</p>
               <p className="mt-1 text-lg font-black uppercase text-white">{lesson.title}</p>
               <p className="mt-1 text-[11px] font-semibold text-gray-300">
                 {new Date(lesson.startTime).toLocaleDateString("tr-TR")} ·{" "}
@@ -234,15 +234,15 @@ export function GroupLessonsView({
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Koç</p>
               <p className="mt-1 text-[11px] font-semibold text-white">{coachName}</p>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Lokasyon</p>
               <p className="mt-1 text-[11px] font-semibold text-white">{lesson.location || "-"}</p>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
+            <div className="rounded-lg ui-kpi-band px-3 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Kapasite / Kayıtlı</p>
               <p className="mt-1 text-[11px] font-semibold text-white">{lesson.capacity} / {detail.participants.length}</p>
             </div>
@@ -256,10 +256,10 @@ export function GroupLessonsView({
             <p>Yoklama Özeti: <span className="text-gray-200">{attendanceSummary.attended} katıldı · {attendanceSummary.missed} gelmedi · {attendanceSummary.registered} bekliyor</span></p>
             <p>Ders Tipi: <span className="text-gray-200">Grup Dersi</span></p>
           </div>
-          <p className="mt-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[11px] font-semibold text-gray-300">
+          <p className="mt-2 rounded-lg ui-kpi-band px-3 py-2 text-[11px] font-semibold text-gray-300">
             Açıklama: <span className="text-gray-100">{lesson.description?.trim() ? lesson.description : "Açıklama notu bulunmuyor."}</span>
           </p>
-          <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
+          <div className="mt-3 rounded-lg ui-kpi-band p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[10px] font-black uppercase tracking-wide text-gray-300">Katılımcı Önizleme</p>
               <p className="text-[10px] font-semibold text-gray-400">
@@ -283,10 +283,10 @@ export function GroupLessonsView({
                   return (
                     <div
                       key={participant.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-2.5 py-2"
+                      className="flex items-center justify-between gap-2 rounded-lg ui-card-inner px-2.5 py-2"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/5 text-[9px] font-black text-gray-200">
+                        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full ui-card-inner text-[9px] font-black text-gray-200">
                           {participantInitials(participant.full_name)}
                         </span>
                         <p className="truncate text-[11px] font-semibold text-gray-200">{participant.full_name}</p>
@@ -299,7 +299,7 @@ export function GroupLessonsView({
                 })}
               </div>
             ) : (
-              <p className="mt-2 rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-gray-500">
+              <p className="mt-2 rounded-lg border border-dashed ui-card-inner px-3 py-2 text-[11px] font-semibold text-gray-500">
                 Bu derste henüz katılımcı bulunmuyor.
               </p>
             )}
@@ -313,13 +313,13 @@ export function GroupLessonsView({
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href={`/dersler/${lesson.id}`}
-              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-200"
+              className="rounded-lg border ui-btn-ghost px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-200"
             >
               Düzenle
             </Link>
             <Link
               href={`/antrenman-yonetimi?modul=grup-dersleri&view=yoklama&trainingId=${lesson.id}`}
-              className="rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+              className="rounded-lg border ui-kpi-chip--brand px-3 py-2 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
             >
               Yoklama Aç
             </Link>
@@ -356,7 +356,7 @@ export function GroupLessonsView({
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+    <section className="rounded-2xl ui-card p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-sm font-black uppercase text-white">Ders Listesi</h2>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -384,12 +384,12 @@ export function GroupLessonsView({
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+        <div className="rounded-lg ui-card-inner px-3 py-2">
           <p className="text-[9px] font-black uppercase tracking-wide text-gray-500">Toplam Ders</p>
           <p className="mt-1 text-lg font-black text-white">{listStats.total}</p>
         </div>
-        <div className="rounded-lg border border-[#7c3aed]/25 bg-[#7c3aed]/10 px-3 py-2">
-          <p className="text-[9px] font-black uppercase tracking-wide text-[#d8cbff]">Planlanan</p>
+        <div className="rounded-lg border ui-kpi-chip--brand px-3 py-2">
+          <p className="text-[9px] font-black uppercase tracking-wide ui-kpi-card__trend">Planlanan</p>
           <p className="mt-1 text-lg font-black text-white">{listStats.planned}</p>
         </div>
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
@@ -408,7 +408,7 @@ export function GroupLessonsView({
       ) : null}
       <div className="mt-4 grid gap-3">
         {filtered.length === 0 ? (
-          <EmptyStateCard
+          <EmptyState
             title="Kayıt bulunamadı"
             description="Seçili filtreye uygun ders kaydı bulunamadı."
             reason="Durum filtresi veya arama metni sonucu daraltmış olabilir."
@@ -425,19 +425,13 @@ export function GroupLessonsView({
           filtered.map((lesson) => (
             <div
               key={lesson.id}
-              className="rounded-xl border border-white/10 bg-black/20 p-4 transition hover:border-[#7c3aed]/35 hover:bg-[#7c3aed]/10"
+              className="rounded-xl ui-card-inner p-4 transition hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] hover:ui-kpi-chip--brand"
             >
               <button type="button" onClick={() => onOpenLesson(lesson.id)} className="w-full text-left">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-black uppercase text-white">{lesson.title}</p>
                   <span
-                    className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${
-                      lesson.status === "cancelled"
-                        ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                        : lesson.status === "completed"
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                          : "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                    }`}
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${ lesson.status === "cancelled" ? "border-rose-500/40 bg-rose-500/10 text-rose-200" : lesson.status === "completed" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200" }`}
                   >
                     {lesson.status === "cancelled"
                       ? "İptal Edildi"
@@ -483,19 +477,19 @@ export function GroupLessonsView({
                 <button
                   type="button"
                   onClick={() => onOpenLesson(lesson.id)}
-                  className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
+                  className="rounded-lg border ui-btn-ghost px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
                 >
                   Aç
                 </button>
                 <Link
                   href={`/antrenman-yonetimi?modul=grup-dersleri&view=yoklama&trainingId=${lesson.id}`}
-                  className="rounded-lg border border-[#7c3aed]/35 bg-[#7c3aed]/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#ddd6fe]"
+                  className="rounded-lg border ui-kpi-chip--brand px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ui-kpi-card__trend"
                 >
                   Yoklama Aç
                 </Link>
                 <Link
                   href={`/dersler/${lesson.id}`}
-                  className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
+                  className="rounded-lg border ui-btn-ghost px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-200"
                 >
                   Düzenle
                 </Link>

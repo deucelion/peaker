@@ -10,7 +10,8 @@
  * markup'ı tek yere taşır.
  */
 
-export { DataTable } from "./DataTable";
+export { DataTable, uiTableRowClass, uiTableRowHoverClass, uiTableThClass, uiTableTdClass } from "./DataTable";
+export type { DataTableLayout, DataTableProps } from "./DataTable";
 export { DataTableToolbar } from "./DataTableToolbar";
 export { DataTablePagination } from "./DataTablePagination";
 export { LoadingState } from "./LoadingState";

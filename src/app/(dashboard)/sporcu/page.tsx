@@ -149,7 +149,7 @@ export default function SporcuPanel() {
 
   if (loading) return (
     <div className="flex min-h-[60dvh] min-w-0 flex-col items-center justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] text-white">
-      <Loader2 className="mb-8 animate-spin text-[#7c3aed]" size={60} aria-hidden />
+      <Loader2 className="mb-8 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={60} aria-hidden />
       <p className="text-center text-xs font-black uppercase italic tracking-[0.5em] opacity-50">Senkronize Ediliyor...</p>
     </div>
   );
@@ -170,7 +170,7 @@ export default function SporcuPanel() {
         eyebrow="Sporcu paneli"
         title={
           <>
-            Gelişim <span className="text-[#7c3aed]">Profilim</span>
+            Gelişim <span className="text-[color:var(--peaker-ui-PRIMARY)]">Profilim</span>
           </>
         }
         subtitle="Performans, iyi oluş ve finans özetiniz"
@@ -179,7 +179,7 @@ export default function SporcuPanel() {
             type="button"
             onClick={() => (isEditing ? void handleSave() : setIsEditing(true))}
             className={`min-h-10 w-full touch-manipulation rounded-xl px-5 py-2.5 text-[10px] font-black uppercase italic tracking-[0.15em] transition-all sm:w-auto ${
-              isEditing ? "bg-white text-black" : "bg-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/20"
+              isEditing ? "bg-white text-black" : "bg-[color:var(--peaker-ui-PRIMARY)] text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]"
             }`}
           >
             {saveLoading ? (
@@ -204,12 +204,12 @@ export default function SporcuPanel() {
           {permissions.can_view_morning_report ? (
             <HardNavLink
               href="/sporcu/sabah-raporu"
-              className="rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3 text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation"
+              className="rounded-xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] ui-kpi-chip--brand px-4 py-3 text-[10px] font-black uppercase text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] touch-manipulation"
             >
               Önce sabah raporunu gir
             </HardNavLink>
           ) : (
-            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+            <span className="rounded-xl border border-white/5 ui-kpi-band px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Sabah raporu kapalı
             </span>
           )}
@@ -221,19 +221,19 @@ export default function SporcuPanel() {
               {financePresentation.label}
             </HardNavLink>
           ) : (
-            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+            <span className="rounded-xl border border-white/5 ui-kpi-band px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Finans görünümü kapalı
             </span>
           )}
           {permissions.can_view_programs ? (
             <HardNavLink
               href="/programlarim"
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
+              className="rounded-xl border border-white/5 ui-kpi-band px-4 py-3 text-[10px] font-black uppercase text-gray-300 touch-manipulation"
             >
               Günün programını aç
             </HardNavLink>
           ) : (
-            <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-black uppercase text-gray-600">
+            <span className="rounded-xl border border-white/5 ui-kpi-band px-4 py-3 text-[10px] font-black uppercase text-gray-600">
               Program erişimi kapalı
             </span>
           )}
@@ -245,7 +245,7 @@ export default function SporcuPanel() {
           <AthleteCard padding="sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black italic uppercase text-white tracking-tight">Yoklama özeti</h3>
-              <Clock className="text-[#7c3aed]" size={20} />
+              <Clock className="text-[color:var(--peaker-ui-PRIMARY)]" size={20} />
             </div>
             {attendancePreview.length === 0 ? (
               <AthleteEmptyState
@@ -296,7 +296,7 @@ export default function SporcuPanel() {
         <AthleteCard padding="sm">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-sm font-black italic uppercase text-white tracking-tight">
-              Sakatlık <span className="text-[#7c3aed]">Geçmişi</span>
+              Sakatlık <span className="text-[color:var(--peaker-ui-PRIMARY)]">Geçmişi</span>
             </h3>
             <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">Sadece görüntüleme</span>
           </div>
@@ -317,7 +317,7 @@ export default function SporcuPanel() {
           ) : (
             <div className="space-y-3">
               {injuryNotes.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                <article key={item.id} className="rounded-2xl border border-white/5 ui-card-inner p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs font-black uppercase text-white break-words">{item.injuryType}</p>
                     <span className="text-[10px] text-gray-500 font-bold uppercase">
@@ -333,7 +333,7 @@ export default function SporcuPanel() {
                           href={asset.signedUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                          className="overflow-hidden rounded-xl ui-input border"
                         >
                           <Image
                             src={asset.signedUrl}
@@ -402,8 +402,8 @@ export default function SporcuPanel() {
         <aside className="lg:col-span-4">
           <AthleteCard className="relative flex flex-col items-center overflow-hidden shadow-lg" padding="sm">
             <div className="group relative mb-4">
-              <div className="mx-auto h-24 w-24 rounded-2xl border-4 border-[#7c3aed]/10 p-0.5 sm:h-28 sm:w-28">
-                <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border-2 border-[#7c3aed]/20 bg-black">
+              <div className="mx-auto h-24 w-24 rounded-2xl border-4 border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] p-0.5 sm:h-28 sm:w-28">
+                <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border-2 border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] bg-black">
                   {profile?.avatar_url ? (
                     <Image
                       src={profile.avatar_url}
@@ -413,7 +413,7 @@ export default function SporcuPanel() {
                       height={112}
                     />
                   ) : (
-                    <User size={40} className="text-[#7c3aed]/20" />
+                    <User size={40} className="text-[color:var(--peaker-ui-PRIMARY)]/20" />
                   )}
                 </div>
               </div>
@@ -421,7 +421,7 @@ export default function SporcuPanel() {
               <button
                 type="button"
                 onClick={() => document.getElementById("avatarInput")?.click()}
-                className="absolute -bottom-1 -right-1 min-h-10 min-w-10 touch-manipulation rounded-xl border-2 border-[#121215] bg-[#7c3aed] p-2 text-white shadow-lg"
+                className="absolute -bottom-1 -right-1 min-h-10 min-w-10 touch-manipulation rounded-xl border-2 border-[var(--peaker-ui-SURFACE)] ui-btn-primary p-2 text-white shadow-lg"
                 aria-label="Profil fotoğrafı yükle"
               >
                 <Camera size={16} aria-hidden />
@@ -436,7 +436,7 @@ export default function SporcuPanel() {
               </p>
             ) : null}
             <div className="mb-4 mt-3 flex items-center gap-2">
-              <span className="rounded-full border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#7c3aed]">
+              <span className="rounded-full border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] ui-kpi-chip--brand px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--peaker-ui-PRIMARY)]">
                 {profile?.position?.trim() || "Sporcu"}
               </span>
               <span className="font-black italic text-gray-600">#{profile?.number || "—"}</span>
@@ -467,20 +467,20 @@ export default function SporcuPanel() {
                   value={profile.full_name ?? ""}
                   onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
                   placeholder="Ad Soyad"
-                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed] sm:text-sm"
+                  className="min-h-11 w-full min-w-0 touch-manipulation rounded-2xl ui-input border px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)] sm:text-sm"
                 />
                 <div className="grid min-w-0 grid-cols-2 gap-3">
                   <input
                     value={profile.position ?? ""}
                     onChange={(e) => setProfile({ ...profile, position: e.target.value })}
                     placeholder="Pozisyon"
-                    className="min-h-11 min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed] sm:text-sm"
+                    className="min-h-11 min-w-0 touch-manipulation rounded-2xl ui-input border px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)] sm:text-sm"
                   />
                   <input
                     value={profile.number ?? ""}
                     onChange={(e) => setProfile({ ...profile, number: e.target.value })}
                     placeholder="Numara"
-                    className="min-h-11 min-w-0 touch-manipulation rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[#7c3aed] sm:text-sm"
+                    className="min-h-11 min-w-0 touch-manipulation rounded-2xl ui-input border px-4 py-3 text-base font-bold italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)] sm:text-sm"
                   />
                 </div>
               </div>
@@ -493,10 +493,10 @@ export default function SporcuPanel() {
           <AthleteCard className="group shadow-lg" padding="sm">
              <div className="mb-3 flex min-w-0 items-center justify-between">
                 <div className="flex min-w-0 items-center gap-2">
-                  <div className="shrink-0 rounded-xl bg-[#7c3aed]/10 p-2 text-[#7c3aed]"><Activity size={18} aria-hidden /></div>
-                  <h3 className="break-words text-sm font-black uppercase italic tracking-tight text-white">Beceri <span className="text-[#7c3aed]">radarı</span></h3>
+                  <div className="shrink-0 rounded-xl ui-kpi-chip--brand p-2 text-[color:var(--peaker-ui-PRIMARY)]"><Activity size={18} aria-hidden /></div>
+                  <h3 className="break-words text-sm font-black uppercase italic tracking-tight text-white">Beceri <span className="text-[color:var(--peaker-ui-PRIMARY)]">radarı</span></h3>
                 </div>
-                <ArrowUpRight className="shrink-0 text-gray-700 sm:group-hover:text-[#7c3aed]" size={20} aria-hidden />
+                <ArrowUpRight className="shrink-0 text-gray-700 sm:group-hover:text-[color:var(--peaker-ui-PRIMARY)]" size={20} aria-hidden />
              </div>
              <PerformanceRadar />
           </AthleteCard>

@@ -1,0 +1,93 @@
+# FAZ 34 Wave 4 / Wave 14 — branding parity + production validation gates (blocking on PR/main).
+name: Branding Parity
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: branding-parity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  branding-parity-strict:
+    runs-on: ubuntu-latest
+    env:
+      BRANDING_PARITY_STRICT: "1"
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ci-placeholder-anon
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wave 14 strict parity + validation gates
+        run: npm run branding:parity:strict && npm run branding:validate
+
+  branding-storybook-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Storybook catalog
+        run: npm run build-storybook
+
+  branding-lighthouse:
+    runs-on: ubuntu-latest
+    if: vars.LIGHTHOUSE_URL != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lighthouse performance gate
+        env:
+          LIGHTHOUSE_URL: ${{ vars.LIGHTHOUSE_URL }}
+        run: npx tsx scripts/branding-lighthouse-gate.ts
+
+  branding-e2e:
+    runs-on: ubuntu-latest
+    if: vars.E2E_ADMIN_EMAIL != ''
+    env:
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      PLAYWRIGHT_START_SERVER: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Branding E2E white-label + kill switch
+        run: npm run test:e2e:branding

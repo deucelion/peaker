@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Lock, Mail, Loader2, KeyRound } from "lucide-react";
 import { getDefaultRouteForRole } from "@/lib/auth/roleMatrix";
 import { fetchMeRoleClient } from "@/lib/auth/meRoleClient";
+import { resetMeAccessClientCache } from "@/lib/auth/meAccessClient";
 import { PATHS } from "@/lib/navigation/routeRegistry";
 import Notification from "@/components/Notification";
 import { normalizeEmailInput } from "@/lib/email/emailNormalize";
@@ -64,6 +65,7 @@ export default function LoginPage() {
 
         if (me.ok) {
           console.info("[login] session role", { userId: data.user.id, role: me.role });
+          resetMeAccessClientCache();
           router.replace(getDefaultRouteForRole(me.role));
           return;
         }
@@ -117,16 +119,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] min-w-0 flex-col items-center justify-center overflow-x-hidden overflow-y-auto overscroll-y-contain bg-[#09090b] px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] font-sans sm:px-6 sm:py-6">
-      <div className="relative my-auto w-full max-w-md min-w-0 space-y-6 overflow-hidden rounded-[2rem] border border-white/5 bg-[#121215] p-6 shadow-2xl sm:space-y-8 sm:rounded-[3rem] sm:p-10">
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#7c3aed]/10 blur-[100px] rounded-full" />
+    <div className="flex min-h-[100dvh] min-w-0 flex-col items-center justify-center overflow-x-hidden overflow-y-auto overscroll-y-contain ui-page px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] font-sans sm:px-6 sm:py-6">
+      <div className="relative my-auto w-full max-w-md min-w-0 space-y-6 overflow-hidden rounded-[2rem] border border-white/5 ui-card p-6 shadow-2xl sm:space-y-8 sm:rounded-[3rem] sm:p-10">
+        <div className="absolute -top-24 -right-24 w-48 h-48 ui-kpi-chip--brand blur-[100px] rounded-full" />
         
         <div className="relative z-10 min-w-0 text-center">
-          <div className="mb-6 inline-flex h-16 w-16 -rotate-6 transform items-center justify-center rounded-2xl bg-[#7c3aed] font-black text-3xl italic text-white shadow-lg shadow-[#7c3aed]/20">
+          <div className="mb-6 inline-flex h-16 w-16 -rotate-6 transform items-center justify-center rounded-2xl ui-btn-primary font-black text-3xl italic text-white shadow-lg shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)]">
             P
           </div>
           <h2 className="break-words text-2xl font-black uppercase tracking-tighter text-white italic sm:text-3xl">
-            PEAKER<span className="text-[#7c3aed]">.</span> LOGIN
+            PEAKER<span className="text-[color:var(--peaker-ui-PRIMARY)]">.</span> LOGIN
           </h2>
           <p className="mt-2 break-words text-[10px] font-bold uppercase italic tracking-[0.2em] text-gray-500">
             Performance Lab Giriş
@@ -136,7 +138,7 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} noValidate className="relative z-10 space-y-4">
           <div className="group relative min-w-0">
             <Mail
-              className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 transition-colors group-focus-within:text-[#7c3aed] sm:left-5"
+              className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 transition-colors group-focus-within:text-[color:var(--peaker-ui-PRIMARY)] sm:left-5"
               size={18}
               aria-hidden
             />
@@ -145,7 +147,7 @@ export default function LoginPage() {
               placeholder="e-posta adresiniz" 
               inputMode="email"
               autoComplete="email"
-              className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-black py-3.5 pl-12 pr-4 text-base font-bold lowercase italic text-white outline-none transition-all placeholder:opacity-50 focus:border-[#7c3aed]/50 sm:pl-14 sm:text-xs"
+              className="ui-input min-h-12 w-full min-w-0 touch-manipulation"
               value={email}
               onChange={(e) => setEmail(normalizeEmailInput(e.target.value))}
               // Mobil cihazlarda otomatik düzeltmeleri kapatır:
@@ -157,7 +159,7 @@ export default function LoginPage() {
           </div>
           <div className="group relative min-w-0">
             <Lock
-              className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 transition-colors group-focus-within:text-[#7c3aed] sm:left-5"
+              className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gray-500 transition-colors group-focus-within:text-[color:var(--peaker-ui-PRIMARY)] sm:left-5"
               size={18}
               aria-hidden
             />
@@ -165,7 +167,7 @@ export default function LoginPage() {
               type="password" 
               placeholder="Şifre" 
               autoComplete="current-password"
-              className="min-h-12 w-full min-w-0 touch-manipulation rounded-2xl border border-white/5 bg-black py-3.5 pl-12 pr-4 text-base font-bold italic text-white outline-none transition-all placeholder:opacity-50 focus:border-[#7c3aed]/50 sm:pl-14 sm:text-xs"
+              className="ui-input min-h-12 w-full min-w-0 touch-manipulation"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               {...PASSWORD_FIELD_PROPS}
@@ -176,7 +178,7 @@ export default function LoginPage() {
           <button 
             type="submit" 
             disabled={loading}
-            className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-3 rounded-[2rem] bg-[#7c3aed] px-4 py-3.5 font-black uppercase italic tracking-widest text-white shadow-xl shadow-[#7c3aed]/10 transition-all sm:hover:bg-[#6d28d9] active:scale-[0.98] disabled:opacity-50 sm:min-h-[3.25rem] sm:p-5"
+            className="flex min-h-12 w-full touch-manipulation items-center justify-center gap-3 rounded-[2rem] ui-btn-primary px-4 py-3.5 font-black uppercase italic tracking-widest text-white shadow-xl shadow-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)] transition-all sm:hover:bg-[color:var(--peaker-ui-PRIMARY)] active:scale-[0.98] disabled:opacity-50 sm:min-h-[3.25rem] sm:p-5"
           >
             {loading ? <Loader2 className="size-5 shrink-0 animate-spin" aria-hidden /> : "SİSTEME GİRİŞ YAP"}
           </button>
@@ -195,7 +197,7 @@ export default function LoginPage() {
           <button 
             type="button"
             onClick={handleForgotPassword}
-            className="min-h-11 w-full touch-manipulation text-gray-500 sm:hover:text-[#7c3aed] text-[9px] font-black italic uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 px-2 py-2 group rounded-xl sm:hover:bg-white/[0.03]"
+            className="min-h-11 w-full touch-manipulation text-gray-500 sm:hover:text-[color:var(--peaker-ui-PRIMARY)] text-[9px] font-black italic uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 px-2 py-2 group rounded-xl sm:hover:ui-kpi-band"
           >
             <KeyRound size={12} className="transition-transform sm:group-hover:rotate-12" aria-hidden /> ŞİFREMİ UNUTTUM / SIFIRLA
           </button>

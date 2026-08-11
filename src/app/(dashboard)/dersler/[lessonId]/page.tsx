@@ -169,7 +169,7 @@ export default function LessonDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-center text-[10px] font-black uppercase italic tracking-wide text-gray-500 sm:tracking-widest">Ders detayi yukleniyor...</p>
       </div>
     );
@@ -178,7 +178,7 @@ export default function LessonDetailPage() {
   if (error || !lesson) {
     return (
       <div className="min-w-0 space-y-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-        <Link href="/dersler" className="inline-flex min-h-11 items-center text-[10px] font-black uppercase tracking-wide text-[#7c3aed] touch-manipulation sm:tracking-widest">
+        <Link href="/dersler" className="inline-flex min-h-11 items-center text-[10px] font-black uppercase tracking-wide text-[color:var(--peaker-ui-PRIMARY)] touch-manipulation sm:tracking-widest">
           Dersler
         </Link>
         <div className="min-w-0 break-words">
@@ -190,7 +190,7 @@ export default function LessonDetailPage() {
 
   return (
     <div className="space-y-5 sm:space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
-      <Link href="/dersler" className="inline-flex min-h-11 items-center text-[#7c3aed] text-[10px] font-black uppercase tracking-wide sm:tracking-widest touch-manipulation">
+      <Link href="/dersler" className="inline-flex min-h-11 items-center text-[color:var(--peaker-ui-PRIMARY)] text-[10px] font-black uppercase tracking-wide sm:tracking-widest touch-manipulation">
         Dersler
       </Link>
 
@@ -200,7 +200,7 @@ export default function LessonDetailPage() {
         </div>
       ) : null}
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 min-w-0">
+      <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 min-w-0">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-black italic uppercase text-white break-words">{lesson.title}</h1>
@@ -218,12 +218,12 @@ export default function LessonDetailPage() {
             >
               {lessonStatusLabelTr(lesson.status)}
             </span>
-            <span className="px-3 py-2 sm:py-1 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/20 text-[#c4b5fd] text-[10px] font-black uppercase text-center sm:text-left">
+            <span className="px-3 py-2 sm:py-1 rounded-xl ui-kpi-chip--brand text-[10px] font-black uppercase text-center sm:text-left">
               Kapasite {lesson.capacity}
             </span>
             <Link
               href={`/antrenman-yonetimi?trainingId=${lesson.id}`}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white touch-manipulation sm:hover:bg-[#6d28d9]"
+              className="ui-btn-primary inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white touch-manipulation sm:hover:opacity-90"
             >
               Yoklamaya Git
             </Link>
@@ -240,7 +240,7 @@ export default function LessonDetailPage() {
       </section>
 
       {canEditLessonDetails ? (
-        <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
+        <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
           <h3 className="text-sm font-black italic uppercase text-white">Dersi duzenle</h3>
           <p className="text-[10px] text-gray-500 font-bold break-words">
             Iptal edilmemis derslerde baslik, aciklama, lokasyon, tarih/saat ve kapasite guncellenir. Kayit silinmez; kapasite mevcut katilimcinin altina dusurulemez.
@@ -255,7 +255,7 @@ export default function LessonDetailPage() {
                 required
                 value={editForm.title}
                 onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 md:col-span-2 min-w-0">
@@ -263,7 +263,7 @@ export default function LessonDetailPage() {
               <input
                 value={editForm.description}
                 onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 min-w-0">
@@ -272,7 +272,7 @@ export default function LessonDetailPage() {
                 required
                 value={editForm.location}
                 onChange={(e) => setEditForm((p) => ({ ...p, location: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 min-w-0">
@@ -283,7 +283,7 @@ export default function LessonDetailPage() {
                 min={participants.length || 1}
                 value={editForm.capacity}
                 onChange={(e) => setEditForm((p) => ({ ...p, capacity: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 min-w-0">
@@ -293,7 +293,7 @@ export default function LessonDetailPage() {
                 type="date"
                 value={editForm.lessonDate}
                 onChange={(e) => setEditForm((p) => ({ ...p, lessonDate: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 min-w-0">
@@ -303,7 +303,7 @@ export default function LessonDetailPage() {
                 type="time"
                 value={editForm.startClock}
                 onChange={(e) => setEditForm((p) => ({ ...p, startClock: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="space-y-1 min-w-0">
@@ -313,14 +313,14 @@ export default function LessonDetailPage() {
                 type="time"
                 value={editForm.endClock}
                 onChange={(e) => setEditForm((p) => ({ ...p, endClock: e.target.value }))}
-                className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#7c3aed]/60"
+                className="w-full min-w-0 ui-card-inner rounded-xl px-4 py-3 text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
               />
             </div>
             <div className="md:col-span-2">
               <button
                 type="submit"
                 disabled={editSaving}
-                className="min-h-11 w-full touch-manipulation rounded-xl bg-[#7c3aed] px-5 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50 sm:w-auto sm:hover:bg-[#6d28d9]"
+                className="ui-btn-primary min-h-11 w-full touch-manipulation rounded-xl px-5 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50 sm:w-auto sm:hover:opacity-90"
               >
                 {editSaving ? "Kaydediliyor..." : "Degisiklikleri kaydet"}
               </button>
@@ -329,14 +329,14 @@ export default function LessonDetailPage() {
         </section>
       ) : null}
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-sm font-black italic uppercase text-white">Katilimcilar ({participants.length}/{lesson.capacity})</h3>
         {participants.length === 0 ? (
           <p className="text-gray-500 text-[10px] font-black uppercase italic">Bu derse henuz sporcu eklenmedi.</p>
         ) : (
           <div className="grid gap-2 min-w-0">
             {participants.map((p) => (
-              <div key={p.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white/[0.02] border border-white/5 rounded-xl p-3 min-w-0">
+              <div key={p.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ui-card-inner rounded-xl p-3 min-w-0">
                 <span className="text-white text-sm font-black italic uppercase break-words min-w-0 flex-1">{p.full_name}</span>
                 <button
                   type="button"
@@ -352,7 +352,7 @@ export default function LessonDetailPage() {
         )}
       </section>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-sm font-black italic uppercase text-white">Sporcu Ekle</h3>
         {availableAthletes.length === 0 ? (
           <p className="text-gray-500 text-[10px] font-black uppercase italic">Tüm sporcular derste veya sporcu yok.</p>
@@ -377,7 +377,7 @@ export default function LessonDetailPage() {
               type="button"
               onClick={handleAddParticipants}
               disabled={selectedAddIds.length === 0 || (role === "coach" && (lesson.coachId !== actorId || !permissions.can_add_athletes_to_lessons))}
-              className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-1 rounded-xl bg-[#7c3aed] px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-40 sm:w-auto sm:hover:bg-[#6d28d9]"
+              className="ui-btn-primary inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-1 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-40 sm:w-auto sm:hover:opacity-90"
             >
               <UserPlus size={12} aria-hidden /> Seçilenleri Ekle
             </button>

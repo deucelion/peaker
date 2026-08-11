@@ -11,6 +11,44 @@ import {
   LAYOUT_THEME_VARS,
 } from "./layoutThemeTokens";
 
+export const DEFAULT_LAYOUT_THEME_PARITY_TOKENS = {
+  PRIMARY: "#7c3aed",
+  SECONDARY: "#5b21b6",
+  ACCENT: "#7c3aed",
+  BACKGROUND: "#09090b",
+  SURFACE: "#121215",
+  TEXT_PRIMARY: "#ffffff",
+  TEXT_SECONDARY: "#a1a1aa",
+  SIDEBAR_BACKGROUND: "#09090b",
+  SIDEBAR_TEXT: "#71717a",
+  SIDEBAR_ACTIVE: "#ffffff",
+} as const;
+
+/** CI parity gate: default Peaker layout tokens match canonical defaults. */
+export function runDefaultLayoutThemeParityGate():
+  | { ok: true }
+  | { ok: false; message: string } {
+  const tokens = extractLayoutThemeTokens(createDefaultBranding().theme);
+  if (!isDefaultLayoutThemeParity(tokens)) {
+    return {
+      ok: false,
+      message: "Default layout theme parity failed for PRIMARY/BACKGROUND/SURFACE.",
+    };
+  }
+
+  for (const [key, expected] of Object.entries(DEFAULT_LAYOUT_THEME_PARITY_TOKENS)) {
+    const actual = tokens[key as keyof typeof DEFAULT_LAYOUT_THEME_PARITY_TOKENS];
+    if (actual !== expected) {
+      return {
+        ok: false,
+        message: `Layout token ${key} expected ${expected} but got ${actual}.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
 describe("layoutThemeTokens", () => {
   it("maps canonical theme tokens from branding theme snapshot", () => {
     const theme = mergeBranding(createDefaultBranding(), {
@@ -48,11 +86,11 @@ describe("layoutThemeTokens", () => {
   it("exposes layout theme var references without magic strings", () => {
     expect(LAYOUT_THEME_VARS.PRIMARY).toBe("var(--peaker-layout-theme-PRIMARY)");
     expect(LAYOUT_THEME_VARS.BACKGROUND).toBe("var(--peaker-layout-theme-BACKGROUND)");
+    expect("SIDEBAR_BACKGROUND" in LAYOUT_THEME_VARS).toBe(false);
   });
 
   it("preserves default layout parity for Peaker branding", () => {
-    const tokens = extractLayoutThemeTokens(createDefaultBranding().theme);
-    expect(isDefaultLayoutThemeParity(tokens)).toBe(true);
+    expect(runDefaultLayoutThemeParityGate().ok).toBe(true);
   });
 
   it("detects runtime branding divergence from default layout parity", () => {

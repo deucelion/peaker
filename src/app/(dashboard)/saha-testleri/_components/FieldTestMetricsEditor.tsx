@@ -78,17 +78,17 @@ function SortableMetricRow({
       style={style}
       className={`flex flex-col gap-3 rounded-xl border p-3 min-w-0 transition-[box-shadow,background-color,border-color] duration-200 ease-out group md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-x-3 md:gap-y-2 ${
         isDragging
-          ? "z-10 border-[#a78bfa]/80 bg-[#7c3aed]/20 shadow-[0_12px_32px_-12px_rgba(124,58,237,0.85)]"
+          ? "z-10 border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_80%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] shadow-[0_12px_32px_-12px_color-mix(in_srgb,var(--peaker-ui-PRIMARY)_85%,transparent)]"
           : isHighlighted
-            ? "border-[#a78bfa]/70 bg-[#7c3aed]/15 ring-2 ring-[#7c3aed]/50 shadow-[0_0_0_1px_rgba(124,58,237,0.5),0_8px_24px_-14px_rgba(124,58,237,0.9)]"
-            : "border-white/10 bg-white/[0.03] sm:hover:border-[#7c3aed]/35 sm:hover:bg-white/[0.05] sm:hover:shadow-[0_8px_24px_-16px_rgba(124,58,237,0.55)]"
+            ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] ring-2 ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent),0_8px_24px_-14px_color-mix(in_srgb,var(--peaker-ui-PRIMARY)_90%,transparent)]"
+            : "ui-card-inner sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_35%,transparent)] sm:hover:shadow-[0_8px_24px_-16px_color-mix(in_srgb,var(--peaker-ui-PRIMARY)_55%,transparent)]"
       }`}
     >
       <div className="flex items-start gap-3 min-w-0 md:col-span-1">
         <button
           type="button"
           ref={setActivatorNodeRef}
-          className={`flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-white/15 bg-black/30 text-gray-400 transition sm:hover:border-[#7c3aed]/40 sm:hover:text-[#c4b5fd] ${
+          className={`ui-card-inner flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-lg text-gray-400 transition sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] ${
             orderingBusy ? "cursor-not-allowed opacity-50" : "cursor-grab active:cursor-grabbing"
           }`}
           aria-label={`${m.name} metriğini sürükleyerek sırala`}
@@ -98,14 +98,14 @@ function SortableMetricRow({
         >
           <GripVertical size={16} aria-hidden />
         </button>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-[11px] font-black text-[#c4b5fd]">
+        <div className="ui-card-inner flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">
           {index + 1}
         </div>
         <div className="min-w-0 flex-1">
           <span className="font-black text-sm uppercase tracking-tight line-clamp-2 break-words text-white">
             {m.name}
           </span>
-          <span className="text-[#c4b5fd] font-bold text-[10px] uppercase tracking-wide break-words">
+          <span className="font-bold text-[10px] uppercase tracking-wide break-words text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]">
             Tip: {metricIsText(m) ? "Yazılı Not" : "Sayısal Değer"} · Birim: {m.unit || "—"}
           </span>
         </div>
@@ -288,9 +288,9 @@ export function FieldTestMetricsEditor() {
 
   if (loading && metrics.length === 0 && !loadError) {
     return (
-      <div className="min-h-[50dvh] px-4 flex flex-col items-center justify-center bg-black gap-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
-        <Loader2 className="w-10 h-10 text-[#7c3aed] animate-spin" aria-hidden />
-        <p className="text-[10px] font-black uppercase italic tracking-wide sm:tracking-widest text-gray-500 break-words max-w-md">
+      <div className="ui-loading-panel min-h-[50dvh] px-4 min-w-0 overflow-x-hidden pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] text-center">
+        <Loader2 className="ui-loading-panel__spinner w-10 h-10 animate-spin" aria-hidden />
+        <p className="ui-loading-panel__label italic tracking-wide sm:tracking-widest break-words max-w-md">
           Metrikler yükleniyor...
         </p>
       </div>
@@ -303,13 +303,13 @@ export function FieldTestMetricsEditor() {
         <div className="space-y-2 min-w-0">
           <Link
             href="/saha-testleri"
-            className="inline-flex min-h-10 items-center gap-2 text-[10px] font-black uppercase tracking-wider text-gray-500 transition sm:hover:text-[#c4b5fd]"
+            className="inline-flex min-h-10 items-center gap-2 text-[10px] font-black uppercase tracking-wider text-gray-500 transition sm:hover:text-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)]"
           >
             <ChevronLeft size={14} aria-hidden />
             Saha testleri
           </Link>
           <h1 className="ui-h1 break-words">
-            SAHA TEST <span className="text-[#7c3aed]">METRİKLERİ</span>
+            SAHA TEST <span className="text-[color:var(--peaker-ui-PRIMARY)]">METRİKLERİ</span>
           </h1>
           <p className="text-[11px] font-bold text-gray-500">
             Veri girişinde kullanılan metrikleri tanımlayın, sürükleyerek sıralayın ve düzenleyin.
@@ -346,7 +346,7 @@ export function FieldTestMetricsEditor() {
       ) : null}
 
       <section className="mt-6 min-w-0 space-y-4">
-        <div className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5 min-w-0">
+        <div className="ui-card p-4 sm:p-5 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Tanımlı metrikler</h2>
             {metrics.length > 1 ? (
@@ -383,24 +383,24 @@ export function FieldTestMetricsEditor() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#121215] p-4 sm:p-5 min-w-0">
+        <div className="ui-card p-4 sm:p-5 min-w-0">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Yeni metrik ekle</h2>
-          <div className="mt-4 bg-white/5 p-4 rounded-xl space-y-3 min-w-0">
+          <div className="ui-card-inner mt-4 space-y-3 p-4 min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
               <input
                 placeholder="Metrik adı (örn. 30m Sprint)"
-                className="col-span-1 sm:col-span-2 min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                className="ui-input col-span-1 min-h-11 touch-manipulation sm:col-span-2"
                 value={newMetric.name}
                 onChange={(e) => setNewMetric({ ...newMetric, name: e.target.value })}
               />
               <input
                 placeholder={newMetric.valueType === "text" ? "Birim (opsiyonel)" : "Birim (sn, cm, kg)"}
-                className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                className="ui-input min-h-11 touch-manipulation"
                 value={newMetric.unit}
                 onChange={(e) => setNewMetric({ ...newMetric, unit: e.target.value })}
               />
               <select
-                className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                className="ui-select min-h-11 touch-manipulation"
                 value={newMetric.valueType}
                 onChange={(e) => setNewMetric({ ...newMetric, valueType: e.target.value as MetricValueType })}
               >
@@ -409,7 +409,7 @@ export function FieldTestMetricsEditor() {
               </select>
               {newMetric.valueType === "number" ? (
                 <select
-                  className="min-h-11 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed] text-white transition-all touch-manipulation"
+                  className="ui-select min-h-11 touch-manipulation"
                   value={newMetric.improvementDirection}
                   onChange={(e) =>
                     setNewMetric({
@@ -424,14 +424,14 @@ export function FieldTestMetricsEditor() {
                   <option value="lower_better">↓ Düşük değer daha iyi</option>
                 </select>
               ) : (
-                <div className="min-h-11 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-[11px] font-medium text-gray-500">
+                <div className="ui-card-inner min-h-11 px-4 py-3 text-[11px] font-medium text-gray-500">
                   Yazılı metrikler trend analizine girmez.
                 </div>
               )}
               <button
                 type="button"
                 onClick={() => void handleAddMetric()}
-                className="min-h-11 bg-[#7c3aed] text-white font-black rounded-xl px-4 py-3 uppercase text-[10px] tracking-wide sm:hover:bg-[#6d28d9] transition-all shadow-xl shadow-[#7c3aed]/20 touch-manipulation"
+                className="ui-btn-primary min-h-11 touch-manipulation"
               >
                 Metrik ekle
               </button>

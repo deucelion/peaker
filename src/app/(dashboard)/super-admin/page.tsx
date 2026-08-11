@@ -27,11 +27,11 @@ function orgStatusChipClass(s: OrganizationStatus): string {
     case "suspended":
       return "text-amber-300 border-amber-500/25 bg-amber-500/10";
     case "archived":
-      return "text-gray-400 border-white/10 bg-white/5";
+      return "text-gray-400 border-white/5 ui-kpi-band";
     case "expired":
       return "text-red-300 border-red-500/25 bg-red-500/10";
     default:
-      return "text-gray-300 border-white/10 bg-white/5";
+      return "text-gray-300 border-white/5 ui-kpi-band";
   }
 }
 
@@ -164,8 +164,8 @@ export default async function SuperAdminPage() {
           Bu ekran service role ile tum organizasyonlari okur. Asagidaki mesaj genelde SUPABASE_SERVICE_ROLE_KEY eksik/yanlis, Supabase
           erisim hatasi veya sema uyumsuzlugunu gosterir.
         </p>
-        <pre className="text-[10px] text-amber-200/90 whitespace-pre-wrap break-all rounded-xl border border-white/10 bg-black/30 p-3">{loadError}</pre>
-        <Link href="/sistem-saglik" className="inline-flex min-h-11 items-center text-[10px] font-black uppercase text-[#c4b5fd] touch-manipulation">
+        <pre className="text-[10px] text-amber-200/90 whitespace-pre-wrap break-all rounded-xl ui-card-inner p-3">{loadError}</pre>
+        <Link href="/sistem-saglik" className="inline-flex min-h-11 items-center text-[10px] font-black uppercase text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] touch-manipulation">
           Sistem saglik sayfasina git
         </Link>
       </div>
@@ -280,7 +280,7 @@ export default async function SuperAdminPage() {
     <div className="space-y-5 sm:space-y-6 pb-[max(3rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
       <header className="border-b border-white/5 pb-5 sm:pb-6 min-w-0">
         <h1 className="text-3xl sm:text-4xl font-black italic text-white uppercase tracking-tighter break-words leading-tight">
-          SUPER ADMIN <span className="text-[#7c3aed]">CONTROL CENTER</span>
+          SUPER ADMIN <span className="text-[color:var(--peaker-ui-PRIMARY)]">CONTROL CENTER</span>
         </h1>
         <p className="text-gray-500 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.25em] italic mt-2 sm:mt-3 break-words">
           Tüm organizasyonlar için üst seviye operasyon paneli
@@ -302,14 +302,14 @@ export default async function SuperAdminPage() {
       </section>
 
       <section className="grid lg:grid-cols-12 gap-4 min-w-0">
-        <div className="lg:col-span-8 bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 overflow-hidden">
+        <div className="lg:col-span-8 ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0 overflow-hidden">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
             <p className="text-white text-sm font-black italic uppercase">Organizasyonlar</p>
             <p className="text-[10px] text-gray-500 font-bold uppercase">{orgSummaries.length} kayit</p>
           </div>
           <div className="grid gap-3 min-w-0">
             {orgSummaries.length === 0 ? (
-              <div className="text-center py-10 border border-dashed border-white/10 rounded-xl">
+              <div className="text-center py-10 border border-dashed border-white/5 rounded-xl">
                 <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider italic">
                   Henuz organizasyon kaydi bulunmuyor.
                 </p>
@@ -319,7 +319,7 @@ export default async function SuperAdminPage() {
                 <Link
                   key={org.organizationId}
                   href={`/super-admin/${org.organizationId}`}
-                  className="block bg-black/20 border border-white/10 rounded-xl p-4 sm:hover:border-[#7c3aed]/30 transition-all min-w-0 touch-manipulation"
+                  className="block ui-card-inner border border-white/5 rounded-xl p-4 sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] transition-all min-w-0 touch-manipulation"
                 >
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 min-w-0">
                     <div className="min-w-0 flex-1">
@@ -346,9 +346,9 @@ export default async function SuperAdminPage() {
                       >
                         {ORGANIZATION_STATUS_LABELS[org.status]}
                       </span>
-                      <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-300">{org.athletes} sporcu</span>
-                      <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-300">{org.coaches} koc</span>
-                      <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-300">{org.todayLessons} bugun</span>
+                      <span className="px-2 py-1 rounded-lg ui-kpi-band border border-white/5 text-gray-300">{org.athletes} sporcu</span>
+                      <span className="px-2 py-1 rounded-lg ui-kpi-band border border-white/5 text-gray-300">{org.coaches} koc</span>
+                      <span className="px-2 py-1 rounded-lg ui-kpi-band border border-white/5 text-gray-300">{org.todayLessons} bugun</span>
                       <span
                         className={`px-2 py-1 rounded-lg border ${org.health === "healthy" ? "text-green-400 border-green-500/20 bg-green-500/10" : "text-amber-300 border-amber-500/20 bg-amber-500/10"}`}
                       >
@@ -382,10 +382,10 @@ export default async function SuperAdminPage() {
 
         <div className="lg:col-span-4 space-y-4 min-w-0">
           <SuperAdminCreateOrgForm />
-          <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+          <section className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3 min-w-0">
               <p className="text-white text-sm font-black italic uppercase">Sistem Sagligi</p>
-              <Link href="/sistem-saglik" className="min-h-9 inline-flex items-center text-[#c4b5fd] text-[10px] font-black uppercase touch-manipulation shrink-0">
+              <Link href="/sistem-saglik" className="min-h-9 inline-flex items-center text-[color-mix(in_srgb,var(--peaker-ui-PRIMARY)_70%,white)] text-[10px] font-black uppercase touch-manipulation shrink-0">
                 Detay
               </Link>
             </div>
@@ -408,7 +408,7 @@ export default async function SuperAdminPage() {
 
 function KpiCard({ label, value, warning }: { label: string; value: string | number; warning?: boolean }) {
   return (
-    <div className="bg-[#121215] border border-white/5 rounded-xl p-2.5 sm:p-3 min-w-0">
+    <div className="ui-card border border-white/5 rounded-xl p-2.5 sm:p-3 min-w-0">
       <p className="text-[8px] sm:text-[9px] text-gray-500 font-black uppercase leading-tight break-words">{label}</p>
       <p className={`text-xl sm:text-2xl font-black italic tabular-nums break-all ${warning ? "text-amber-300" : "text-white"}`}>{value}</p>
     </div>
@@ -417,14 +417,14 @@ function KpiCard({ label, value, warning }: { label: string; value: string | num
 
 function ListBlock({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="bg-[#121215] border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
+    <div className="ui-card border border-white/5 rounded-[1.5rem] p-4 sm:p-5 min-w-0">
       <p className="text-white text-sm font-black italic uppercase mb-3 break-words">{title}</p>
       {items.length === 0 ? (
         <p className="text-[10px] text-gray-500 font-bold uppercase">Veri yok</p>
       ) : (
         <div className="grid gap-2 min-w-0">
           {items.map((item) => (
-            <p key={item} className="text-[10px] text-gray-300 font-bold bg-black/20 border border-white/10 rounded-lg px-3 py-2 break-words">
+            <p key={item} className="text-[10px] text-gray-300 font-bold ui-card-inner border border-white/5 rounded-lg px-3 py-2 break-words">
               {item}
             </p>
           ))}

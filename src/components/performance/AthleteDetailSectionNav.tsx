@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UiTabsNav } from "@/components/ui/navigation/UiTabsNav";
 
 const SECTIONS = [
   { id: "sporcu-ozet", label: "Özet" },
@@ -35,26 +36,17 @@ export function AthleteDetailSectionNav({ className = "" }: { className?: string
   }, []);
 
   return (
-    <nav
-      aria-label="Sporcu profili bölümleri"
-      className={`sticky top-14 z-10 -mx-1 flex gap-1 overflow-x-auto bg-[#0a0a0b]/95 px-1 py-2 backdrop-blur-md lg:top-0 ${className}`}
-    >
-      {SECTIONS.map((section) => {
-        const active = activeId === section.id;
-        return (
-          <a
-            key={section.id}
-            href={`#${section.id}`}
-            className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-wide ${
-              active
-                ? "border-[#7c3aed]/40 bg-[#7c3aed]/10 text-[#c4b5fd]"
-                : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-            }`}
-          >
-            {section.label}
-          </a>
-        );
-      })}
-    </nav>
+    <UiTabsNav
+      ariaLabel="Sporcu profili bölümleri"
+      sticky
+      size="sm"
+      className={className}
+      tabs={SECTIONS.map((section) => ({
+        key: section.id,
+        label: section.label,
+        href: `#${section.id}`,
+        active: activeId === section.id,
+      }))}
+    />
   );
 }

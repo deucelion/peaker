@@ -70,20 +70,19 @@ export function CoachMobileQuickStrip() {
           <WifiOff size={12} aria-hidden /> Çevrimdışı — güvenli işlemler kuyrukta
         </p>
       ) : null}
-      <nav
-        aria-label="Koç hızlı işlemler"
-        className="grid grid-cols-5 gap-0.5 rounded-xl border border-white/10 bg-[#121215] p-1.5"
-      >
+      <nav aria-label="Koç hızlı işlemler" className="ui-card grid grid-cols-5 gap-0.5 p-1.5">
         {BASE_LINKS.map(({ href, label, icon: Icon, ...rest }) => {
           const showBadge = "badgeKey" in rest && rest.badgeKey === "perf" && perfBadge !== null;
           return (
             <Link
               key={href}
               href={href}
-              className="relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg border border-transparent px-0.5 py-1.5 text-center touch-manipulation active:border-[#7c3aed]/30 active:bg-[#7c3aed]/10"
+              className="relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg border border-transparent px-0.5 py-1.5 text-center touch-manipulation active:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] active:bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_10%,transparent)]"
             >
-              <Icon size={16} className="text-[#7c3aed]" aria-hidden />
-              <span className="text-[7px] font-black uppercase leading-tight tracking-wide text-gray-400">{label}</span>
+              <Icon size={16} className="text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
+              <span className="text-[7px] font-black uppercase leading-tight tracking-wide text-gray-400">
+                {label}
+              </span>
               {showBadge ? (
                 <span className="absolute right-1 top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white">
                   {perfBadge}

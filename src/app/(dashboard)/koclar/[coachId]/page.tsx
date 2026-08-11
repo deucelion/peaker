@@ -128,7 +128,7 @@ function CoachProfilePageInner() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koç profili yükleniyor...</p>
       </div>
     );
@@ -139,7 +139,7 @@ function CoachProfilePageInner() {
       <div className="min-w-0 space-y-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
         <Link
           href={listOrgId ? `/koclar?org=${encodeURIComponent(listOrgId)}` : "/koclar"}
-          className="inline-flex min-h-11 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#7c3aed] touch-manipulation"
+          className="inline-flex min-h-11 items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--peaker-ui-PRIMARY)] touch-manipulation"
         >
           <ChevronLeft size={14} className="shrink-0" aria-hidden /> Koçlar
         </Link>
@@ -154,15 +154,15 @@ function CoachProfilePageInner() {
     <div className="space-y-6 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
       <Link
         href={listOrgId ? `/koclar?org=${encodeURIComponent(listOrgId)}` : "/koclar"}
-        className="inline-flex min-h-11 items-center gap-2 text-[#7c3aed] text-[10px] font-black uppercase tracking-widest touch-manipulation"
+        className="inline-flex min-h-11 items-center gap-2 text-[color:var(--peaker-ui-PRIMARY)] text-[10px] font-black uppercase tracking-widest touch-manipulation"
       >
         <ChevronLeft size={14} className="shrink-0" aria-hidden /> <span className="break-words">Koçlar Listesi</span>
       </Link>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 shadow-xl min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 shadow-xl min-w-0">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 min-w-0">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[#1c1c21] text-[#7c3aed]">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-[color:var(--peaker-ui-PRIMARY)]">
               <User size={24} aria-hidden />
             </div>
             <div className="min-w-0">
@@ -172,19 +172,19 @@ function CoachProfilePageInner() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase min-w-0">
-            <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300 break-all max-w-full">{coach.phone}</span>
-            <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-300 break-words max-w-full">{coach.expertise}</span>
+            <span className="px-3 py-1 rounded-xl bg-white/5 text-gray-300 break-all max-w-full">{coach.phone}</span>
+            <span className="px-3 py-1 rounded-xl bg-white/5 text-gray-300 break-words max-w-full">{coach.expertise}</span>
             <span className={`px-3 py-1 rounded-xl border ${coach.isActive ? "text-green-400 border-green-500/20 bg-green-500/10" : "text-red-400 border-red-500/20 bg-red-500/10"}`}>
               {coach.isActive ? "Aktif" : "Pasif"}
             </span>
-            <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-400">
+            <span className="px-3 py-1 rounded-xl bg-white/5 text-gray-400">
               {coach.createdAt ? new Date(coach.createdAt).toLocaleDateString("tr-TR") : "-"}
             </span>
           </div>
         </div>
       </section>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase break-words">Koç bilgilerini düzenle</h3>
         {profileMessage ? (
           <div className="min-w-0 break-words">
@@ -198,7 +198,7 @@ function CoachProfilePageInner() {
               required
               value={profileForm.fullName}
               onChange={(e) => setProfileForm((p) => ({ ...p, fullName: e.target.value }))}
-              className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[#7c3aed]/60"
+              className="ui-input w-full min-w-0 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
             />
           </div>
           <div className="space-y-1 min-w-0">
@@ -207,7 +207,7 @@ function CoachProfilePageInner() {
               value={profileForm.phone}
               onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))}
               inputMode="tel"
-              className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[#7c3aed]/60"
+              className="ui-input w-full min-w-0 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
             />
           </div>
           <div className="space-y-1 min-w-0">
@@ -216,14 +216,14 @@ function CoachProfilePageInner() {
               value={profileForm.specialization}
               onChange={(e) => setProfileForm((p) => ({ ...p, specialization: e.target.value }))}
               placeholder="Örn. Atletik performans"
-              className="w-full min-w-0 bg-[#1c1c21] border border-white/10 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[#7c3aed]/60"
+              className="ui-input w-full min-w-0 rounded-xl px-4 py-3 font-black italic text-white outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_60%,transparent)]"
             />
           </div>
           <div className="md:col-span-2">
             <button
               type="submit"
               disabled={profileSaving}
-              className="min-h-11 w-full touch-manipulation rounded-xl bg-[#7c3aed] px-5 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50 sm:w-auto sm:hover:bg-[#6d28d9]"
+              className="min-h-11 w-full touch-manipulation rounded-xl ui-btn-primary px-5 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50 sm:w-auto sm:hover:opacity-90"
             >
               {profileSaving ? "Kaydediliyor..." : "Profili Kaydet"}
             </button>
@@ -255,7 +255,7 @@ function CoachProfilePageInner() {
         Sayaçlar grup + özel ders toplamıdır. İptal edilen dersler hariç tutulur.
       </p>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Yetkiler</h3>
         {permissionMessage ? (
           <div className="min-w-0 break-words">
@@ -280,12 +280,12 @@ function CoachProfilePageInner() {
           ].map((item) => {
             const checked = permissions[item.key as CoachPermissionKey];
             return (
-              <label key={item.key} className="flex items-center justify-between gap-3 bg-white/[0.02] border border-white/5 rounded-xl p-3 min-h-12 touch-manipulation cursor-pointer min-w-0">
+              <label key={item.key} className="flex items-center justify-between gap-3 bg-white/[0.02] rounded-xl p-3 min-h-12 touch-manipulation cursor-pointer min-w-0">
                 <span className="text-[11px] font-black uppercase text-gray-300 break-words pr-2">{item.label}</span>
                 <input
                   type="checkbox"
                   checked={checked}
-                  className="size-4 shrink-0 accent-[#7c3aed]"
+                  className="size-4 shrink-0 accent-[color:var(--peaker-ui-PRIMARY)]"
                   onChange={(e) => void togglePermission(item.key as CoachPermissionKey, e.target.checked)}
                 />
               </label>
@@ -294,7 +294,7 @@ function CoachProfilePageInner() {
         </div>
       </section>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Geçmiş Dersler</h3>
         {pastLessons.length === 0 ? (
           <EmptyState
@@ -311,7 +311,7 @@ function CoachProfilePageInner() {
         )}
       </section>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 space-y-4 min-w-0">
         <h3 className="text-base sm:text-lg font-black italic text-white uppercase">Yaklaşan Dersler</h3>
         {upcomingLessons.length === 0 ? (
           <EmptyState
@@ -329,10 +329,10 @@ function CoachProfilePageInner() {
         )}
       </section>
 
-      <section className="bg-[#121215] border border-white/5 rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 min-w-0">
+      <section className="ui-card rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-6 min-w-0">
         <Link
           href="/antrenman-yonetimi"
-          className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white sm:w-auto sm:hover:bg-[#6d28d9]"
+          className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl ui-btn-primary px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white sm:w-auto sm:hover:opacity-90"
         >
           Antrenman Planına Git
         </Link>
@@ -346,7 +346,7 @@ export default function CoachProfilePage() {
     <Suspense
       fallback={
         <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-          <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+          <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
           <p className="text-center text-[10px] font-black uppercase italic tracking-widest text-gray-500">Koç Profili Yükleniyor...</p>
         </div>
       }
@@ -358,7 +358,7 @@ export default function CoachProfilePage() {
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-0 rounded-[1.5rem] border border-white/5 bg-[#121215] p-5">
+    <div className="min-w-0 rounded-[1.5rem] ui-card p-5">
       <p className="text-[9px] font-black uppercase tracking-widest text-gray-600 italic">{label}</p>
       <p className="text-3xl font-black italic text-white mt-2">{value}</p>
     </div>
@@ -377,7 +377,7 @@ function EmptyState({
   secondary?: { label: string; href: string };
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center">
+    <div className="rounded-2xl border border-dashed ui-card-inner px-4 py-8 text-center">
       <p className="text-[11px] font-black uppercase tracking-wide text-gray-300">Kayıt bulunamadı</p>
       <p className="mt-1 text-[11px] font-semibold text-gray-500">{description}</p>
       {reason ? <p className="mt-2 text-[10px] font-semibold text-gray-600">{reason}</p> : null}
@@ -386,7 +386,7 @@ function EmptyState({
           {primary ? (
             <Link
               href={primary.href}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#7c3aed] px-4 text-[10px] font-black uppercase tracking-wide text-white"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl ui-btn-primary px-4 text-[10px] font-black uppercase tracking-wide text-white"
             >
               {primary.label}
             </Link>
@@ -407,7 +407,7 @@ function EmptyState({
 
 function LessonRow({ lesson }: { lesson: CoachLesson }) {
   return (
-    <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
+    <div className="bg-white/[0.02] rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 min-w-0">
       <div className="min-w-0 flex-1">
         <p className="text-white font-black italic uppercase text-sm break-words">{lesson.title}</p>
         <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-gray-500 font-bold uppercase italic">
@@ -416,7 +416,7 @@ function LessonRow({ lesson }: { lesson: CoachLesson }) {
           <span className="inline-flex min-w-0 items-start gap-1"><MapPin size={12} className="mt-0.5 shrink-0" aria-hidden /> <span className="break-words">{lesson.location}</span></span>
         </div>
       </div>
-      <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${lesson.status === "past" ? "bg-white/5 text-gray-400" : "bg-[#7c3aed]/10 text-[#c4b5fd]"}`}>
+      <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${lesson.status === "past" ? "bg-white/5 text-gray-400" : "ui-kpi-chip--brand ui-kpi-card__trend"}`}>
         {lesson.status === "past" ? "Geçmiş" : "Yaklaşan"}
       </span>
     </div>

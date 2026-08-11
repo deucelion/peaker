@@ -30,8 +30,8 @@ export function PrivateLessonParallelMetricsStrip() {
   if (metrics.totalPrivateLessons === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-[#121215] to-[#1a1528] px-4 py-3 text-[11px] font-bold text-gray-300">
-      <p className="text-[9px] font-black uppercase tracking-wider text-[#c4b5fd]">
+    <div className="rounded-2xl bg-gradient-to-r ui-kpi-section px-4 py-3 text-[11px] font-bold text-gray-300">
+      <p className="text-[9px] font-black uppercase tracking-wider ui-kpi-card__trend">
         Özel ders operasyon özeti · {metrics.monthLabel}
       </p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">

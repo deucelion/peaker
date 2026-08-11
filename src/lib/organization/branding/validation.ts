@@ -151,7 +151,7 @@ export function validateBranding(branding: OrganizationBranding): ValidateBrandi
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
 
-function validateBrandingSidebarTokens(sidebar: OrganizationBranding["sidebar"]): ValidateBrandingResult {
+export function validateBrandingSidebarTokens(sidebar: OrganizationBranding["sidebar"]): ValidateBrandingResult {
   const errors: string[] = [];
 
   for (const [key, value] of Object.entries(sidebar)) {

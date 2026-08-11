@@ -23,7 +23,7 @@ export default function DashboardError({
           Bu bölüm yüklenirken beklenmeyen bir hata oluştu. Ağ veya oturum sorunu olabilir; tekrar deneyebilir veya ana sayfaya dönebilirsiniz.
         </p>
         {error?.message ? (
-          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-white/10 bg-black/40 p-4 text-left text-[10px] text-red-300/90">
+          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-xl ui-input border p-4 text-left text-[10px] text-red-300/90">
             {error.message}
           </pre>
         ) : null}
@@ -31,13 +31,13 @@ export default function DashboardError({
           <button
             type="button"
             onClick={() => reset()}
-            className="rounded-xl bg-[#7c3aed] px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition sm:hover:bg-[#6d28d9]"
+            className="rounded-xl ui-btn-primary px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition sm:hover:bg-[color:var(--peaker-ui-PRIMARY)]"
           >
             Tekrar dene
           </button>
           <Link
             href="/"
-            className="rounded-xl border border-white/10 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-300 transition sm:hover:border-[#7c3aed]/40 sm:hover:text-white"
+            className="rounded-xl border border-white/5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-300 transition sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:hover:text-white"
           >
             Ana sayfa
           </Link>

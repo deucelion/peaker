@@ -28,7 +28,7 @@ const AUDITED_BASELINE: Record<string, number> = {
   "src/lib/actions/athletePermissionActions.ts :: athlete_permissions": 1,
   // resolveFieldTestActor + org-scoped profil/metrik ön doğrulaması; orgShape
   // koşullu organization_id/org_id filtreleri buildQuery içinde eklenir
-  "src/lib/actions/athleticFieldActions.ts :: athletic_results": 7,
+  "src/lib/actions/athleticFieldActions.ts :: athletic_results": 8,
   "src/lib/actions/athleticFieldActions.ts :: test_definitions": 5,
   // trainingId canManageTraining ile org-scoped; profileId org-filtreli profiles
   "src/lib/actions/attendanceActions.ts :: training_participants": 3,

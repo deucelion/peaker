@@ -1,4 +1,5 @@
 import type { WellnessReportRow } from "@/types/performance";
+import { UI_CONTENT_THEME_VARS } from "@/lib/ui/branding/UI_CONTENT_THEME_VARS";
 import { computeReadinessScore } from "@/lib/wellness/wellnessScore";
 
 /** Son N readiness skorunu mini SVG sparkline olarak uretir. */
@@ -27,5 +28,5 @@ export function buildReadinessSparklineSvg(
     })
     .join(" ");
 
-  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><polyline fill="none" stroke="#7c3aed" stroke-width="1.5" points="${points}" /></svg>`;
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><polyline fill="none" stroke="${UI_CONTENT_THEME_VARS.PRIMARY}" stroke-width="1.5" points="${points}" /></svg>`;
 }

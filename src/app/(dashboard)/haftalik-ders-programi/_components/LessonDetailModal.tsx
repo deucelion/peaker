@@ -6,7 +6,7 @@ import { CheckCircle2, Clock3, MapPin, User, User2, Users } from "lucide-react";
 import { formatLessonDateTimeTr } from "@/lib/forms/datetimeLocal";
 import type { WeeklyLessonScheduleItem } from "@/lib/types";
 import { resolveWeeklyPrivateCompleteUi } from "@/lib/privateLessons/completeSessionPolicy";
-import { CompactModalFooter } from "@/components/mobile/CompactModalFooter";
+import { OverlayDialog, OverlayFooter, OVERLAY_Z } from "@/components/ui/overlay";
 import { lessonStatusLabelTr } from "../_utils/scheduleGrid";
 
 /**
@@ -38,28 +38,21 @@ export function LessonDetailModal({
   const busy = actionBusyId === selected.id;
 
   return (
-    <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center"
-      onClick={onClose}
+    <OverlayDialog
+      open
+      onClose={onClose}
+      layer={OVERLAY_Z.MODAL_ELEVATED}
+      strongBackdrop
+      shellClassName="flex max-h-[min(92dvh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl ui-card shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)] !max-w-xl !p-0"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="flex max-h-[min(92dvh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#17171d] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.95)]"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
-              selected.sourceType === "group"
-                ? "border-indigo-400/40 bg-indigo-500/10 text-indigo-200"
-                : "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
-            }`}
+            className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${ selected.sourceType === "group" ? "border-indigo-400/40 bg-indigo-500/10 text-indigo-200" : "border-emerald-400/40 bg-emerald-500/10 text-emerald-200" }`}
           >
             {selected.sourceType === "group" ? "Grup Dersi" : "Özel Ders"}
           </span>
-          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-300">
+          <span className="ui-badge-neutral rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-300">
             {lessonStatusLabelTr(selected.status)}
           </span>
           {completeUi?.showCompletedBadge ? (
@@ -74,29 +67,29 @@ export function LessonDetailModal({
         </p>
         {selected.subtitle ? <p className="mt-2 text-sm font-bold text-gray-400">{selected.subtitle}</p> : null}
 
-        <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-black/20 p-4 text-[12px] font-bold text-gray-300">
+        <div className="mt-4 grid gap-2 rounded-xl ui-card-inner p-4 text-[12px] font-bold text-gray-300">
           <p className="flex items-center gap-2">
-            <Clock3 size={14} aria-hidden className="text-[#c4b5fd]" />
+            <Clock3 size={14} aria-hidden className="ui-kpi-card__trend" />
             {formatLessonDateTimeTr(selected.startsAt, appTz)} – {formatLessonDateTimeTr(selected.endsAt, appTz)}
           </p>
           <p className="flex items-center gap-2">
-            <User2 size={14} aria-hidden className="text-[#c4b5fd]" />
+            <User2 size={14} aria-hidden className="ui-kpi-card__trend" />
             Koç: {selected.coachName || "Koç atanmadı"}
           </p>
           <p className="flex items-center gap-2">
             {selected.sourceType === "group" ? (
-              <Users size={14} aria-hidden className="text-[#c4b5fd]" />
+              <Users size={14} aria-hidden className="ui-kpi-card__trend" />
             ) : (
-              <User size={14} aria-hidden className="text-[#c4b5fd]" />
+              <User size={14} aria-hidden className="ui-kpi-card__trend" />
             )}
             Ders tipi: {selected.sourceType === "group" ? "Grup Dersi" : "Özel Ders"}
           </p>
           <p className="flex items-center gap-2">
-            <Users size={14} aria-hidden className="text-[#c4b5fd]" />
+            <Users size={14} aria-hidden className="ui-kpi-card__trend" />
             Katılımcı: {selected.participantCount}
           </p>
           <p className="flex items-center gap-2">
-            <MapPin size={14} aria-hidden className="text-[#c4b5fd]" />
+            <MapPin size={14} aria-hidden className="ui-kpi-card__trend" />
             {selected.location || "Lokasyon yok"}
           </p>
           {selected.sourceType === "private" && selected.packageRemainingLessons != null ? (
@@ -151,7 +144,7 @@ export function LessonDetailModal({
         ) : null}
 
         </div>
-        <CompactModalFooter>
+        <OverlayFooter>
           {completeUi?.showButton ? (
             <span className="inline-flex shrink-0" title={completeUi.disabledReason ?? undefined}>
               <button
@@ -188,9 +181,8 @@ export function LessonDetailModal({
           <Link href={selected.detailHref} className="ui-btn-primary min-h-10 shrink-0 px-4 text-[10px]">
             Detay
           </Link>
-        </CompactModalFooter>
-      </div>
-    </div>
+        </OverlayFooter>
+    </OverlayDialog>
   );
 }
 

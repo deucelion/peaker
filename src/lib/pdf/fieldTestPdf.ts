@@ -166,6 +166,7 @@ export async function buildFieldTestSingleDatePdf(input: FieldTestSingleDatePdfI
     subtitle: `${displayName} · ${dateLabel}`,
     pdfBranding: input.pdfBranding,
   });
+  const headerColorRgb = resolvedBranding.pdfBranding.headerColorRgb;
 
   let y = drawReportHeader(doc, resolvedBranding, ctx);
 
@@ -189,12 +190,12 @@ export async function buildFieldTestSingleDatePdf(input: FieldTestSingleDatePdfI
   );
 
   if (input.numericMetrics.length > 0) {
-    y = drawSectionTitle(doc, y, "Sayısal Test Sonuçları", ctx);
+    y = drawSectionTitle(doc, y, "Sayısal Test Sonuçları", ctx, headerColorRgb);
     y = drawGroupedNumericTable(doc, y, input.numericMetrics, ctx);
   }
 
   if (input.textMetrics.length > 0) {
-    y = drawSectionTitle(doc, y, "Değerlendirme Notları", ctx);
+    y = drawSectionTitle(doc, y, "Değerlendirme Notları", ctx, headerColorRgb);
     for (const m of input.textMetrics) {
       y = drawNoteCard(doc, y, m.name, m.value || "—", ctx);
     }
@@ -212,7 +213,7 @@ export async function buildFieldTestSingleDatePdf(input: FieldTestSingleDatePdfI
   }
 
   if (input.numericMetrics.length === 0 && input.textMetrics.length === 0) {
-    y = drawSectionTitle(doc, y, "Test Sonuçları", ctx);
+    y = drawSectionTitle(doc, y, "Test Sonuçları", ctx, headerColorRgb);
     y = drawNoteCard(doc, y, "Veri yok", "Bu tarihte kayıtlı test değeri bulunmuyor.", ctx);
   }
 

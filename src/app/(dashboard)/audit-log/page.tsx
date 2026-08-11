@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import Notification from "@/components/Notification";
 import EmptyState from "@/components/ui/EmptyState";
-import { InlineErrorState } from "@/components/ui/data-display";
+import { InlineErrorState, DataTable, DataTablePagination } from "@/components/ui/data-display";
+import { OverlayDrawer, OVERLAY_Z } from "@/components/ui/overlay";
 import { SkeletonTable } from "@/components/ui/skeletons";
 import type { AuditLogListItem } from "@/lib/actions/auditLogTypes";
 import { useStreamingCsvDownload } from "@/lib/hooks/useStreamingCsvDownload";
@@ -35,10 +36,8 @@ import {
   useAuditLogViewer,
   type AuditLogFilterState as FilterState,
 } from "@/lib/hooks/useAuditLogViewer";
-import { DataTablePagination } from "@/components/ui/data-display";
-import { fetchMeAccessClient } from "@/lib/auth/meAccessClient";
+import { useMeAccessOrganizationFeatures } from "@/lib/auth/useMeAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
-import type { OrganizationFeatures } from "@/lib/organization/features/types";
 import { shouldRenderExportUi } from "@/lib/navigation/exportFeatureVisibility";
 
 type FilterPreset = "today" | "7d" | "30d" | "all";
@@ -93,20 +92,8 @@ export default function AuditLogPage() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [selectedDetail, setSelectedDetail] = useState<AuditLogListItem | null>(null);
   const [showCustomRange, setShowCustomRange] = useState(false);
-  const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeatures | null>(null);
+  const organizationFeatures = useMeAccessOrganizationFeatures();
   const csvExport = useStreamingCsvDownload();
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMeAccessClient().then((payload) => {
-      if (!cancelled && payload.ok) {
-        setOrganizationFeatures(payload.organizationFeatures);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const showAuditExportUi = shouldRenderExportUi(EXPORT_ENDPOINT_IDS.auditLogStream, {
     roleAllowed: true,
@@ -210,7 +197,7 @@ export default function AuditLogPage() {
       <div className="ui-page-loose space-y-5 pb-[max(4rem,env(safe-area-inset-bottom,0px))] min-w-0 overflow-x-hidden">
         <header className="space-y-2">
           <h1 className="ui-h1">
-            Audit <span className="text-[#7c3aed]">Kayıtları</span>
+            Audit <span className="text-[color:var(--peaker-ui-PRIMARY)]">Kayıtları</span>
           </h1>
         </header>
         <SkeletonTable rows={8} cols={4} />
@@ -223,7 +210,7 @@ export default function AuditLogPage() {
       <div className="ui-page-loose space-y-4 pb-[max(4rem,env(safe-area-inset-bottom,0px))]">
         <header className="space-y-2">
           <h1 className="ui-h1">
-            Audit <span className="text-[#7c3aed]">Kayıtları</span>
+            Audit <span className="text-[color:var(--peaker-ui-PRIMARY)]">Kayıtları</span>
           </h1>
         </header>
         <div
@@ -237,7 +224,7 @@ export default function AuditLogPage() {
             <p className="text-[10px] font-semibold normal-case text-amber-200/80">{error}</p>
           </div>
         </div>
-        <Link href="/" className="text-[10px] font-black uppercase text-[#7c3aed]">← Ana Panel</Link>
+        <Link href="/" className="text-[10px] font-black uppercase text-[color:var(--peaker-ui-PRIMARY)]">← Ana Panel</Link>
       </div>
     );
   }
@@ -247,7 +234,7 @@ export default function AuditLogPage() {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between min-w-0">
         <div className="min-w-0 space-y-2">
           <h1 className="ui-h1">
-            Audit <span className="text-[#7c3aed]">Kayıtları</span>
+            Audit <span className="text-[color:var(--peaker-ui-PRIMARY)]">Kayıtları</span>
           </h1>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
             Yönetim eylemlerinin değişmez izi · {total} kayıt
@@ -265,16 +252,16 @@ export default function AuditLogPage() {
               placeholder="Aktör, aksiyon ya da kimlik ara..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full min-h-10 rounded-xl border border-white/10 bg-[#121215] px-3 pl-9 text-xs text-white placeholder:text-gray-600 outline-none focus:border-[#7c3aed]"
+              className="ui-input w-full min-h-10 pl-9 text-xs text-white placeholder:text-gray-600 outline-none focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)]"
             />
           </div>
           <button
             type="button"
             onClick={() => void fetchData()}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-[#7c3aed]/40 hover:text-white sm:min-h-10"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/5 ui-kpi-band px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] hover:text-white sm:min-h-10"
           >
             <Loader2
-              className={`size-3.5 ${loading ? "animate-spin text-[#7c3aed]" : "opacity-50"}`}
+              className={`size-3.5 ${loading ? "animate-spin text-[color:var(--peaker-ui-PRIMARY)]" : "opacity-50"}`}
               aria-hidden
             />
             Yenile
@@ -284,7 +271,7 @@ export default function AuditLogPage() {
             type="button"
             disabled={csvExport.exporting}
             onClick={runStreamingExport}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/5 ui-kpi-band px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-emerald-500/40 hover:text-white disabled:opacity-50 sm:min-h-10"
             aria-label="Audit kayıtlarını CSV olarak indir (streaming)"
           >
             {csvExport.exporting ? (
@@ -319,7 +306,7 @@ export default function AuditLogPage() {
           <button
             type="button"
             onClick={runStreamingExport}
-            className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-3 text-[9px] font-black uppercase tracking-widest text-white"
+            className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] ui-kpi-chip--brand px-3 text-[9px] font-black uppercase tracking-widest text-white"
           >
             <RotateCcw size={12} aria-hidden />
             Tekrar dene
@@ -328,7 +315,7 @@ export default function AuditLogPage() {
       </header>
 
       <section
-        className="rounded-2xl border border-white/8 bg-[#121215] p-4 sm:p-5 space-y-3 min-w-0"
+        className="ui-card p-4 sm:p-5 space-y-3 min-w-0"
         aria-label="Audit filtreleri"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -348,8 +335,8 @@ export default function AuditLogPage() {
                 onClick={() => applyDateRangePreset(key)}
                 className={`min-h-11 rounded-xl border px-3 text-[10px] font-black uppercase tracking-widest transition sm:min-h-9 ${
                   active
-                    ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                    : "border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:text-white"
+                    ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white"
+                    : "border-white/5 ui-kpi-band text-gray-400 hover:border-white/20 hover:text-white"
                 }`}
               >
                 {label}
@@ -361,16 +348,16 @@ export default function AuditLogPage() {
             onClick={() => setShowCustomRange((s) => !s)}
             className={`min-h-11 rounded-xl border px-3 text-[10px] font-black uppercase tracking-widest transition sm:min-h-9 ${
               showCustomRange
-                ? "border-[#7c3aed]/50 bg-[#7c3aed]/15 text-white"
-                : "border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:text-white"
+                ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_15%,transparent)] text-white"
+                : "border-white/5 ui-kpi-band text-gray-400 hover:border-white/20 hover:text-white"
             }`}
           >
-            <CalendarDays size={12} className="mr-1 inline align-[-2px] text-[#7c3aed]" aria-hidden />
+            <CalendarDays size={12} className="mr-1 inline align-[-2px] text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
             Özel aralık
           </button>
           <div className="ml-auto flex items-center gap-2">
             <select
-              className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-white/20 focus:border-[#7c3aed] outline-none sm:min-h-9"
+              className="min-h-11 rounded-xl ui-input border px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-white/20 focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)] outline-none sm:min-h-9"
               value={filter.action}
               onChange={(e) => setFilter((f) => ({ ...f, action: e.target.value, page: 1 }))}
             >
@@ -382,7 +369,7 @@ export default function AuditLogPage() {
               ))}
             </select>
             <select
-              className="min-h-11 rounded-xl border border-white/10 bg-black/40 px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-white/20 focus:border-[#7c3aed] outline-none sm:min-h-9"
+              className="min-h-11 rounded-xl ui-input border px-3 text-[10px] font-black uppercase tracking-widest text-gray-200 hover:border-white/20 focus:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40,transparent)] outline-none sm:min-h-9"
               value={filter.entityType}
               onChange={(e) => setFilter((f) => ({ ...f, entityType: e.target.value, page: 1 }))}
             >
@@ -397,12 +384,12 @@ export default function AuditLogPage() {
         </div>
 
         {showCustomRange && (
-          <div className="grid gap-3 rounded-xl border border-white/10 bg-black/30 p-3 sm:grid-cols-2">
+          <div className="grid gap-3 rounded-xl ui-card-inner p-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-[8px] font-black uppercase tracking-widest text-gray-500">
               Başlangıç
               <input
                 type="date"
-                className="min-h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-xs text-white"
+                className="min-h-10 rounded-xl ui-input border px-3 text-xs text-white"
                 value={filter.fromIso}
                 onChange={(e) => setFilter((f) => ({ ...f, fromIso: e.target.value, page: 1 }))}
               />
@@ -411,7 +398,7 @@ export default function AuditLogPage() {
               Bitiş
               <input
                 type="date"
-                className="min-h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-xs text-white"
+                className="min-h-10 rounded-xl ui-input border px-3 text-xs text-white"
                 value={filter.toIso}
                 onChange={(e) => setFilter((f) => ({ ...f, toIso: e.target.value, page: 1 }))}
               />
@@ -425,7 +412,7 @@ export default function AuditLogPage() {
             {filterChips.map((chip) => (
               <span
                 key={chip.key}
-                className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-gray-200"
+                className="inline-flex items-center gap-1 rounded-full border border-white/5 ui-kpi-band px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-gray-200"
               >
                 {chip.label}
                 <button
@@ -475,112 +462,111 @@ export default function AuditLogPage() {
         />
       ) : null}
 
-      <section className="rounded-2xl border border-white/8 bg-[#121215] min-w-0 overflow-hidden">
-        <div className="border-b border-white/5 px-4 py-3 sm:px-5 flex items-center justify-between">
-          <h2 className="text-[11px] font-black uppercase tracking-widest text-white">
-            Kayıtlar ({filteredItems.length}
-            {search.trim() && filteredItems.length !== items.length ? ` / ${items.length}` : ""})
-          </h2>
-          <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-            Sayfa {filter.page} / {totalPages}
-          </span>
-        </div>
-
-        <div className="divide-y divide-white/5 min-w-0">
-          {loading && items.length === 0 ? (
-            <div className="flex items-center gap-3 px-4 py-10 text-[10px] font-black uppercase tracking-widest text-gray-500 sm:px-5">
-              <Loader2 className="size-4 animate-spin text-[#7c3aed]" aria-hidden />
-              Yükleniyor…
-            </div>
-          ) : isError ? (
-            <p className="px-4 py-10 text-center text-[10px] font-semibold text-gray-500 sm:px-5">
-              Kayıtlar yüklenemedi. Yukarıdaki hata bandından tekrar deneyin.
-            </p>
-          ) : filteredItems.length === 0 ? (
-            <div className="px-4 py-6 sm:px-5">
-              <EmptyState
-                variant={filterChips.length > 0 ? "filtered_empty" : "no_data"}
-                icon={Inbox}
-                title={
-                  filterChips.length > 0 ? "Bu filtrelerde audit kaydı yok" : "Henüz audit kaydı yok"
-                }
-                description={
-                  filterChips.length > 0
-                    ? "Tarih aralığını genişletin veya filtreleri temizleyin."
-                    : "Yönetim eylemleri burada listelenir."
-                }
-                primaryAction={
-                  filterChips.length > 0
-                    ? { label: "Filtreleri temizle", onClick: clearAllFilters }
-                    : undefined
-                }
-              />
-            </div>
-          ) : (
-            <ul className="divide-y divide-white/5">
-              {filteredItems.map((it) => {
-                const metaEntries = metadataEntries(it.metadata);
-                const previewEntries = metaEntries.slice(0, 3);
-                const remaining = Math.max(0, metaEntries.length - previewEntries.length);
-                return (
-                  <li key={it.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDetail(it)}
-                      className="block w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.03] focus:bg-white/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c3aed]/40 sm:px-5"
-                    >
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${actionToneClass(
-                                it.action
-                              )}`}
-                            >
-                              {actionLabel(it.action)}
-                            </span>
-                            <span className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
-                              {entityLabel(it.entityType)}
-                            </span>
-                            <span className="rounded-md border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-400">
-                              {it.role || "—"}
-                            </span>
-                          </div>
-                          <p className="text-xs font-black text-white break-words">{it.actorName}</p>
-                          {previewEntries.length > 0 && (
-                            <p className="text-[10px] font-semibold text-gray-500 break-words">
-                              {previewEntries
-                                .map((e) =>
-                                  e.isComplex
-                                    ? `${e.label}: …`
-                                    : `${e.label}: ${metadataValueToString(e.value)}`
-                                )
-                                .join(" · ")}
-                              {remaining > 0 ? ` · +${remaining} alan` : ""}
-                            </p>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                          {formatDateTime(it.createdAt)}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="border-t border-white/5 px-4 py-3 sm:px-5">
+      <DataTable
+        layout="records"
+        className="min-w-0"
+        caption={
+          <div className="flex items-center justify-between px-1 sm:px-0">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-white">
+              Kayıtlar ({filteredItems.length}
+              {search.trim() && filteredItems.length !== items.length ? ` / ${items.length}` : ""})
+            </h2>
+            <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+              Sayfa {filter.page} / {totalPages}
+            </span>
+          </div>
+        }
+        footer={
           <DataTablePagination
             page={filter.page}
             pageSize={PAGE_SIZE}
             total={total}
             onChange={(nextPage) => setFilter((f) => ({ ...f, page: nextPage }))}
           />
-        </div>
-      </section>
+        }
+      >
+        {loading && items.length === 0 ? (
+          <div className="flex items-center gap-3 px-4 py-10 text-[10px] font-black uppercase tracking-widest text-gray-500 sm:px-5">
+            <Loader2 className="size-4 animate-spin text-[color:var(--peaker-ui-PRIMARY)]" aria-hidden />
+            Yükleniyor…
+          </div>
+        ) : isError ? (
+          <p className="px-4 py-10 text-center text-[10px] font-semibold text-gray-500 sm:px-5">
+            Kayıtlar yüklenemedi. Yukarıdaki hata bandından tekrar deneyin.
+          </p>
+        ) : filteredItems.length === 0 ? (
+          <div className="px-4 py-6 sm:px-5">
+            <EmptyState
+              variant={filterChips.length > 0 ? "filtered_empty" : "no_data"}
+              icon={Inbox}
+              title={
+                filterChips.length > 0 ? "Bu filtrelerde audit kaydı yok" : "Henüz audit kaydı yok"
+              }
+              description={
+                filterChips.length > 0
+                  ? "Tarih aralığını genişletin veya filtreleri temizleyin."
+                  : "Yönetim eylemleri burada listelenir."
+              }
+              primaryAction={
+                filterChips.length > 0
+                  ? { label: "Filtreleri temizle", onClick: clearAllFilters }
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          filteredItems.map((it) => {
+            const metaEntries = metadataEntries(it.metadata);
+            const previewEntries = metaEntries.slice(0, 3);
+            const remaining = Math.max(0, metaEntries.length - previewEntries.length);
+            return (
+              <div key={it.id} className="ui-table-row ui-table-row--hover min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetail(it)}
+                  className="block w-full px-4 py-3 text-left transition-colors focus:bg-white/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] sm:px-5"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${actionToneClass(
+                            it.action
+                          )}`}
+                        >
+                          {actionLabel(it.action)}
+                        </span>
+                        <span className="rounded-md border border-white/5 ui-kpi-band px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
+                          {entityLabel(it.entityType)}
+                        </span>
+                        <span className="rounded-md ui-card-inner px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-400">
+                          {it.role || "—"}
+                        </span>
+                      </div>
+                      <p className="text-xs font-black text-white break-words">{it.actorName}</p>
+                      {previewEntries.length > 0 && (
+                        <p className="text-[10px] font-semibold text-gray-500 break-words">
+                          {previewEntries
+                            .map((e) =>
+                              e.isComplex
+                                ? `${e.label}: …`
+                                : `${e.label}: ${metadataValueToString(e.value)}`
+                            )
+                            .join(" · ")}
+                          {remaining > 0 ? ` · +${remaining} alan` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      {formatDateTime(it.createdAt)}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            );
+          })
+        )}
+      </DataTable>
 
       {selectedDetail && (
         <AuditDetailDrawer item={selectedDetail} onClose={() => setSelectedDetail(null)} />
@@ -598,43 +584,39 @@ function AuditDetailDrawer({
 }) {
   const entries = metadataEntries(item.metadata);
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Audit kaydı detayı"
-      className="fixed inset-0 z-50 flex items-stretch justify-end"
+    <OverlayDrawer
+      open
+      onClose={onClose}
+      layer={OVERLAY_Z.DIALOG}
+      titleId="audit-detail-drawer-title"
+      shellClassName="ml-auto h-full w-full max-w-md overflow-y-auto border-l border-white/5 bg-[#0e0e11] shadow-2xl !max-w-md !rounded-none !p-0"
     >
-      <button
-        type="button"
-        aria-label="Kapat"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-      />
-      <aside className="relative ml-auto h-full w-full max-w-md overflow-y-auto border-l border-white/10 bg-[#0e0e11] shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-[#0e0e11] px-5 py-4">
-          <div className="min-w-0 space-y-1">
-            <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Audit detayı</p>
-            <h2 className="text-sm font-black uppercase text-white break-words">{actionLabel(item.action)}</h2>
-            <p className="text-[10px] font-semibold text-gray-500">
-              {entityLabel(item.entityType)} · {formatDateTime(item.createdAt)}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-gray-300 hover:border-white/20 hover:text-white"
-            aria-label="Detayı kapat"
-          >
-            <X size={16} aria-hidden />
-          </button>
-        </header>
+      <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/5 bg-[#0e0e11] px-5 py-4">
+        <div className="min-w-0 space-y-1">
+          <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Audit detayı</p>
+          <h2 id="audit-detail-drawer-title" className="text-sm font-black uppercase text-white break-words">
+            {actionLabel(item.action)}
+          </h2>
+          <p className="text-[10px] font-semibold text-gray-500">
+            {entityLabel(item.entityType)} · {formatDateTime(item.createdAt)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded-xl border border-white/5 ui-kpi-band p-2 text-gray-300 hover:border-white/20 hover:text-white"
+          aria-label="Detayı kapat"
+        >
+          <X size={16} aria-hidden />
+        </button>
+      </header>
 
-        <div className="space-y-4 px-5 py-5">
-          <section className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-1">
+      <div className="space-y-4 px-5 py-5">
+          <section className="rounded-xl ui-card-inner p-3 space-y-1">
             <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Aktör</p>
             <p className="text-sm font-black text-white break-words">{item.actorName}</p>
             <p className="text-[10px] font-semibold text-gray-500">
-              <span className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
+              <span className="rounded-md border border-white/5 ui-kpi-band px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-gray-300">
                 {item.role || "—"}
               </span>
             </p>
@@ -644,14 +626,14 @@ function AuditDetailDrawer({
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-1">
+          <section className="rounded-xl ui-card-inner p-3 space-y-1">
             <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Hedef</p>
             <p className="text-[11px] font-black text-white break-words">{entityLabel(item.entityType)}</p>
             <p className="text-[10px] font-mono text-gray-400 break-all">Entity ID: {item.entityId}</p>
             <p className="text-[10px] font-mono text-gray-500 break-all">Action key: {item.action}</p>
           </section>
 
-          <section className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+          <section className="rounded-xl ui-card-inner p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Metadata</p>
               <span className="text-[9px] font-bold text-gray-500">
@@ -670,7 +652,7 @@ function AuditDetailDrawer({
                     </dt>
                     <dd className="col-span-2 min-w-0 break-words font-mono text-gray-200">
                       {e.isComplex ? (
-                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-2 text-[10px] text-gray-300">
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg ui-card-inner p-2 text-[10px] text-gray-300">
                           {JSON.stringify(e.value, null, 2)}
                         </pre>
                       ) : (
@@ -683,7 +665,6 @@ function AuditDetailDrawer({
             )}
           </section>
         </div>
-      </aside>
-    </div>
+    </OverlayDrawer>
   );
 }

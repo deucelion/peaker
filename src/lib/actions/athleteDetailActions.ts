@@ -14,6 +14,7 @@ import { isUuid } from "@/lib/validation/uuid";
 import { PACKAGE_EVENT_LABEL_TR, type PackageEventType } from "@/lib/privateLessons/packageEventTypes";
 import { syncBodyMeasurementFromProfileUpdate } from "@/lib/actions/athleteBodyMeasurementActions";
 import { mapBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
+import { paginatePostgrestSelect } from "@/lib/db/paginatePostgrestRange";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -99,12 +100,15 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
   }
   prof.full_name = toDisplayName(prof.full_name, prof.email, "Sporcu");
 
-  const [{ data: results }, { data: loads }, { data: wellnessRows }] = await Promise.all([
-    adminClient
-      .from("athletic_results")
-      .select("value, value_text, test_date, test_id, test_definitions (id, name, unit, value_type)")
-      .eq("profile_id", athleteId)
-      .order("test_date", { ascending: false }),
+  const [{ data: results, error: resultsError }, { data: loads }, { data: wellnessRows }] = await Promise.all([
+    paginatePostgrestSelect(async (from, to) =>
+      adminClient
+        .from("athletic_results")
+        .select("value, value_text, test_date, test_id, test_definitions (id, name, unit, value_type)")
+        .eq("profile_id", athleteId)
+        .order("test_date", { ascending: false })
+        .range(from, to)
+    ),
     adminClient
       .from("training_loads")
       .select("profile_id, total_load, rpe_score, measurement_date")
@@ -119,6 +123,10 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
       .order("report_date", { ascending: false })
       .limit(120),
   ]);
+
+  if (resultsError) {
+    return { error: `Saha testi gecmisi alinamadi: ${resultsError.message}` as const };
+  }
 
   const bodyRes = await adminClient
     .from("athlete_metrics")

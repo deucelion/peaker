@@ -121,10 +121,10 @@ export default async function OrgDurumuPage({
     const description =
       "Oturum acildi ancak profil satiri bulunamadi veya okunamadi. Bu durum yetkilendirme icin zorunlu oldugundan panele gecis engellenir. Lutfen sistem yoneticisi ile iletisime gecin.";
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#09090b] min-w-0">
-        <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/10 bg-[#121215] p-5 sm:p-8 shadow-2xl min-w-0">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] ui-page min-w-0">
+        <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/5 ui-card p-5 sm:p-8 shadow-2xl min-w-0">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[#7c3aed]">Peaker</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[color:var(--peaker-ui-PRIMARY)]">Peaker</p>
             <h1 className="mt-2 text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white break-words">Erisim sinirli</h1>
             <p className="mt-3 text-sm font-bold text-gray-400 leading-relaxed break-words">{description}</p>
           </div>
@@ -162,10 +162,10 @@ export default async function OrgDurumuPage({
       if (target) redirect(target);
     }
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#09090b] min-w-0">
-        <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/10 bg-[#121215] p-5 sm:p-8 shadow-2xl min-w-0">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] ui-page min-w-0">
+        <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/5 ui-card p-5 sm:p-8 shadow-2xl min-w-0">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[#7c3aed]">Peaker</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[color:var(--peaker-ui-PRIMARY)]">Peaker</p>
             <h1 className="mt-2 text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white break-words">Yonlendirme bekleniyor</h1>
             <p className="mt-3 text-sm font-bold text-gray-400 leading-relaxed break-words">
               Hesabiniz aktif gorunuyor ancak panele otomatik gecis tamamlanamadi. Asagidaki baglantidan devam edin veya cikis yapip tekrar giris yapin.
@@ -173,7 +173,7 @@ export default async function OrgDurumuPage({
           </div>
           <Link
             href={PATHS.home}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#7c3aed] px-4 py-3 text-[10px] font-black uppercase tracking-wide text-white touch-manipulation"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl ui-btn-primary px-4 py-3 text-[10px] font-black uppercase tracking-wide text-white touch-manipulation"
           >
             Panele git
           </Link>
@@ -210,10 +210,10 @@ export default async function OrgDurumuPage({
                 : "Organizasyon geçici olarak askıya alındı. Yöneticiniz veya süper admin ile iletişime geçin.";
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-[#09090b] min-w-0">
-      <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/10 bg-[#121215] p-5 sm:p-8 shadow-2xl min-w-0">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16 pb-[max(2rem,env(safe-area-inset-bottom,0px))] ui-page min-w-0">
+      <div className="w-full max-w-md space-y-5 sm:space-y-6 rounded-[1.5rem] border border-white/5 ui-card p-5 sm:p-8 shadow-2xl min-w-0">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[#7c3aed]">Peaker</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[color:var(--peaker-ui-PRIMARY)]">Peaker</p>
           <h1 className="mt-2 text-xl sm:text-2xl font-black italic uppercase tracking-tight text-white break-words">Erisim sinirli</h1>
           <p className="mt-3 text-sm font-bold text-gray-400 leading-relaxed break-words">{description}</p>
         </div>

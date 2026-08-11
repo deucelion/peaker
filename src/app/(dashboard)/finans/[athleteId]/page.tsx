@@ -1,5 +1,6 @@
 "use client";
 
+import { uiBrandingClasses } from "@/lib/ui/branding/uiBrandingClasses";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
@@ -244,20 +245,20 @@ export default function FinanceAthleteDetailPage() {
       />
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <form onSubmit={handlePlanSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-[#121215] p-5">
+        <form onSubmit={handlePlanSubmit} className="space-y-3 rounded-2xl border border-white/10 ui-card p-5">
           <h2 className="text-sm font-black uppercase text-white">Aidat planı düzenle</h2>
           <input
             type="date"
             value={planForm.dueDate}
             onChange={(e) => setPlanForm((p) => ({ ...p, dueDate: e.target.value }))}
-            className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+            className="w-full min-h-11 ui-input px-3 text-sm font-bold text-white"
           />
           <input
             type="number"
             value={planForm.amount}
             onChange={(e) => setPlanForm((p) => ({ ...p, amount: e.target.value }))}
             placeholder="Bir sonraki ödeme tutarı (₺)"
-            className="w-full min-h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-bold text-white"
+            className="w-full min-h-11 ui-input px-3 text-sm font-bold text-white"
           />
           <button disabled={planSaving} className="min-h-11 rounded-xl bg-green-600 px-4 text-[10px] font-black uppercase text-white">
             {planSaving ? "Kaydediliyor..." : "Planı Kaydet"}
@@ -273,7 +274,7 @@ export default function FinanceAthleteDetailPage() {
         </form>
 
         {!canOpenAccountingPanel ? (
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-[#121215] p-5">
+          <div className="space-y-3 rounded-2xl border border-white/10 ui-card p-5">
             <h2 className="text-sm font-black uppercase text-white">Ödeme kaydet</h2>
             <p className="text-[10px] font-semibold text-gray-500">
               Koç kayıtları sporcu finans özeti ile senkron kalır; durum çoğunlukla bekliyor olarak açılır.

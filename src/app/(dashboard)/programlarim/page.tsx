@@ -56,19 +56,19 @@ export default function MyProgramsPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50dvh] min-w-0 flex-col items-center justify-center gap-4 overflow-x-hidden px-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <Loader2 className="animate-spin text-[#7c3aed]" size={44} aria-hidden />
+        <Loader2 className="animate-spin text-[color:var(--peaker-ui-PRIMARY)]" size={44} aria-hidden />
         <p className="text-center text-[10px] font-black uppercase italic tracking-wide text-gray-500 sm:tracking-widest">Programlar yukleniyor...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-w-0 space-y-5 overflow-x-hidden pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
+    <div className="ui-page min-w-0 space-y-5 overflow-x-hidden pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
       <AthletePageHeader
         backHref="/sporcu"
         title={
           <>
-            Programlarım <span className="text-[#7c3aed]">ve notlar</span>
+            Programlarım <span className="text-[color:var(--peaker-ui-PRIMARY)]">ve notlar</span>
           </>
         }
         subtitle="Koçunuzun atadığı antrenman planları"
@@ -93,7 +93,7 @@ export default function MyProgramsPage() {
 
       {!error && items.length > 0 && (
         <>
-          <section className="bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-5 min-w-0">
+          <section className="ui-card rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-5 min-w-0">
             <p className="text-[10px] font-black uppercase text-gray-500 mb-3">Aktif / Güncel Program</p>
             {items.find((item) => item.isActive) ? (
               (() => {
@@ -102,7 +102,7 @@ export default function MyProgramsPage() {
                   <button
                     type="button"
                     onClick={() => void openProgram(current.id)}
-                    className="w-full min-h-11 text-left bg-[#7c3aed]/10 border border-[#7c3aed]/20 rounded-xl p-4 touch-manipulation"
+                    className="w-full min-h-11 text-left ui-kpi-band border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] rounded-xl p-4 touch-manipulation"
                   >
                     <p className="text-white text-base font-black italic uppercase break-words">{current.title}</p>
                     <p className="text-[10px] text-gray-300 font-bold italic break-words">Koç: {current.coachName} - {new Date(current.createdAt).toLocaleString("tr-TR")}</p>
@@ -115,14 +115,14 @@ export default function MyProgramsPage() {
           </section>
 
           <section className="grid lg:grid-cols-12 gap-4 min-w-0">
-            <div className="lg:col-span-5 bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 space-y-2 min-w-0">
+            <div className="lg:col-span-5 ui-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 space-y-2 min-w-0">
               <p className="text-[10px] font-black uppercase text-gray-500 mb-2">Program Geçmişi</p>
               {items.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => void openProgram(item.id)}
-                  className={`w-full min-h-11 text-left rounded-xl border p-3 touch-manipulation min-w-0 ${selectedProgramId === item.id ? "border-[#7c3aed]/40 bg-[#7c3aed]/10" : "border-white/10 bg-white/[0.02]"}`}
+                  className={`w-full min-h-11 text-left rounded-xl border p-3 touch-manipulation min-w-0 ${selectedProgramId === item.id ? "border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_40%,transparent)] ui-kpi-band" : "ui-card-inner"}`}
                 >
                   <div className="flex items-start justify-between gap-2 min-w-0">
                     <p className="text-xs font-black italic text-white uppercase break-words min-w-0 flex-1">{item.title}</p>
@@ -135,7 +135,7 @@ export default function MyProgramsPage() {
               ))}
             </div>
 
-            <div className="lg:col-span-7 bg-[#121215] border border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 min-w-0 overflow-x-hidden">
+            <div className="lg:col-span-7 ui-card rounded-[1.5rem] sm:rounded-[2rem] p-3 sm:p-4 min-w-0 overflow-x-hidden">
               {selectedProgramId ? (
                 (() => {
                   const selected = items.find((item) => item.id === selectedProgramId);
@@ -154,7 +154,7 @@ export default function MyProgramsPage() {
                         )}
                       </div>
                       {selected.pdfUrl && (
-                        <a href={selected.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-3 py-2 rounded-xl bg-[#7c3aed]/10 border border-[#7c3aed]/20 text-[#c4b5fd] text-[10px] font-black uppercase touch-manipulation break-all">
+                        <a href={selected.pdfUrl} target="_blank" rel="noreferrer" className="ui-btn-ghost inline-flex min-h-11 items-center px-3 py-2 rounded-xl border border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_20%,transparent)] ui-kpi-card__trend text-[10px] font-black uppercase touch-manipulation break-all">
                           DOSYA AC
                         </a>
                       )}
@@ -164,11 +164,11 @@ export default function MyProgramsPage() {
                           alt={selected.title}
                           width={800}
                           height={360}
-                          className="max-h-56 w-full max-w-full rounded-xl border border-white/10 object-contain"
+                          className="max-h-56 w-full max-w-full rounded-xl object-contain"
                         />
                       )}
                       {selected.content && (
-                        <p className="text-[11px] text-gray-300 font-bold italic bg-black/20 border border-white/5 rounded-xl p-3 break-words whitespace-pre-wrap">
+                        <p className="text-[11px] text-gray-300 font-bold italic ui-card-inner rounded-xl p-3 break-words whitespace-pre-wrap">
                           {selected.content}
                         </p>
                       )}
