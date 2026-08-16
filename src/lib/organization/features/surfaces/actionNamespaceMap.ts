@@ -42,6 +42,7 @@ export const ACTION_NAMESPACE_IDS = {
   systemOps: "action:systemOps",
   team: "action:team",
   trainingLoadSurvey: "action:trainingLoadSurvey",
+  trainingReport: "action:trainingReport",
   wellness: "action:wellness",
 } as const;
 
@@ -87,5 +88,6 @@ export const ACTION_NAMESPACE_ENTITLEMENT_MAP = {
   [ACTION_NAMESPACE_IDS.systemOps]: ENTITLEMENT_KEYS.core,
   [ACTION_NAMESPACE_IDS.team]: ENTITLEMENT_KEYS.core,
   [ACTION_NAMESPACE_IDS.trainingLoadSurvey]: ENTITLEMENT_KEYS.athlete,
+  [ACTION_NAMESPACE_IDS.trainingReport]: ENTITLEMENT_KEYS.insightTrainingReports,
   [ACTION_NAMESPACE_IDS.wellness]: ENTITLEMENT_KEYS.insightWellnessArchive,
 } as const satisfies Record<ActionNamespaceMapKey, EntitlementKey>;

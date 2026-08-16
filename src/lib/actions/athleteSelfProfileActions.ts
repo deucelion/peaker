@@ -58,7 +58,7 @@ export async function updateAthleteSelfProfile(formData: FormData) {
   }
 
   const adminClient = createSupabaseAdminClient();
-  const { error } = await adminClient
+  const { data: updated, error } = await adminClient
     .from("profiles")
     .update({
       full_name: fullName,
@@ -68,9 +68,12 @@ export async function updateAthleteSelfProfile(formData: FormData) {
       number: number || null,
     })
     .eq("id", resolved.userId)
-    .eq("organization_id", resolved.organizationId);
+    .eq("organization_id", resolved.organizationId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { error: `Profil guncellenemedi: ${error.message}` };
+  if (!updated) return { error: "Profil guncellenemedi: kayit bulunamadi." };
 
   await syncBodyMeasurementFromProfileUpdate({
     profileId: resolved.userId,

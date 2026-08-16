@@ -15,6 +15,8 @@ import { PACKAGE_EVENT_LABEL_TR, type PackageEventType } from "@/lib/privateLess
 import { syncBodyMeasurementFromProfileUpdate } from "@/lib/actions/athleteBodyMeasurementActions";
 import { mapBodyMeasurementRow } from "@/lib/athlete/bodyMeasurement";
 import { paginatePostgrestSelect } from "@/lib/db/paginatePostgrestRange";
+import { isOrganizationEntitlementEnabled } from "@/lib/auth/serverActionFeatureAccess";
+import { ENTITLEMENT_KEYS } from "@/lib/organization/features/keys";
 
 function assertUuid(id: string | null | undefined): id is string {
   return isUuid(id);
@@ -100,68 +102,94 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
   }
   prof.full_name = toDisplayName(prof.full_name, prof.email, "Sporcu");
 
+  // Bu action `core` namespace'inde calisir, ancak asagidaki dilimler kendi
+  // insight entitlement'larina aittir. Kapali modulun verisi hic sorgulanmaz.
+  const [fieldTestsEnabled, trainingReportsEnabled, wellnessEnabled, bodyMeasurementsEnabled, financeEnabled, privateLessonsEnabled] =
+    await Promise.all([
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightFieldTests, actor.organization_id),
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightTrainingReports, actor.organization_id),
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightWellnessArchive, actor.organization_id),
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightBodyMeasurements, actor.organization_id),
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.finance, actor.organization_id),
+      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.privateLessons, actor.organization_id),
+    ]);
+
   const [{ data: results, error: resultsError }, { data: loads }, { data: wellnessRows }] = await Promise.all([
-    paginatePostgrestSelect(async (from, to) =>
-      adminClient
-        .from("athletic_results")
-        .select("value, value_text, test_date, test_id, test_definitions (id, name, unit, value_type)")
-        .eq("profile_id", athleteId)
-        .order("test_date", { ascending: false })
-        .range(from, to)
-    ),
-    adminClient
-      .from("training_loads")
-      .select("profile_id, total_load, rpe_score, measurement_date")
-      .eq("profile_id", athleteId)
-      .order("measurement_date", { ascending: true }),
-    adminClient
-      .from("wellness_reports")
-      .select(
-        "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes"
-      )
-      .eq("profile_id", athleteId)
-      .order("report_date", { ascending: false })
-      .limit(120),
+    fieldTestsEnabled
+      ? paginatePostgrestSelect(async (from, to) =>
+          adminClient
+            .from("athletic_results")
+            .select("value, value_text, test_date, test_id, test_definitions (id, name, unit, value_type)")
+            .eq("profile_id", athleteId)
+            .order("test_date", { ascending: false })
+            .range(from, to)
+        )
+      : Promise.resolve({ data: [], error: null }),
+    trainingReportsEnabled
+      ? adminClient
+          .from("training_loads")
+          .select("profile_id, total_load, rpe_score, measurement_date")
+          .eq("profile_id", athleteId)
+          .order("measurement_date", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    wellnessEnabled
+      ? adminClient
+          .from("wellness_reports")
+          .select(
+            "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes"
+          )
+          .eq("profile_id", athleteId)
+          .order("report_date", { ascending: false })
+          .limit(120)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (resultsError) {
     return { error: `Saha testi gecmisi alinamadi: ${resultsError.message}` as const };
   }
 
-  const bodyRes = await adminClient
-    .from("athlete_metrics")
-    .select("id, measurement_date, height, weight, body_fat, note, recorded_by")
-    .eq("profile_id", athleteId)
-    .order("measurement_date", { ascending: true });
+  const bodyRes = bodyMeasurementsEnabled
+    ? await adminClient
+        .from("athlete_metrics")
+        .select("id, measurement_date, height, weight, body_fat, note, recorded_by")
+        .eq("profile_id", athleteId)
+        .order("measurement_date", { ascending: true })
+    : { data: [], error: null };
   const bodyMetrics = bodyRes.error ? [] : (bodyRes.data ?? []).map((row) => mapBodyMeasurementRow(row as Record<string, unknown>));
 
   const caps = await getSchemaCapabilities();
   const [packageRes, privatePaymentRes, aidatRes, lessonRes, injuryRes, programRes, financeNotesRes] =
     await Promise.all([
-    adminClient
-      .from("private_lesson_packages")
-      .select("id, package_name, remaining_lessons, payment_status, is_active, total_lessons, used_lessons, total_price, amount_paid, updated_at")
-      .eq("organization_id", actor.organization_id)
-      .eq("athlete_id", athleteId)
-      .order("updated_at", { ascending: false })
-      .limit(5),
-    applyPrivateLessonPaymentActiveFilter(
-      adminClient
-        .from("private_lesson_payments")
-        .select("id, amount, paid_at, note")
-        .eq("organization_id", actor.organization_id)
-        .eq("athlete_id", athleteId)
-        .order("paid_at", { ascending: false })
-        .limit(40),
-      caps
-    ),
-    adminClient
-      .from("payments")
-      .select("id, amount, payment_date, due_date, status, payment_type, description")
-      .eq("organization_id", actor.organization_id)
-      .eq("profile_id", athleteId)
-      .order("due_date", { ascending: false })
-      .limit(40),
+    privateLessonsEnabled
+      ? adminClient
+          .from("private_lesson_packages")
+          .select("id, package_name, remaining_lessons, payment_status, is_active, total_lessons, used_lessons, total_price, amount_paid, updated_at")
+          .eq("organization_id", actor.organization_id)
+          .eq("athlete_id", athleteId)
+          .order("updated_at", { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: [], error: null }),
+    privateLessonsEnabled
+      ? applyPrivateLessonPaymentActiveFilter(
+          adminClient
+            .from("private_lesson_payments")
+            .select("id, amount, paid_at, note")
+            .eq("organization_id", actor.organization_id)
+            .eq("athlete_id", athleteId)
+            .order("paid_at", { ascending: false })
+            .limit(40),
+          caps
+        )
+      : Promise.resolve({ data: [], error: null }),
+    financeEnabled
+      ? adminClient
+          .from("payments")
+          .select("id, amount, payment_date, due_date, status, payment_type, description")
+          .eq("organization_id", actor.organization_id)
+          .eq("profile_id", athleteId)
+          .order("due_date", { ascending: false })
+          .limit(40)
+      : Promise.resolve({ data: [], error: null }),
     adminClient
       .from("training_participants")
       .select("training_schedule!inner(id, title, start_time, end_time, location, status)")
@@ -183,18 +211,22 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
       .eq("athlete_id", athleteId)
       .order("created_at", { ascending: false })
       .limit(30),
-    adminClient
-      .from("finance_contact_notes")
-      .select("id, note, contact_method, created_at, follow_up_date")
-      .eq("organization_id", actor.organization_id)
-      .eq("athlete_id", athleteId)
-      .is("deleted_at", null)
-      .is("package_id", null)
-      .order("created_at", { ascending: false })
-      .limit(40),
+    financeEnabled
+      ? adminClient
+          .from("finance_contact_notes")
+          .select("id, note, contact_method, created_at, follow_up_date")
+          .eq("organization_id", actor.organization_id)
+          .eq("athlete_id", athleteId)
+          .is("deleted_at", null)
+          .is("package_id", null)
+          .order("created_at", { ascending: false })
+          .limit(40)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const pkgIds = (packageRes.data || []).map((p) => p.id as string).filter(Boolean);
+  const pkgIds = privateLessonsEnabled
+    ? (packageRes.data || []).map((p) => p.id as string).filter(Boolean)
+    : [];
   let packageEvents: Array<{
     id: string;
     created_at: string;
@@ -456,7 +488,7 @@ export async function updateAthleteProfileForManagement(
     return { error: "Sporcu bulunamadi veya erisim reddedildi." as const };
   }
 
-  const { error } = await adminClient
+  const { data: updated, error } = await adminClient
     .from("profiles")
     .update({
       full_name: fullName,
@@ -467,8 +499,11 @@ export async function updateAthleteProfileForManagement(
       weight: weightNum,
     })
     .eq("id", athleteId)
-    .eq("organization_id", gate.actor.organization_id);
+    .eq("organization_id", gate.actor.organization_id)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: `Sporcu profili guncellenemedi: ${error.message}` as const };
+  if (!updated) return { error: "Sporcu profili guncellenemedi: kayit bulunamadi." as const };
 
   await syncBodyMeasurementFromProfileUpdate({
     profileId: athleteId,

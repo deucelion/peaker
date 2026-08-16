@@ -1,9 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isCanonicalEntitlementKey, isFeatureBundleParentKey } from "../keys";
 import { parseOrganizationFeatures } from "../parser";
+import { isKnownFeaturePresetId } from "../presets";
 import { recomputeEffective } from "../recompute";
 import { invalidateOrganizationFeaturesProcessCache } from "../runtime/processCache";
-import { serializeOrganizationFeaturesForPersistence } from "./constants";
+import type { FeatureOverrideKey, FeatureOverrides, FeaturePresetId } from "../types";
+import {
+  DEFAULT_ORGANIZATION_FEATURE_PRESET,
+  serializeOrganizationFeaturesForPersistence,
+} from "./constants";
 import type {
+  GetOrganizationFeatureConfigurationResult,
   GetOrganizationFeaturesResult,
   OrganizationFeaturesPersistencePort,
   OrganizationFeaturesRepositoryErrorCode,
@@ -231,4 +238,69 @@ export async function saveOrganizationFeatureConfigurationFromAdminClient(
     createSupabaseOrganizationFeaturesPersistencePort(adminClient),
     input
   );
+}
+
+/** DB'de bilinmeyen/bozuk anahtar kalırsa recompute girdisine taşınmaz. */
+function parsePersistedFeatureOverrides(raw: unknown): FeatureOverrides {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const parsed: FeatureOverrides = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== "boolean") {
+      continue;
+    }
+    if (isCanonicalEntitlementKey(key) || isFeatureBundleParentKey(key)) {
+      parsed[key as FeatureOverrideKey] = value;
+    }
+  }
+  return parsed;
+}
+
+function parsePersistedFeaturePreset(raw: unknown): FeaturePresetId {
+  return typeof raw === "string" && isKnownFeaturePresetId(raw)
+    ? raw
+    : DEFAULT_ORGANIZATION_FEATURE_PRESET;
+}
+
+/**
+ * Super Admin editor read — runtime `features` yaninda preset + override metadata'si da doner.
+ * Runtime katmani bunu kullanmaz; `getOrganizationFeatures()` degismeden kalir.
+ */
+export async function getOrganizationFeatureConfigurationFromAdminClient(
+  adminClient: SupabaseClient,
+  organizationId: string
+): Promise<GetOrganizationFeatureConfigurationResult> {
+  const { data, error } = await adminClient
+    .from("organizations")
+    .select(FEATURES_WRITE_SELECT)
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, code: "read_failed", message: error.message };
+  }
+  if (!data) {
+    return { ok: false, code: "not_found", message: "Organizasyon bulunamadi." };
+  }
+
+  const row = data as {
+    features?: unknown;
+    features_revision?: number | null;
+    feature_preset?: unknown;
+    feature_overrides?: unknown;
+  };
+  const parsed = parseOrganizationFeatures(row.features ?? {});
+
+  return {
+    ok: true,
+    data: {
+      features: parsed.features,
+      featuresRevision: typeof row.features_revision === "number" ? row.features_revision : 1,
+      parseFallback: !parsed.ok,
+      featurePreset: parsePersistedFeaturePreset(row.feature_preset),
+      featureOverrides: parsePersistedFeatureOverrides(row.feature_overrides),
+    },
+  };
 }

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createServerSupabaseClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getSafeRole, type UserRole } from "@/lib/auth/roleMatrix";
@@ -99,8 +100,11 @@ export type ResolveSessionActorOptions = {
 /**
  * Oturum + profiles (+ gerekirse service-role) ile tek tip aktör çözümü.
  * Davranış snapshotActions.resolveActor ile hizalıdır.
+ *
+ * Faz 42: React cache() ile ayni request icinde gate + action cift cagrisi tek DB
+ * round-trip'e indirgenir. Farkli claimRequiresOrganization degerleri ayri cache anahtaridir.
  */
-export async function resolveSessionActor(
+export const resolveSessionActor = cache(async function resolveSessionActor(
   options: ResolveSessionActorOptions = {}
 ): Promise<{ actor: SessionActor } | { error: string }> {
   const { claimRequiresOrganization = false } = options;
@@ -206,4 +210,4 @@ export async function resolveSessionActor(
       fullName: profile.full_name ?? null,
     },
   };
-}
+});

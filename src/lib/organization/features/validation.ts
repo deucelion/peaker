@@ -115,21 +115,34 @@ export function applyOverrideToConfigurableMap(
   overrides: FeatureOverrides
 ): Record<ConfigurableEntitlementKey, boolean> {
   const next = { ...base };
+  const explicitChildKeys = new Set<string>();
 
+  // Pass 1: canonical child anahtarlari — parent bundle'dan bagimsiz, insertion order'dan bagimsiz.
   for (const [rawKey, value] of Object.entries(overrides)) {
     if (typeof value !== "boolean") {
       continue;
     }
-
     if (isFeatureBundleParentKey(rawKey)) {
-      for (const childKey of FEATURE_BUNDLE_CHILD_KEYS[rawKey]) {
-        next[childKey as ConfigurableEntitlementKey] = value;
-      }
       continue;
     }
-
     if (isCanonicalEntitlementKey(rawKey) && !isAlwaysOnEntitlementKey(rawKey)) {
       next[rawKey as ConfigurableEntitlementKey] = value;
+      explicitChildKeys.add(rawKey);
+    }
+  }
+
+  // Pass 2: bundle parent — yalnizca acik child override'i olmayan alt anahtarlara uygulanir.
+  for (const [rawKey, value] of Object.entries(overrides)) {
+    if (typeof value !== "boolean") {
+      continue;
+    }
+    if (!isFeatureBundleParentKey(rawKey)) {
+      continue;
+    }
+    for (const childKey of FEATURE_BUNDLE_CHILD_KEYS[rawKey]) {
+      if (!explicitChildKeys.has(childKey)) {
+        next[childKey as ConfigurableEntitlementKey] = value;
+      }
     }
   }
 

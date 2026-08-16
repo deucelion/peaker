@@ -734,8 +734,8 @@ export async function getAthletePanelSnapshot() {
   const features = await loadSnapshotOrganizationFeatures(actor.organizationId);
   const includeFinance = permissions.can_view_financial_status &&
     isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelFinance, features);
-  const includePerformance = permissions.can_view_performance_metrics &&
-    isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelPerformanceMetrics, features);
+  const includeBodyMeasurements = permissions.can_view_performance_metrics &&
+    isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelBodyMeasurements, features);
   const includeDevelopment = permissions.can_view_development_profile &&
     isSnapshotBranchFeatureVisible(SNAPSHOT_BRANCH_IDS.athletePanelDevelopmentHub, features);
 
@@ -743,7 +743,7 @@ export async function getAthletePanelSnapshot() {
     includeFinance
       ? adminClient.from("payments").select("*").eq("profile_id", profile.id).order("due_date", { ascending: false }).limit(1)
       : Promise.resolve({ data: [], error: null }),
-    includePerformance
+    includeBodyMeasurements
       ? adminClient.from("athlete_metrics").select("*").eq("profile_id", profile.id).order("measurement_date", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     includeDevelopment
@@ -767,7 +767,7 @@ export async function getAthletePanelSnapshot() {
   if (includeFinance) {
     response.payment = (paymentRes.data || [])[0] || null;
   }
-  if (includePerformance) {
+  if (includeBodyMeasurements) {
     response.metrics = (metricRes.data || []).map((m) => ({
       tarih: new Date(m.measurement_date).toLocaleDateString("tr-TR", { month: "short" }),
       boy: m.height != null ? Number(m.height) : null,

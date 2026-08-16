@@ -8,19 +8,23 @@ export type NavigationFeatureDecision = "skip" | "allow" | "deny";
 /**
  * organizationFeatures snapshot uzerinden nav item feature karari.
  * Map miss → skip (legacy visible).
- * organizationFeatures null → skip (henuz yuklenmedi).
+ * organizationFeatures null + mapped item → deny (yuklenene kadar gizle; fail-open degil).
  */
 export function evaluateNavigationItemFeatureAccess(
   navItemId: NavigationEntitlementMapKey | undefined,
   organizationFeatures: OrganizationFeatures | null
 ): NavigationFeatureDecision {
-  if (!navItemId || !organizationFeatures) {
+  if (!navItemId) {
     return "skip";
   }
 
   const entitlementKey = resolveNavigationEntitlementKey(navItemId);
   if (!entitlementKey) {
     return "skip";
+  }
+
+  if (!organizationFeatures) {
+    return "deny";
   }
 
   return isEntitlementEnabled(organizationFeatures, entitlementKey) ? "allow" : "deny";

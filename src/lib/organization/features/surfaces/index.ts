@@ -23,6 +23,7 @@ export { resolveNavigationEntitlementKey } from "./resolveNavigationEntitlement"
 
 export { QUICK_ACTION_ENTITLEMENT_MAP, QUICK_ACTION_IDS } from "./quickActionEntitlementMap";
 export type { QuickActionEntitlementMapKey } from "./quickActionEntitlementMap";
+export { resolveQuickActionEntitlementKey } from "./resolveQuickActionEntitlement";
 
 export { EXPORT_ENTITLEMENT_MAP, EXPORT_ENDPOINT_IDS } from "./exportEntitlementMap";
 export type { ExportEntitlementMapKey } from "./exportEntitlementMap";

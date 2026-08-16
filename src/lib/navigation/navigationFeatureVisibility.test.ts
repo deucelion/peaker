@@ -51,8 +51,9 @@ describe("navigationFeatureVisibility", () => {
     );
   });
 
-  it("skips feature evaluation when organizationFeatures is null", () => {
-    expect(evaluateNavigationItemFeatureAccess(NAV_ITEM_IDS.managementCoachPayments, null)).toBe("skip");
+  it("denies mapped navigation while organizationFeatures is not yet loaded", () => {
+    expect(evaluateNavigationItemFeatureAccess(NAV_ITEM_IDS.managementCoachPayments, null)).toBe("deny");
+    expect(isNavigationItemFeatureVisible(NAV_ITEM_IDS.managementCoachPayments, null)).toBe(false);
     expect(isEntitlementEnabled).not.toHaveBeenCalled();
   });
 

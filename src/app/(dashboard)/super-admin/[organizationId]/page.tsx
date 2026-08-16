@@ -104,6 +104,12 @@ export default async function SuperAdminOrganizationDetailPage({ params }: PageP
         >
           Branding Editor
         </Link>
+        <Link
+          href={`/super-admin/${organizationId}/package`}
+          className="inline-flex min-h-10 mt-3 ml-2 items-center rounded-xl border border-white/5 ui-kpi-band px-4 text-[10px] font-black uppercase text-white touch-manipulation sm:hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] sm:hover:ui-kpi-chip--brand"
+        >
+          Paket Yonetimi
+        </Link>
       </header>
 
       <div id="kullanici-sifreleri" className="scroll-mt-6">

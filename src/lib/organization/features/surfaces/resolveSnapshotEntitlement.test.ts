@@ -14,6 +14,9 @@ describe("resolveSnapshotEntitlementKey", () => {
     expect(resolveSnapshotEntitlementKey(SNAPSHOT_BRANCH_IDS.athletePanelDevelopmentHub)).toBe(
       ENTITLEMENT_KEYS.insightDevelopmentHub
     );
+    expect(resolveSnapshotEntitlementKey(SNAPSHOT_BRANCH_IDS.athletePanelBodyMeasurements)).toBe(
+      ENTITLEMENT_KEYS.insightBodyMeasurements
+    );
   });
 
   it("returns entitlement for every registered snapshot branch id", () => {

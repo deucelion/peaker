@@ -15,6 +15,8 @@ import {
   parseBodyMeasurementInput,
   type AthleteBodyMeasurementRow,
 } from "@/lib/athlete/bodyMeasurement";
+import { isOrganizationEntitlementEnabled } from "@/lib/auth/serverActionFeatureAccess";
+import { ENTITLEMENT_KEYS } from "@/lib/organization/features/keys";
 
 const MEASUREMENT_SELECT =
   "id, profile_id, organization_id, measurement_date, height, weight, body_fat, note, recorded_by, created_at, updated_at";
@@ -55,15 +57,31 @@ export async function upsertAthleteBodyMeasurement(args: UpsertBodyMeasurementAr
   });
   if (error) return { error: `Olçüm kaydedilemedi: ${error.message}` as const };
 
+  const { data: persisted, error: verifyError } = await adminClient
+    .from("athlete_metrics")
+    .select("id")
+    .eq("profile_id", args.profileId)
+    .eq("organization_id", args.organizationId)
+    .eq("measurement_date", args.measurementDate)
+    .maybeSingle();
+  if (verifyError || !persisted) {
+    return { error: "Olçüm kaydedilemedi: doğrulama başarısız." as const };
+  }
+
   const profilePatch: { height?: number | null; weight?: number | null } = {};
   if (args.height != null) profilePatch.height = args.height;
   if (args.weight != null) profilePatch.weight = args.weight;
   if (Object.keys(profilePatch).length > 0) {
-    await adminClient
+    const { data: profileRow, error: profileError } = await adminClient
       .from("profiles")
       .update(profilePatch)
       .eq("id", args.profileId)
-      .eq("organization_id", args.organizationId);
+      .eq("organization_id", args.organizationId)
+      .select("id")
+      .maybeSingle();
+    if (profileError || !profileRow) {
+      return { error: "Profil ölçüleri güncellenemedi." as const };
+    }
   }
 
   return { success: true as const };
@@ -227,7 +245,11 @@ export async function recordAthleteBodyMeasurementForManagement(
   });
 }
 
-/** Profil güncellemelerinden otomatik ölçüm kaydı (aynı gün upsert). */
+/**
+ * Profil güncellemelerinden otomatik ölçüm kaydı (aynı gün upsert).
+ * Çağıran action'lar `core`/`athlete` namespace'lerinde olabildiği için ölçüm
+ * entitlement'ı burada ayrıca doğrulanır; kapalıysa sessizce atlanır.
+ */
 export async function syncBodyMeasurementFromProfileUpdate(args: {
   profileId: string;
   organizationId: string;
@@ -236,6 +258,12 @@ export async function syncBodyMeasurementFromProfileUpdate(args: {
   weight: number | null;
 }) {
   if (args.height == null && args.weight == null) return { success: true as const };
+
+  const enabled = await isOrganizationEntitlementEnabled(
+    ENTITLEMENT_KEYS.insightBodyMeasurements,
+    args.organizationId
+  );
+  if (!enabled) return { success: true as const };
   const measurementDate = new Date().toISOString().split("T")[0]!;
   return upsertAthleteBodyMeasurement({
     profileId: args.profileId,

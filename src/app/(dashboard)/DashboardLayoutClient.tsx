@@ -43,6 +43,8 @@ import { BrandingDocumentMetadata } from "@/components/branding/BrandingDocument
 import { BrandingSidebarLogo } from "@/components/branding/BrandingSidebarLogo";
 import { useUnreadNotificationsLive } from "@/lib/hooks/useUnreadNotificationsLive";
 import { PATHS } from "@/lib/navigation/routeRegistry";
+import { isQuickActionFeatureVisible } from "@/lib/navigation/quickActionFeatureVisibility";
+import { QUICK_ACTION_IDS } from "@/lib/organization/features/surfaces/quickActionEntitlementMap";
 import { hrefTahsilatKaydet } from "@/lib/finance/tahsilatMerkeziLinks";
 import type { CoachPermissions, AthletePermissions } from "@/lib/types";
 import type { OrganizationFeatures } from "@/lib/organization/features/types";
@@ -285,39 +287,40 @@ function DashboardLayoutShell({
 
   const visibleNav = (section: NavSection) =>
     DASHBOARD_NAV_ITEMS.filter((item) => item.section === section && isDashboardNavItemVisible(item, navCtx));
-  const quickActions =
+  const quickActions = (
     isCoachOrAdmin && !permissionsLoading
       ? [
           ...(safeRole === "admin"
             ? [
-                { label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" },
-                { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" },
-                { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" },
-                { label: "Sporcu Ekle", href: "/sporcular/yeni" },
-                { label: "Tahsilat Kaydet", href: hrefTahsilatKaydet() },
-                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()) },
+                { label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur", quickActionId: QUICK_ACTION_IDS.planGroupLesson },
+                { label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama", quickActionId: QUICK_ACTION_IDS.planPrivateLesson },
+                { label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama", quickActionId: QUICK_ACTION_IDS.openAttendance },
+                { label: "Sporcu Ekle", href: "/sporcular/yeni", quickActionId: QUICK_ACTION_IDS.addAthlete },
+                { label: "Tahsilat Kaydet", href: hrefTahsilatKaydet(), quickActionId: QUICK_ACTION_IDS.recordPayment },
+                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()), quickActionId: QUICK_ACTION_IDS.fieldTestEntry },
               ]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_create_lessons
-            ? [{ label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur" }]
+            ? [{ label: "Grup Dersi Planla", href: "/antrenman-yonetimi?modul=grup-dersleri&view=ders-olustur", quickActionId: QUICK_ACTION_IDS.planGroupLesson }]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_manage_training_notes
-            ? [{ label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama" }]
+            ? [{ label: "Özel Ders Planla", href: "/antrenman-yonetimi?modul=ozel-dersler&view=planlama", quickActionId: QUICK_ACTION_IDS.planPrivateLesson }]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_take_attendance
-            ? [{ label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama" }]
+            ? [{ label: "Yoklama Aç", href: "/antrenman-yonetimi?modul=grup-dersleri&view=yoklama", quickActionId: QUICK_ACTION_IDS.openAttendance }]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_manage_athlete_profiles
-            ? [{ label: "Sporcu Ekle", href: "/sporcular/yeni" }]
+            ? [{ label: "Sporcu Ekle", href: "/sporcular/yeni", quickActionId: QUICK_ACTION_IDS.addAthlete }]
             : []),
           ...(safeRole === "coach" && coachPermissions?.can_view_reports
             ? [
-                { label: "Tahsilat Kaydet", href: PATHS.finans },
-                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()) },
+                { label: "Tahsilat Kaydet", href: PATHS.finans, quickActionId: QUICK_ACTION_IDS.recordPayment },
+                { label: "Saha Testi Girişi", href: hrefFieldTestSession(todayFieldTestSessionDate()), quickActionId: QUICK_ACTION_IDS.fieldTestEntry },
               ]
             : []),
         ]
-      : [];
+      : []
+  ).filter((action) => isQuickActionFeatureVisible(action.quickActionId, organizationFeatures));
 
   useEffect(() => {
     setIsSidebarOpen(false);

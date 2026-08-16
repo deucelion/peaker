@@ -15,6 +15,8 @@ import { chunkedInQuery } from "@/lib/db/chunkedIn";
 import { isoToZonedDateKey } from "@/lib/schedule/scheduleWallTime";
 import { istanbulDateWallRangeToHalfOpenUtc } from "@/lib/accountingFinance/istanbulQueryRange";
 import { resolveOrganizationTimeZone } from "@/lib/organization/timeZone";
+import { isOrganizationEntitlementEnabled } from "@/lib/auth/serverActionFeatureAccess";
+import { ENTITLEMENT_KEYS } from "@/lib/organization/features/keys";
 import {
   normalizeDirectoryPagination,
   totalDirectoryPages,
@@ -210,20 +212,28 @@ export async function listManagementDirectory(options?: ListManagementDirectoryO
   const totalAthletes = canViewAthletes ? (athleteRes.count ?? athleteRows.length) : 0;
   const athleteIds = athleteRows.map((row) => row.id);
 
+  const [financeEnabled, privateLessonsEnabled] = await Promise.all([
+    isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.finance, resolved.organizationId),
+    isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.privateLessons, resolved.organizationId),
+  ]);
+
   const skipFinance = view === "summary" || athleteIds.length === 0;
+  const loadPackages = !skipFinance && privateLessonsEnabled;
+  const loadPayments = !skipFinance && financeEnabled;
+  const loadSessions = !skipFinance && privateLessonsEnabled;
 
   // FAZ 32: "son tamamlanan ders" DB-side distinct on RPC ile sporcu basina
   // tek satir doner; RPC yoksa eski (tum tamamlanmis seanslari tasiyan)
   // sorguya fallback yapilir.
   const lastSessionRpcPromise =
-    !skipFinance && athleteIds.length > 0 && !pager
+    loadSessions && athleteIds.length > 0 && !pager
       ? adminClient.rpc("peaker_directory_last_completed_sessions", {
           p_org_id: resolved.organizationId,
         })
       : Promise.resolve({ data: [], error: null });
 
   const [packageRes, lastSessionRpcRes, paymentRes] = await Promise.all([
-    !skipFinance && athleteIds.length > 0
+    loadPackages && athleteIds.length > 0
       ? adminClient
           .from("private_lesson_packages")
           .select("id, athlete_id, package_name, remaining_lessons, payment_status, total_price, amount_paid, is_active, updated_at")
@@ -235,7 +245,7 @@ export async function listManagementDirectory(options?: ListManagementDirectoryO
     // FAZ 32: dizin paket satirlarini kullanmaz (paket finansi packages
     // uzerinden gelir; computeFinanceStatusSummary "paket" disindakileri aidat
     // sayar). Satir hacmi payment_type filtresiyle dusurulur.
-    !skipFinance && athleteIds.length > 0
+    loadPayments && athleteIds.length > 0
       ? adminClient
           .from("payments")
           .select("id, profile_id, organization_id, amount, payment_type, due_date, payment_date, status, total_sessions, remaining_sessions, description")
@@ -249,7 +259,7 @@ export async function listManagementDirectory(options?: ListManagementDirectoryO
   if (!skipFinance && paymentRes.error) return { error: `Finans bilgisi alınamadı: ${paymentRes.error.message}` };
 
   let sessionRows: Array<{ athlete_id: string | null; starts_at: string }> = [];
-  if (!skipFinance && athleteIds.length > 0) {
+  if (loadSessions && athleteIds.length > 0) {
     if (!pager && !lastSessionRpcRes.error && (lastSessionRpcRes.data || []).length > 0) {
       sessionRows = ((lastSessionRpcRes.data || []) as Array<{ athlete_id: string; last_completed_at: string }>).map(
         (r) => ({ athlete_id: r.athlete_id, starts_at: r.last_completed_at })
@@ -387,13 +397,18 @@ export async function listManagementDirectory(options?: ListManagementDirectoryO
 }
 
 export async function listDailyTrainingLoadReports() {
-  return withServerActionGuard("managementDirectory.listDailyTrainingLoadReports", async () => {
+  return withServerActionGuard("trainingReport.listDailyTrainingLoadReports", async (ctx) => {
   const resolved = await resolveManagementActor();
   if ("error" in resolved) {
     return {
       error: resolved.error,
       errorKind: resolved.errorKind ?? ("fetch_error" as ManagementErrorKind),
     };
+  }
+
+  const featureDenial = await ctx.assertOrganizationFeature(resolved.organizationId);
+  if (featureDenial) {
+    return { error: featureDenial.error, errorKind: featureDenial.errorKind };
   }
 
   const permissions =

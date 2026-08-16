@@ -260,6 +260,23 @@ describe("validation", () => {
     expect(validateOverrideKeys({ finance: true, insight: false }).ok).toBe(true);
     expect(validateOverrideKeys({ bogus: true } as never).ok).toBe(false);
   });
+
+  it("applies bundle parent overrides deterministically regardless of insertion order", () => {
+    const base = getPresetTemplateFlat("club_professional");
+    const forward = applyOverrideToConfigurableMap(base, {
+      insight: false,
+      "insight.field_tests": true,
+    });
+    const reverse = applyOverrideToConfigurableMap(base, {
+      "insight.field_tests": true,
+      insight: false,
+    });
+
+    expect(forward).toEqual(reverse);
+    expect(forward["insight.field_tests"]).toBe(true);
+    expect(forward["insight.performance"]).toBe(false);
+    expect(forward["insight.body_measurements"]).toBe(false);
+  });
 });
 
 describe("helpers", () => {

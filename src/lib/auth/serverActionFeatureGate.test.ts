@@ -37,7 +37,13 @@ describe("runServerActionWithFeatureGate", () => {
     });
   });
 
-  it("does not call runtime when action returns permission denied", async () => {
+  it("preserves the action's own permission error when the entitlement is enabled", async () => {
+    vi.mocked(getOrganizationFeatures).mockResolvedValue({
+      features: createClubProfessionalFeatures(),
+      featuresRevision: 1,
+      source: "database",
+    });
+
     const result = await runServerActionWithFeatureGate("finance.listOrgPaymentsForAdmin", async () => ({
       error: "Bu sayfa icin yetkiniz yok.",
       errorKind: "permission_denied" as const,
@@ -47,7 +53,6 @@ describe("runServerActionWithFeatureGate", () => {
       error: "Bu sayfa icin yetkiniz yok.",
       errorKind: "permission_denied",
     });
-    expect(getOrganizationFeatures).not.toHaveBeenCalled();
   });
 
   it("allows unmapped actions without runtime lookup", async () => {
@@ -57,7 +62,7 @@ describe("runServerActionWithFeatureGate", () => {
   });
 
   it("runs explicit feature assert after permissions with correct org id", async () => {
-    vi.mocked(getOrganizationFeatures).mockResolvedValueOnce({
+    vi.mocked(getOrganizationFeatures).mockResolvedValue({
       features: createClubProfessionalFeatures(),
       featuresRevision: 1,
       source: "database",
@@ -70,27 +75,29 @@ describe("runServerActionWithFeatureGate", () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(getOrganizationFeatures).toHaveBeenCalledTimes(1);
     expect(getOrganizationFeatures).toHaveBeenCalledWith("org-1");
   });
 
-  it("auto-gates successful mapped actions when explicit assert is omitted", async () => {
-    vi.mocked(getOrganizationFeatures).mockResolvedValueOnce({
+  it("gates mapped actions before the body runs when explicit assert is omitted", async () => {
+    vi.mocked(getOrganizationFeatures).mockResolvedValue({
       features: createAllDisabledFeatures(),
       featuresRevision: 1,
       source: "database",
     });
 
-    const result = await runServerActionWithFeatureGate("audit.listAuditLogsForActor", async () => ({ ok: true }));
+    const body = vi.fn(async () => ({ ok: true }));
+    const result = await runServerActionWithFeatureGate("audit.listAuditLogsForActor", body);
+
     expect(result).toEqual({
       error: "Bu modul organizasyonunuz icin aktif degil.",
       errorKind: "permission_denied",
     });
+    expect(body).not.toHaveBeenCalled();
     expect(getOrganizationFeatures).toHaveBeenCalledWith("org-1");
   });
 
   it("allows mapped actions under kill-switch fallback", async () => {
-    vi.mocked(getOrganizationFeatures).mockResolvedValueOnce({
+    vi.mocked(getOrganizationFeatures).mockResolvedValue({
       features: createClubProfessionalFeatures(),
       featuresRevision: 0,
       source: "kill_switch",

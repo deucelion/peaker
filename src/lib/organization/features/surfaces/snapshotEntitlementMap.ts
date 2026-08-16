@@ -17,6 +17,7 @@ export const SNAPSHOT_BRANCH_IDS = {
   dashboardAdminRevenueMetrics: "snapshot:dashboard.admin.revenue_metrics",
   athletePanelFinance: "snapshot:athlete_panel.finance",
   athletePanelPerformanceMetrics: "snapshot:athlete_panel.performance_metrics",
+  athletePanelBodyMeasurements: "snapshot:athlete_panel.body_measurements",
   athletePanelDevelopmentHub: "snapshot:athlete_panel.development_hub",
   bootstrapTenantHome: "snapshot:bootstrap_tenant_home",
 } as const;
@@ -38,6 +39,7 @@ export const SNAPSHOT_ENTITLEMENT_MAP = {
   [SNAPSHOT_BRANCH_IDS.dashboardAdminRevenueMetrics]: ENTITLEMENT_KEYS.finance,
   [SNAPSHOT_BRANCH_IDS.athletePanelFinance]: ENTITLEMENT_KEYS.finance,
   [SNAPSHOT_BRANCH_IDS.athletePanelPerformanceMetrics]: ENTITLEMENT_KEYS.insightPerformance,
+  [SNAPSHOT_BRANCH_IDS.athletePanelBodyMeasurements]: ENTITLEMENT_KEYS.insightBodyMeasurements,
   [SNAPSHOT_BRANCH_IDS.athletePanelDevelopmentHub]: ENTITLEMENT_KEYS.insightDevelopmentHub,
   [SNAPSHOT_BRANCH_IDS.bootstrapTenantHome]: ENTITLEMENT_KEYS.core,
 } as const satisfies Record<SnapshotEntitlementMapKey, EntitlementKey>;

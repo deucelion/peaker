@@ -31,6 +31,10 @@ export type GetOrganizationFeaturesResult =
   | { ok: true; data: OrganizationFeaturesRuntimeRow }
   | OrganizationFeaturesRepositoryError;
 
+export type GetOrganizationFeatureConfigurationResult =
+  | { ok: true; data: OrganizationFeatureConfigurationRow }
+  | OrganizationFeaturesRepositoryError;
+
 export type SaveOrganizationFeatureConfigurationInput = {
   organizationId: string;
   preset: FeaturePresetId;

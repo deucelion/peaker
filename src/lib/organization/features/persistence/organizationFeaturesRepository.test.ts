@@ -8,6 +8,7 @@ import {
 import { createClubProfessionalFeaturesJson, DEFAULT_ORGANIZATION_FEATURE_PRESET } from "./constants";
 import {
   createSupabaseOrganizationFeaturesPersistencePort,
+  getOrganizationFeatureConfigurationFromAdminClient,
   readOrganizationFeaturesPersistence,
   saveOrganizationFeatureConfiguration,
 } from "./organizationFeaturesRepository";
@@ -262,6 +263,114 @@ describe("supabase persistence port factory", () => {
     const port = createSupabaseOrganizationFeaturesPersistencePort({} as never);
     expect(typeof port.readFeaturesRuntime).toBe("function");
     expect(typeof port.writeFeatureConfiguration).toBe("function");
+  });
+});
+
+describe("super admin configuration read", () => {
+  function createAdminClientStub(row: unknown, error: { message: string } | null = null) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: row, error }),
+          }),
+        }),
+      }),
+    } as never;
+  }
+
+  it("returns preset and overrides alongside the effective features", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub({
+        features: createClubProfessionalFeaturesJson(),
+        features_revision: 7,
+        feature_preset: "custom",
+        feature_overrides: { finance: true, "insight.field_tests": false },
+      }),
+      "org-1"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.featurePreset).toBe("custom");
+      expect(result.data.featureOverrides).toEqual({ finance: true, "insight.field_tests": false });
+      expect(result.data.featuresRevision).toBe(7);
+    }
+  });
+
+  it("keeps the insight bundle parent as a valid override key", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub({
+        features: createClubProfessionalFeaturesJson(),
+        features_revision: 2,
+        feature_preset: "custom",
+        feature_overrides: { insight: false },
+      }),
+      "org-1"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.featureOverrides).toEqual({ insight: false });
+    }
+  });
+
+  it("drops unknown and non-boolean override entries", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub({
+        features: createClubProfessionalFeaturesJson(),
+        features_revision: 2,
+        feature_preset: "academy_plus",
+        feature_overrides: { finance: true, unknown_module: true, audit: "yes" },
+      }),
+      "org-1"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.featureOverrides).toEqual({ finance: true });
+    }
+  });
+
+  it("falls back to the default preset when the stored value is unknown", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub({
+        features: createClubProfessionalFeaturesJson(),
+        features_revision: 3,
+        feature_preset: "legacy_tier",
+        feature_overrides: {},
+      }),
+      "org-1"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.featurePreset).toBe(DEFAULT_ORGANIZATION_FEATURE_PRESET);
+    }
+  });
+
+  it("reports not_found for a missing organization", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub(null),
+      "org-missing"
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("not_found");
+    }
+  });
+
+  it("reports read_failed when the query errors", async () => {
+    const result = await getOrganizationFeatureConfigurationFromAdminClient(
+      createAdminClientStub(null, { message: "boom" }),
+      "org-1"
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("read_failed");
+    }
   });
 });
 

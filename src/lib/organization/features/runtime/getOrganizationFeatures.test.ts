@@ -188,13 +188,15 @@ describe("organization features runtime service", () => {
     expect(readOrganizationFeaturesProcessCache("org-1")?.featuresRevision).toBe(2);
   });
 
-  it("falls back when repository read fails", async () => {
+  it("fails closed when repository read fails", async () => {
     vi.stubEnv("PEAKER_ORG_FEATURES", "1");
     const port = createMockPort({}, { failRead: true });
 
     const result = await getOrganizationFeatures("org-1", { persistencePort: port });
     expect(result.source).toBe("repository_error_fallback");
-    expect(result.features.finance).toBe(true);
+    expect(result.features.finance).toBe(false);
+    expect(result.features.core).toBe(true);
+    expect(result.features.athlete).toBe(true);
     expect(events).toContain("repository_error_fallback");
   });
 

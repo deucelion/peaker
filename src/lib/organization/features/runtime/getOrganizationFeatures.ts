@@ -1,4 +1,6 @@
 import { createClubProfessionalFeatures } from "../presets";
+import { buildOrganizationFeaturesFromConfigurable } from "../helpers";
+import { assertAlwaysOnEntitlements, createFailClosedConfigurable } from "../validation";
 import { readOrganizationFeaturesPersistence } from "../persistence/organizationFeaturesRepository";
 import type { OrganizationFeaturesPersistencePort } from "../persistence/types";
 import { isOrganizationFeaturesRuntimeEnabled } from "./killSwitch";
@@ -23,6 +25,19 @@ export const KILL_SWITCH_FEATURES_REVISION = 0 as const;
 function createKillSwitchSnapshot(): OrganizationFeaturesRuntimeSnapshot {
   return {
     features: createClubProfessionalFeatures(),
+    featuresRevision: KILL_SWITCH_FEATURES_REVISION,
+  };
+}
+
+/**
+ * Faz 41: organizasyon veya feature cozumlenemediginde configurable entitlement'lar kapali doner.
+ * `core`/`athlete` her zaman aciktir; fail-closed yalnizca opsiyonel modulleri kapatir.
+ */
+function createFailClosedSnapshot(): OrganizationFeaturesRuntimeSnapshot {
+  return {
+    features: assertAlwaysOnEntitlements(
+      buildOrganizationFeaturesFromConfigurable(createFailClosedConfigurable())
+    ),
     featuresRevision: KILL_SWITCH_FEATURES_REVISION,
   };
 }
@@ -58,7 +73,7 @@ async function loadSnapshotFromPersistence(
   const loaded = await readOrganizationFeaturesPersistence(port, organizationId);
   if (!loaded.ok) {
     emitOrganizationFeaturesRuntimeMetric({ type: "repository_error_fallback" });
-    return { ok: false, snapshot: createKillSwitchSnapshot() };
+    return { ok: false, snapshot: createFailClosedSnapshot() };
   }
 
   if (loaded.data.parseFallback) {
@@ -110,14 +125,15 @@ export async function getOrganizationFeatures(
   organizationId: string,
   options: GetOrganizationFeaturesOptions = {}
 ): Promise<OrganizationFeaturesRuntimeResult> {
-  if (!organizationId.trim()) {
-    emitOrganizationFeaturesRuntimeMetric({ type: "repository_error_fallback" });
-    return toRuntimeResult(createKillSwitchSnapshot(), "repository_error_fallback");
-  }
-
+  // Kill switch OFF iken legacy davranis korunur: fail-closed yalnizca runtime aktifken devreye girer.
   if (!isOrganizationFeaturesRuntimeEnabled()) {
     emitOrganizationFeaturesRuntimeMetric({ type: "kill_switch_fallback" });
     return toRuntimeResult(createKillSwitchSnapshot(), "kill_switch");
+  }
+
+  if (!organizationId.trim()) {
+    emitOrganizationFeaturesRuntimeMetric({ type: "repository_error_fallback" });
+    return toRuntimeResult(createFailClosedSnapshot(), "repository_error_fallback");
   }
 
   const requestCached = readOrganizationFeaturesRequestCache(organizationId);

@@ -20,6 +20,7 @@ import {
   planFieldTestCellWrites,
   type FieldTestCellWriteSource,
 } from "@/lib/fieldTests/fieldTestCellWriteGuard";
+import { shouldFailFieldTestSaveWithNoAppliedWrites, shouldFailFieldTestSaveWithStaleSkipsOnline } from "@/lib/fieldTests/fieldTestSaveIntegrity";
 import {
   buildAthleticResultUpsertRow,
   resolveAthleticResultsWriteShape,
@@ -474,6 +475,8 @@ export async function saveAthleticFieldResults(input: {
 
   const orgId = resolved.organizationId;
   let skippedStaleCells = 0;
+  let appliedWrites = 0;
+  const writeSource: FieldTestCellWriteSource = input.writeSource ?? "online";
 
   if (cells.length > 0) {
     const testIds = Array.from(new Set(cells.map((c) => c.testId)));
@@ -535,7 +538,6 @@ export async function saveAthleticFieldResults(input: {
       });
     }
 
-    const writeSource: FieldTestCellWriteSource = input.writeSource ?? "online";
     const storedRowsByKey = new Map<
       string,
       { value: number | null; value_text: string | null }
@@ -599,6 +601,7 @@ export async function saveAthleticFieldResults(input: {
               pgCode: delErr.code,
             });
           }
+          appliedWrites += 1;
           continue;
         }
         const v = Number(cell.valueNumber);
@@ -632,6 +635,7 @@ export async function saveAthleticFieldResults(input: {
             pgCode: upErr.code,
           });
         }
+        appliedWrites += 1;
         continue;
       }
 
@@ -648,6 +652,7 @@ export async function saveAthleticFieldResults(input: {
             pgCode: delErr.code,
           });
         }
+        appliedWrites += 1;
       } else {
         const row = buildAthleticResultUpsertRow({
           profileId: cell.profileId,
@@ -676,6 +681,7 @@ export async function saveAthleticFieldResults(input: {
             pgCode: upErr.code,
           });
         }
+        appliedWrites += 1;
       }
     }
 
@@ -702,6 +708,7 @@ export async function saveAthleticFieldResults(input: {
           pgCode: delErr.code,
         });
       }
+      appliedWrites += 1;
       continue;
     }
     const { error: upErr } = await resolved.adminClient.from("athletic_result_notes").upsert(
@@ -719,6 +726,21 @@ export async function saveAthleticFieldResults(input: {
         pgCode: upErr.code,
       });
     }
+    appliedWrites += 1;
+  }
+
+  if (shouldFailFieldTestSaveWithNoAppliedWrites(appliedWrites, cells.length, notes.length)) {
+    return fieldTestSaveFailure(
+      "Girilen degerler kaydedilemedi; sunucudaki kayit daha guncel. Sayfayi yenileyip tekrar deneyin.",
+      { diagnosticsCode: FIELDTEST_DIAG_VALIDATION }
+    );
+  }
+
+  if (shouldFailFieldTestSaveWithStaleSkipsOnline(skippedStaleCells, writeSource)) {
+    return fieldTestSaveFailure(
+      "Bazi degerler kaydedilemedi; sunucudaki kayit daha guncel. Sayfayi yenileyip tekrar deneyin.",
+      { diagnosticsCode: FIELDTEST_DIAG_VALIDATION }
+    );
   }
 
   revalidatePath("/saha-testleri", "layout");
