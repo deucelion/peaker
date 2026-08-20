@@ -5,6 +5,7 @@ import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import {
   fallbackRouteForDeniedAccess,
   logRouteRedirectDecision,
+  resolveSporcuProxyFallbackRoute,
   safeRedirectPath,
 } from "@/lib/auth/routeRedirect";
 import {
@@ -166,12 +167,8 @@ export async function proxy(request: NextRequest) {
     if (role === "sporcu") {
       const permissions = await loadAthletePermissionsForProxy(user.id, organizationId);
       if (isRouteBlockedForAthlete(pathname, permissions)) {
-        const athleteFallback = getDefaultRouteForRole(role);
-        const safeAthleteTarget = safeRedirectPath(pathname, athleteFallback);
-        if (!safeAthleteTarget) {
-          if (isTransportRequest) return jsonError(403, "forbidden");
-          return response;
-        }
+        const safeAthleteTarget = resolveSporcuProxyFallbackRoute(pathname);
+        if (!safeAthleteTarget) return jsonError(403, "forbidden");
         logRouteRedirectDecision("proxy", {
           pathname,
           role,
@@ -186,9 +183,14 @@ export async function proxy(request: NextRequest) {
     const featureDecision = await evaluateProxyRouteFeatureAccess(pathname, organizationId);
     if (featureDecision === "deny") {
       if (isTransportRequest) return jsonError(403, "forbidden");
-      const featureFallback = role ? getDefaultRouteForRole(role) : fallbackRouteForDeniedAccess(role);
-      const safeFeatureTarget = safeRedirectPath(pathname, featureFallback);
-      if (!safeFeatureTarget) return response;
+      const safeFeatureTarget =
+        role === "sporcu"
+          ? resolveSporcuProxyFallbackRoute(pathname)
+          : safeRedirectPath(
+              pathname,
+              role ? getDefaultRouteForRole(role) : fallbackRouteForDeniedAccess(role)
+            );
+      if (!safeFeatureTarget) return jsonError(403, "forbidden");
       logRouteRedirectDecision("proxy", {
         pathname,
         role,

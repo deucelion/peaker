@@ -67,6 +67,12 @@ export const ADMIN_ACCOUNT_INFO_ROUTE = PATHS.adminAccount;
 export const COACH_ACCOUNT_INFO_ROUTE = PATHS.coachAccount;
 export const SPORCU_ACCOUNT_INFO_ROUTE = PATHS.athleteAccount;
 
+/**
+ * Sporcu proxy redirect fallback: `/sporcu` (development_hub) deny edildiğinde güvenli landing.
+ * Org feature gate'te `athlete` always-on; login default route (`getDefaultRouteForRole`) değişmez.
+ */
+export const SPORCU_DEFAULT_LANDING_ROUTE = PATHS.anket;
+
 /** super_admin dışındaki roller için kapalı (super_admin daha önce true döner) */
 export const SUPER_ADMIN_EXCLUSIVE_PREFIXES = [PATHS.superAdmin, PATHS.sistemSaglik] as const;
 

@@ -1,4 +1,5 @@
 import { getDefaultRouteForRole, ORG_LIFECYCLE_INFO_ROUTE, type UserRole } from "@/lib/auth/roleMatrix";
+import { SPORCU_DEFAULT_LANDING_ROUTE } from "@/lib/navigation/routeRegistry";
 
 export type RouteRedirectReason =
   | "unauthenticated"
@@ -24,6 +25,11 @@ export function pathsEqual(a: string, b: string): boolean {
 export function safeRedirectPath(currentPath: string, targetPath: string): string | null {
   if (pathsEqual(currentPath, targetPath)) return null;
   return targetPath;
+}
+
+/** Sporcu proxy: feature/permission deny sonrası `/sporcu` döngüsünü keser. */
+export function resolveSporcuProxyFallbackRoute(currentPath: string): string | null {
+  return safeRedirectPath(currentPath, SPORCU_DEFAULT_LANDING_ROUTE);
 }
 
 export function fallbackRouteForDeniedAccess(role: UserRole | null): string {

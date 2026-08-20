@@ -38,11 +38,13 @@ vi.mock("@/lib/auth/resolveRouteRole", () => ({
   resolveRouteRoleFromUser: vi.fn(() => "coach"),
 }));
 
-vi.mock("@/lib/auth/routeRedirect", () => ({
-  fallbackRouteForDeniedAccess: vi.fn(() => PATHS.home),
-  logRouteRedirectDecision: vi.fn(),
-  safeRedirectPath: vi.fn((_current: string, target: string) => target),
-}));
+vi.mock("@/lib/auth/routeRedirect", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/routeRedirect")>();
+  return {
+    ...actual,
+    logRouteRedirectDecision: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/auth/coachPermissions", () => ({
   isRouteBlockedForCoach: vi.fn(() => false),
