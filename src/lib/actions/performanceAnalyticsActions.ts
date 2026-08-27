@@ -39,7 +39,9 @@ import { buildCsvFromRows } from "@/lib/export/csvStream";
 import { createJobContext, runJob } from "@/lib/jobs";
 import { checkExportRateLimit } from "@/lib/rateLimit";
 import { assertExportFeatureForOrg } from "@/lib/auth/exportFeatureAccess";
+import { isOrganizationEntitlementEnabled } from "@/lib/auth/serverActionFeatureAccess";
 import { EXPORT_ENDPOINT_IDS } from "@/lib/organization/features/surfaces/exportEntitlementMap";
+import { ENTITLEMENT_KEYS } from "@/lib/organization/features/keys";
 import {
   shouldUseDailyTrainingLoadMv,
   fetchDailyTrainingLoadMvRows,
@@ -342,27 +344,36 @@ export async function listPerformanceAnalyticsData(
     })) as Record<string, unknown>[];
   }
 
-  let wellnessQuery = adminClient
-    .from("wellness_reports")
-    .select(
-      "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles(full_name, email, id, organization_id)"
-    )
-    .eq("profiles.organization_id", organizationId)
-    .gte("report_date", dateFrom)
-    .lte("report_date", dateTo)
-    .order("report_date", { ascending: false })
-    .limit(200);
+  const wellnessEnabled = await isOrganizationEntitlementEnabled(
+    ENTITLEMENT_KEYS.insightWellnessArchive,
+    organizationId
+  );
 
-  if (athleteProfileId) {
-    wellnessQuery = wellnessQuery.eq("profile_id", athleteProfileId);
-  }
+  let reports: Record<string, unknown>[] = [];
+  if (wellnessEnabled) {
+    let wellnessQuery = adminClient
+      .from("wellness_reports")
+      .select(
+        "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes, profiles(full_name, email, id, organization_id)"
+      )
+      .eq("profiles.organization_id", organizationId)
+      .gte("report_date", dateFrom)
+      .lte("report_date", dateTo)
+      .order("report_date", { ascending: false })
+      .limit(200);
 
-  const { data: reports, error: wellnessError } = await wellnessQuery;
-  if (wellnessError) {
-    return {
-      error: `Wellness verisi alinamadi: ${wellnessError.message}` as const,
-      errorKind: "fetch_error" as const,
-    };
+    if (athleteProfileId) {
+      wellnessQuery = wellnessQuery.eq("profile_id", athleteProfileId);
+    }
+
+    const { data: wellnessRows, error: wellnessError } = await wellnessQuery;
+    if (wellnessError) {
+      return {
+        error: `Wellness verisi alinamadi: ${wellnessError.message}` as const,
+        errorKind: "fetch_error" as const,
+      };
+    }
+    reports = (wellnessRows || []) as Record<string, unknown>[];
   }
 
   return {
@@ -374,7 +385,7 @@ export async function listPerformanceAnalyticsData(
     athleteCap: fetchPlan.cappedAtHard
       ? { capped: true as const, cap: PROFILE_LOAD_FETCH_HARD_CAP, total: profileIdsTotalCount }
       : null,
-    reports: (reports || []).map((row) => {
+    reports: reports.map((row) => {
       const profile = (row as { profiles?: { full_name?: string | null; email?: string | null } }).profiles;
       return {
         ...row,
@@ -558,27 +569,35 @@ export async function exportPerformanceSummaryCSV(
   }
   const loadRows = loadChunked.data;
 
-  const reportChunked = await chunkedInQuery(
-    profileIds,
-    async (chunk) =>
-      await adminClient
-        .from("wellness_reports")
-        .select(
-          "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes"
-        )
-        .in("profile_id", chunk)
-        .gte("report_date", dateFrom)
-        .lte("report_date", dateTo)
-        .order("report_date", { ascending: false }),
-    { scope: "exportPerformanceSummaryCSV.wellness_reports" }
+  const wellnessEnabled = await isOrganizationEntitlementEnabled(
+    ENTITLEMENT_KEYS.insightWellnessArchive,
+    organizationId
   );
-  if (reportChunked.error) {
-    return {
-      error: `Wellness raporları alınamadı: ${reportChunked.error.message}`,
-      errorKind: "fetch_error" as PerformanceAnalyticsErrorKind,
-    };
+
+  let reportRows: WellnessReportRow[] = [];
+  if (wellnessEnabled) {
+    const reportChunked = await chunkedInQuery(
+      profileIds,
+      async (chunk) =>
+        await adminClient
+          .from("wellness_reports")
+          .select(
+            "id, profile_id, report_date, resting_heart_rate, fatigue, sleep_quality, muscle_soreness, stress_level, energy_level, notes"
+          )
+          .in("profile_id", chunk)
+          .gte("report_date", dateFrom)
+          .lte("report_date", dateTo)
+          .order("report_date", { ascending: false }),
+      { scope: "exportPerformanceSummaryCSV.wellness_reports" }
+    );
+    if (reportChunked.error) {
+      return {
+        error: `Wellness raporları alınamadı: ${reportChunked.error.message}`,
+        errorKind: "fetch_error" as PerformanceAnalyticsErrorKind,
+      };
+    }
+    reportRows = (reportChunked.data || []) as WellnessReportRow[];
   }
-  const reportRows = reportChunked.data;
 
   const loadsByProfile = new Map<string, TrainingLoadRowType[]>();
   for (const row of (loadRows || []) as TrainingLoadRowType[]) {

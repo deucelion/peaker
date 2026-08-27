@@ -397,18 +397,14 @@ export async function listManagementDirectory(options?: ListManagementDirectoryO
 }
 
 export async function listDailyTrainingLoadReports() {
-  return withServerActionGuard("trainingReport.listDailyTrainingLoadReports", async (ctx) => {
+  // RPE okuma sporcu deneyimi always-on; insight.training_reports gate'i yok (athleteDetail ile hizali).
+  return withServerActionGuard("managementDirectory.listDailyTrainingLoadReports", async () => {
   const resolved = await resolveManagementActor();
   if ("error" in resolved) {
     return {
       error: resolved.error,
       errorKind: resolved.errorKind ?? ("fetch_error" as ManagementErrorKind),
     };
-  }
-
-  const featureDenial = await ctx.assertOrganizationFeature(resolved.organizationId);
-  if (featureDenial) {
-    return { error: featureDenial.error, errorKind: featureDenial.errorKind };
   }
 
   const permissions =

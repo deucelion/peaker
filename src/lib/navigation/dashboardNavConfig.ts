@@ -120,6 +120,17 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
     activePrefixes: [PATHS.performans, PATHS.sahaTestleri, PATHS.idmanRaporu],
   },
   {
+    href: PATHS.performansWellnessDetay,
+    icon: "Moon",
+    label: "Wellness Arşivi",
+    section: "management",
+    navItemId: NAV_ITEM_IDS.managementWellnessArchive,
+    roles: ["admin", "coach"],
+    coachNeedsAll: ["can_view_reports"],
+    activeMatch: "prefix",
+    activePrefixes: [PATHS.performansWellnessDetay],
+  },
+  {
     href: PATHS.finans,
     icon: "CreditCard",
     label: "Sporcu Ödemeleri",

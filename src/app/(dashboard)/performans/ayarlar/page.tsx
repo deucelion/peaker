@@ -271,8 +271,8 @@ export default function AyarlarPage() {
 
           <div className="grid gap-4 min-w-0">
             {athletes.filter(a => a.full_name?.toLowerCase().includes(searchTerm.toLowerCase())).map((athlete) => (
-              <div key={athlete.id} className="ui-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 sm:gap-6 sm:hover:bg-white/[0.01] transition-all group min-w-0">
-                <div className="flex items-center gap-4 sm:gap-5 min-w-0 w-full lg:w-auto">
+              <div key={athlete.id} className="ui-card p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-5 sm:gap-6 sm:hover:bg-white/[0.01] transition-all group min-w-0">
+                <div className="flex items-center gap-4 sm:gap-5 min-w-0 w-full xl:shrink-0 xl:min-w-[11rem] xl:max-w-[40%]">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl flex items-center justify-center font-black italic text-lg sm:text-xl text-[color:var(--peaker-ui-PRIMARY)] sm:group-hover:border-[color:color-mix(in_srgb,var(--peaker-ui-PRIMARY)_30%,transparent)] transition-all">
                     {athlete.avatar_url ? (
                       <Image
@@ -287,12 +287,17 @@ export default function AyarlarPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-base sm:text-lg font-black italic uppercase text-white tracking-tighter break-words">{athlete.full_name}</h3>
+                    <h3
+                      title={athlete.full_name ?? undefined}
+                      className="text-base sm:text-lg font-black italic uppercase text-white tracking-tighter break-words line-clamp-2"
+                    >
+                      {athlete.full_name}
+                    </h3>
                     <p className="text-[9px] text-gray-600 font-black uppercase tracking-wide sm:tracking-widest italic break-words">{athlete.team || "TAKIM BELİRSİZ"}</p>
                   </div>
                 </div>
                 
-                <div className="flex flex-wrap justify-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex flex-wrap justify-center xl:justify-end gap-2 sm:gap-3 min-w-0">
                   <PermissionToggle 
                     label="Sabah Raporu" 
                     active={athlete.permissions?.can_view_morning_report !== false} 

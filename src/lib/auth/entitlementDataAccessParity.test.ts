@@ -61,89 +61,31 @@ describe("training report enforcement (P0)", () => {
     expect(resolveRouteEntitlementKey(PATHS.idmanRaporu)).toBe(ENTITLEMENT_KEYS.insightTrainingReports);
   });
 
-  it("gates the daily training load data action on the same entitlement as the route", () => {
-    const routeKey = resolveRouteEntitlementKey(PATHS.idmanRaporu);
-    const actionKey = resolveActionNamespaceEntitlementKey("trainingReport.listDailyTrainingLoadReports");
-
-    expect(actionKey).toBe(ENTITLEMENT_KEYS.insightTrainingReports);
-    expect(actionKey).toBe(routeKey);
-  });
-
-  it("no longer resolves the training load action to the always-on core entitlement", () => {
-    expect(resolveActionNamespaceEntitlementKey("trainingReport.listDailyTrainingLoadReports")).not.toBe(
+  it("resolves daily training load data action to core (RPE read always-on)", () => {
+    expect(resolveActionNamespaceEntitlementKey("managementDirectory.listDailyTrainingLoadReports")).toBe(
       ENTITLEMENT_KEYS.core
     );
   });
 
-  it("allows the data action when training reports are enabled", async () => {
-    mockFeatures(featuresWith({ "insight.training_reports": true }));
+  it("allows the data action when training reports are disabled (ATHLETE BASIC)", async () => {
+    mockFeatures(featuresWith({ "insight.training_reports": false }));
 
     const result = await runServerActionWithFeatureGate(
-      "trainingReport.listDailyTrainingLoadReports",
+      "managementDirectory.listDailyTrainingLoadReports",
       async () => ({ reports: [{ id: "load-1" }] })
     );
 
     expect(result).toEqual({ reports: [{ id: "load-1" }] });
   });
 
-  it("denies the data action when training reports are disabled even though core stays on", async () => {
-    const features = featuresWith({ "insight.training_reports": false });
-    expect(features.core).toBe(true);
-    mockFeatures(features);
+  it("allows the data action when training reports are enabled", async () => {
+    mockFeatures(featuresWith({ "insight.training_reports": true }));
 
     const result = await runServerActionWithFeatureGate(
-      "trainingReport.listDailyTrainingLoadReports",
+      "managementDirectory.listDailyTrainingLoadReports",
       async () => ({ reports: [{ id: "load-1" }] })
     );
 
-    expect(result).toEqual({
-      error: "Bu modul organizasyonunuz icin aktif degil.",
-      errorKind: "permission_denied",
-    });
-  });
-
-  it("denies the data action when only performance is enabled", async () => {
-    mockFeatures(featuresWith({ "insight.performance": true, "insight.training_reports": false }));
-
-    const denial = await assertOrganizationEntitlement(ENTITLEMENT_KEYS.insightTrainingReports, ORG_ID);
-
-    expect(denial).not.toBeNull();
-  });
-
-  it("keeps the explicit pre-check from running the action body when denied", async () => {
-    mockFeatures(featuresWith({ "insight.training_reports": false }));
-    const body = vi.fn(async () => ({ reports: [] }));
-
-    const result = await runServerActionWithFeatureGate(
-      "trainingReport.listDailyTrainingLoadReports",
-      async (ctx) => {
-        const denial = await ctx.assertOrganizationFeature(ORG_ID);
-        if (denial) return denial;
-        return body();
-      }
-    );
-
-    expect(body).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      error: "Bu modul organizasyonunuz icin aktif degil.",
-      errorKind: "permission_denied",
-    });
-  });
-
-  it("runs the action body through the explicit pre-check when allowed", async () => {
-    mockFeatures(featuresWith({ "insight.training_reports": true }));
-    const body = vi.fn(async () => ({ reports: [{ id: "load-1" }] }));
-
-    const result = await runServerActionWithFeatureGate(
-      "trainingReport.listDailyTrainingLoadReports",
-      async (ctx) => {
-        const denial = await ctx.assertOrganizationFeature(ORG_ID);
-        if (denial) return denial;
-        return body();
-      }
-    );
-
-    expect(body).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ reports: [{ id: "load-1" }] });
   });
 

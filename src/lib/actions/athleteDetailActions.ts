@@ -104,10 +104,10 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
 
   // Bu action `core` namespace'inde calisir, ancak asagidaki dilimler kendi
   // insight entitlement'larina aittir. Kapali modulun verisi hic sorgulanmaz.
-  const [fieldTestsEnabled, trainingReportsEnabled, wellnessEnabled, bodyMeasurementsEnabled, financeEnabled, privateLessonsEnabled] =
+  // RPE (training_loads) sporcu deneyimi always-on; koç okuma da her zaman acik.
+  const [fieldTestsEnabled, wellnessEnabled, bodyMeasurementsEnabled, financeEnabled, privateLessonsEnabled] =
     await Promise.all([
       isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightFieldTests, actor.organization_id),
-      isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightTrainingReports, actor.organization_id),
       isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightWellnessArchive, actor.organization_id),
       isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.insightBodyMeasurements, actor.organization_id),
       isOrganizationEntitlementEnabled(ENTITLEMENT_KEYS.finance, actor.organization_id),
@@ -125,13 +125,11 @@ export async function loadAthleteDetailForManagement(athleteId: string) {
             .range(from, to)
         )
       : Promise.resolve({ data: [], error: null }),
-    trainingReportsEnabled
-      ? adminClient
-          .from("training_loads")
-          .select("profile_id, total_load, rpe_score, measurement_date")
-          .eq("profile_id", athleteId)
-          .order("measurement_date", { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
+    adminClient
+      .from("training_loads")
+      .select("profile_id, total_load, rpe_score, measurement_date")
+      .eq("profile_id", athleteId)
+      .order("measurement_date", { ascending: true }),
     wellnessEnabled
       ? adminClient
           .from("wellness_reports")
