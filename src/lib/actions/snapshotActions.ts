@@ -219,7 +219,13 @@ export async function listWeeklyLessonScheduleSnapshot(
 
   const items: WeeklyLessonScheduleItem[] = [];
 
-  if (lessonType !== "private") {
+  async function fetchGroupScheduleItems(): Promise<
+    { ok: true; items: WeeklyLessonScheduleItem[] } | { ok: false; error: string }
+  > {
+    if (lessonType === "private") {
+      return { ok: true, items: [] };
+    }
+
     let groupQuery = adminClient
       .from("training_schedule")
       .select(
@@ -235,10 +241,13 @@ export async function listWeeklyLessonScheduleSnapshot(
     if (locationFilter) groupQuery = groupQuery.ilike("location", `%${locationFilter}%`);
 
     const { data: groupRows, error: groupErr } = await groupQuery;
-    if (groupErr) return { error: `Grup dersleri alınamadı: ${groupErr.message}` };
+    if (groupErr) {
+      return { ok: false, error: `Grup dersleri alınamadı: ${groupErr.message}` };
+    }
 
-    items.push(
-      ...((groupRows || []) as GroupScheduleRow[]).map((row) => {
+    return {
+      ok: true,
+      items: ((groupRows || []) as GroupScheduleRow[]).map((row) => {
         const coach = firstJoined(row.coach_profile);
         const participants = (row.training_participants || []).map((p) => firstJoined(p.athlete_profile));
         const participantNames = participants
@@ -264,11 +273,17 @@ export async function listWeeklyLessonScheduleSnapshot(
           detailHref: `${PATHS.dersler}/${row.id}`,
           status: row.status || "scheduled",
         } satisfies WeeklyLessonScheduleItem;
-      })
-    );
+      }),
+    };
   }
 
-  if (lessonType !== "group") {
+  async function fetchPrivateScheduleItems(): Promise<
+    { ok: true; items: WeeklyLessonScheduleItem[] } | { ok: false; error: string }
+  > {
+    if (lessonType === "group") {
+      return { ok: true, items: [] };
+    }
+
     let privateQuery = adminClient
       .from("private_lesson_sessions")
       .select(
@@ -284,10 +299,13 @@ export async function listWeeklyLessonScheduleSnapshot(
     if (locationFilter) privateQuery = privateQuery.ilike("location", `%${locationFilter}%`);
 
     const { data: privateRows, error: privateErr } = await privateQuery;
-    if (privateErr) return { error: `Özel ders planları alınamadı: ${privateErr.message}` };
+    if (privateErr) {
+      return { ok: false, error: `Özel ders planları alınamadı: ${privateErr.message}` };
+    }
 
-    items.push(
-      ...((privateRows || []) as PrivateScheduleRow[]).map((row) => {
+    return {
+      ok: true,
+      items: ((privateRows || []) as PrivateScheduleRow[]).map((row) => {
         const coach = firstJoined(row.coach_profile);
         const athlete = firstJoined(row.athlete_profile);
         const pkg = firstJoined(row.pkg);
@@ -317,8 +335,26 @@ export async function listWeeklyLessonScheduleSnapshot(
           packageUsedLessons: pkg?.used_lessons ?? 0,
           packageIsActive: pkg?.is_active ?? true,
         } satisfies WeeklyLessonScheduleItem;
-      })
-    );
+      }),
+    };
+  }
+
+  if (lessonType === "all") {
+    const [groupResult, privateResult] = await Promise.all([
+      fetchGroupScheduleItems(),
+      fetchPrivateScheduleItems(),
+    ]);
+    if (!groupResult.ok) return { error: groupResult.error };
+    if (!privateResult.ok) return { error: privateResult.error };
+    items.push(...groupResult.items, ...privateResult.items);
+  } else if (lessonType === "group") {
+    const groupResult = await fetchGroupScheduleItems();
+    if (!groupResult.ok) return { error: groupResult.error };
+    items.push(...groupResult.items);
+  } else {
+    const privateResult = await fetchPrivateScheduleItems();
+    if (!privateResult.ok) return { error: privateResult.error };
+    items.push(...privateResult.items);
   }
 
   items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
@@ -363,7 +399,7 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
 
   let lessonsQuery = adminClient
     .from("training_schedule")
-    .select("*", { count: "exact" })
+    .select("*")
     .eq("organization_id", actor.organizationId)
     .order("start_time", { ascending: false })
     .range(pager.from, pager.to);
@@ -445,7 +481,7 @@ export async function listLessonsSnapshot(page = 1, pageSize = 50) {
         missedCount: summary?.missedCount ?? 0,
       };
     }),
-    total: lessonRes.count || 0,
+    total: lessonRows.length,
     page: pager.page,
     pageSize: pager.pageSize,
     coaches: (coachRes.data || [])
@@ -521,7 +557,7 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
 
   let trainingsQuery = adminClient
     .from("training_schedule")
-    .select("*", { count: "exact" })
+    .select("*")
     .eq("organization_id", actor.organizationId)
     .order("start_time", { ascending: false })
     .range(pager.from, pager.to);
@@ -569,7 +605,7 @@ export async function listAttendanceSnapshot(page = 1, pageSize = 100) {
     permissions,
     organizationId: actor.organizationId,
     trainings: trainingsWithCoach as Array<Record<string, unknown>>,
-    total: trainingsRes.count || 0,
+    total: rawTrainings.length,
     page: pager.page,
     pageSize: pager.pageSize,
     allPlayers: athletes,

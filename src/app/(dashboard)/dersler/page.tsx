@@ -67,8 +67,10 @@ export default function LessonsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const snapshot = await listLessonsSnapshot(1, 200);
-    const locationRes = await listLocationsForActor();
+    const [snapshot, locationRes] = await Promise.all([
+      listLessonsSnapshot(1, 200),
+      listLocationsForActor(),
+    ]);
     if ("error" in snapshot) {
       setError(snapshot.error ?? "Veri alınamadı.");
       setLoading(false);

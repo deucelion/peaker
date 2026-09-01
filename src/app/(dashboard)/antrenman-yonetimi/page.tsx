@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Clock,
@@ -33,9 +34,21 @@ import { OverlayMenu, OVERLAY_Z, overlayZIndex } from "@/components/ui/overlay";
 import { UiTabsNav } from "@/components/ui/navigation/UiTabsNav";
 import { clearScopedFormDraft, loadScopedFormDraft } from "@/lib/offline/scopedFormDrafts";
 import { DEFAULT_COACH_PERMISSIONS } from "@/lib/types";
-import WeeklyLessonSchedulePage from "../haftalik-ders-programi/page";
-import LessonsPage from "../dersler/page";
-import ProgramNotesPage from "../notlar-haftalik-program/page";
+import LoadingState from "@/components/ui/data-display/LoadingState";
+
+function ModuleLoadingPanel() {
+  return <LoadingState label="Modül yükleniyor..." />;
+}
+
+const WeeklyLessonSchedulePage = dynamic(() => import("../haftalik-ders-programi/page"), {
+  loading: () => <ModuleLoadingPanel />,
+});
+const LessonsPage = dynamic(() => import("../dersler/page"), {
+  loading: () => <ModuleLoadingPanel />,
+});
+const ProgramNotesPage = dynamic(() => import("../notlar-haftalik-program/page"), {
+  loading: () => <ModuleLoadingPanel />,
+});
 import {
   VALID_TRAINING_VIEWS,
   formatTrainingDateTr,
@@ -75,7 +88,7 @@ export default function AntrenmanYonetimi() {
   const [trainings, setTrainings] = useState<TrainingScheduleRow[]>([]);
   const [selectedTrainingId, setSelectedTrainingId] = useState<string>("");
   const [participants, setParticipants] = useState<TrainingParticipantRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actorRole, setActorRole] = useState<"admin" | "coach" | "sporcu">("sporcu");
   const [permissions, setPermissions] = useState(DEFAULT_COACH_PERMISSIONS);
@@ -127,6 +140,16 @@ export default function AntrenmanYonetimi() {
         : moduleView === "notlar"
           ? [{ key: "notlar", label: "Notlar" }]
         : [{ key: "takvim", label: "Takvim Operasyonu" }];
+
+  const needsAttendanceBootstrap = useMemo(() => {
+    if (moduleView === "haftalik-takvim" || moduleView === "ozel-dersler" || moduleView === "notlar") {
+      return false;
+    }
+    if (moduleView === "grup-dersleri") {
+      return activeWorkspaceView !== "ders-listesi" && activeWorkspaceView !== "ders-olustur";
+    }
+    return false;
+  }, [moduleView, activeWorkspaceView]);
 
   useEffect(() => {
     if (!requestedView) return;
@@ -214,6 +237,11 @@ export default function AntrenmanYonetimi() {
   );
 
   const loadInitialData = useCallback(async () => {
+    if (!needsAttendanceBootstrap) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const snapshot = await listAttendanceSnapshot(1, 200);
     if ("error" in snapshot) {
@@ -248,7 +276,7 @@ export default function AntrenmanYonetimi() {
       setParticipants([]);
     }
     setLoading(false);
-  }, [requestedTrainingId, loadParticipants]);
+  }, [needsAttendanceBootstrap, requestedTrainingId, loadParticipants]);
 
   useEffect(() => {
     const id = setTimeout(() => {
