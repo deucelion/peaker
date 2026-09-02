@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter } from "next/navigation";
 import { HardNavLink } from "@/components/navigation/HardNavLink";
@@ -119,11 +119,17 @@ function DashboardLayoutShell({
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
-
-  const isSuperAdminRoute =
-    pathname === PATHS.superAdmin ||
-    pathname.startsWith(`${PATHS.superAdmin}/`) ||
-    pathname === PATHS.sistemSaglik;
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  const sessionIdentityRef = useRef<{
+    userId: string | null;
+    organizationId: string | null;
+    role: UserRole | null;
+  }>({
+    userId: null,
+    organizationId: null,
+    role: null,
+  });
 
   async function tryBootstrapSuperAdminSession(): Promise<boolean> {
     const { data: authData } = await supabase.auth.getUser();
@@ -170,7 +176,12 @@ function DashboardLayoutShell({
             if (payload.httpStatus === 401) {
               router.replace(PATHS.login);
             } else if (payload.httpStatus === 403) {
-              if (isSuperAdminRoute) {
+              const currentPath = pathnameRef.current;
+              const isOnSuperAdminRoute =
+                currentPath === PATHS.superAdmin ||
+                currentPath.startsWith(`${PATHS.superAdmin}/`) ||
+                currentPath === PATHS.sistemSaglik;
+              if (isOnSuperAdminRoute) {
                 const allowed = await tryBootstrapSuperAdminSession();
                 if (!allowed) {
                   const { data: authData } = await supabase.auth.getUser();
@@ -214,18 +225,33 @@ function DashboardLayoutShell({
         }
 
         if (!cancelled) {
+          const nextUserId = payload.userId ?? null;
+          const nextOrganizationId = payload.organizationId ?? null;
+          const identityChanged =
+            sessionIdentityRef.current.userId !== nextUserId ||
+            sessionIdentityRef.current.organizationId !== nextOrganizationId ||
+            sessionIdentityRef.current.role !== payload.role;
+
           setRole(payload.role);
           setUserName(payload.fullName || "Peaker User");
-          setOrganizationId(payload.organizationId ?? null);
-          setUserId(payload.userId ?? null);
-          setPermissionsLoading(true);
-          setCoachPermissions(null);
-          setAthletePermissions(null);
-          invalidateMeAccessSession();
-          onEnableMeAccessFetch();
-          void refreshMeAccess({ force: true });
+          setOrganizationId(nextOrganizationId);
+          setUserId(nextUserId);
           setOrganizationName(payload.organizationName ?? "");
           setLoading(false);
+
+          if (identityChanged) {
+            setPermissionsLoading(true);
+            setCoachPermissions(null);
+            setAthletePermissions(null);
+            invalidateMeAccessSession();
+            onEnableMeAccessFetch();
+            void refreshMeAccess({ force: true });
+            sessionIdentityRef.current = {
+              userId: nextUserId,
+              organizationId: nextOrganizationId,
+              role: payload.role,
+            };
+          }
         }
       } catch {
         if (!cancelled) {
@@ -245,7 +271,7 @@ function DashboardLayoutShell({
       cancelled = true;
       authSub.subscription.unsubscribe();
     };
-  }, [router, pathname, isSuperAdminRoute, onEnableMeAccessFetch, refreshMeAccess]);
+  }, [router, onEnableMeAccessFetch, refreshMeAccess]);
 
   useEffect(() => {
     if (!accessPayload?.ok) {

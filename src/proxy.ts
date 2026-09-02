@@ -5,6 +5,7 @@ import { resolveRouteRoleFromUser } from "@/lib/auth/resolveRouteRole";
 import {
   fallbackRouteForDeniedAccess,
   logRouteRedirectDecision,
+  resolveManagementFeatureDenyFallback,
   resolveSporcuProxyFallbackRoute,
   safeRedirectPath,
 } from "@/lib/auth/routeRedirect";
@@ -186,10 +187,12 @@ export async function proxy(request: NextRequest) {
       const safeFeatureTarget =
         role === "sporcu"
           ? resolveSporcuProxyFallbackRoute(pathname)
-          : safeRedirectPath(
-              pathname,
-              role ? getDefaultRouteForRole(role) : fallbackRouteForDeniedAccess(role)
-            );
+          : role === "admin" || role === "coach"
+            ? resolveManagementFeatureDenyFallback(pathname, role)
+            : safeRedirectPath(
+                pathname,
+                role ? getDefaultRouteForRole(role) : fallbackRouteForDeniedAccess(role)
+              );
       if (!safeFeatureTarget) return jsonError(403, "forbidden");
       logRouteRedirectDecision("proxy", {
         pathname,

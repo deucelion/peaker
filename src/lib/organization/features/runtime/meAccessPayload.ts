@@ -1,6 +1,13 @@
+import { buildOrganizationFeaturesFromConfigurable } from "../helpers";
 import type { OrganizationFeatures } from "../types";
-import { createClubProfessionalFeatures } from "../presets";
+import { assertAlwaysOnEntitlements, createFailClosedConfigurable } from "../validation";
 import { getOrganizationFeatures, KILL_SWITCH_FEATURES_REVISION } from "./getOrganizationFeatures";
+
+function createFailClosedFeatures(): OrganizationFeatures {
+  return assertAlwaysOnEntitlements(
+    buildOrganizationFeaturesFromConfigurable(createFailClosedConfigurable())
+  );
+}
 
 /** FAZ 31.3.4 me-access entegrasyonu icin hazir payload sekli. */
 export type MeAccessOrganizationFeaturesPayload = {
@@ -11,7 +18,7 @@ export type MeAccessOrganizationFeaturesPayload = {
 /**
  * me-access route yalnizca bu helper'i cagirir.
  * Kill-switch OFF iken Club Professional + revision 0 doner.
- * Beklenmeyen hatalarda da ayni guvenli fallback kullanilir.
+ * Beklenmeyen hatalarda fail-closed fallback (proxy ile hizali).
  */
 export async function resolveOrganizationFeaturesForMeAccess(
   organizationId: string
@@ -24,7 +31,7 @@ export async function resolveOrganizationFeaturesForMeAccess(
     };
   } catch {
     return {
-      organizationFeatures: createClubProfessionalFeatures(),
+      organizationFeatures: createFailClosedFeatures(),
       featuresRevision: KILL_SWITCH_FEATURES_REVISION,
     };
   }

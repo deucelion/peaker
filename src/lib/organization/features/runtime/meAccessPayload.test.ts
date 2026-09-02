@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildOrganizationFeaturesFromConfigurable } from "../helpers";
 import { createClubProfessionalFeatures } from "../presets";
+import { assertAlwaysOnEntitlements, createFailClosedConfigurable } from "../validation";
 import { clearOrganizationFeaturesProcessCacheForTests } from "./processCache";
 import { KILL_SWITCH_FEATURES_REVISION, getOrganizationFeatures } from "./getOrganizationFeatures";
 import { resolveOrganizationFeaturesForMeAccess } from "./meAccessPayload";
@@ -57,12 +59,16 @@ describe("resolveOrganizationFeaturesForMeAccess", () => {
     expect(getOrganizationFeatures).toHaveBeenCalledWith("org-1");
   });
 
-  it("falls back safely when runtime throws", async () => {
+  it("falls back to fail-closed when runtime throws", async () => {
     vi.mocked(getOrganizationFeatures).mockRejectedValueOnce(new Error("unexpected"));
 
+    const failClosedFeatures = assertAlwaysOnEntitlements(
+      buildOrganizationFeaturesFromConfigurable(createFailClosedConfigurable())
+    );
     const result = await resolveOrganizationFeaturesForMeAccess("org-1");
     expect(result.featuresRevision).toBe(KILL_SWITCH_FEATURES_REVISION);
-    expect(result.organizationFeatures).toEqual(createClubProfessionalFeatures());
+    expect(result.organizationFeatures).toEqual(failClosedFeatures);
+    expect(result.organizationFeatures["insight.wellness_archive"]).toBe(false);
   });
 
   it("returns repository fallback snapshot without throwing", async () => {
